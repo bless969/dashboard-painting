@@ -48,7 +48,7 @@
             </div>
 
             <label style="display:block; font-size:13px; font-weight:600; color:#1e293b; margin-bottom:6px;">Nama Mesin yang Maintenance <span style="color:#dc2626;">*</span>:</label>
-            <input type="text" id="maint-nama-mesin" class="filter-select" style="width:100%; margin-bottom:14px; padding:8px 12px; font-size:13.5px;" placeholder="Contoh: SMT-01, Wave Soldering, Auto Insert, Konveyor..." autocomplete="off">
+            <input type="text" id="maint-nama-mesin" class="filter-select" style="width:100%; margin-bottom:14px; padding:8px 12px; font-size:13.5px;" placeholder="Contoh: Spray Booth 1, Spray Booth 2, Konveyor Hanger, Oven Curing, ESP-CAM..." autocomplete="off">
 
             <label style="display:block; font-size:13px; font-weight:600; color:#1e293b; margin-bottom:6px;">Kategori Permasalahan <span style="color:#dc2626;">*</span>:</label>
             <select id="maint-kategori-masalah" class="filter-select" style="width:100%; margin-bottom:14px; padding:8px 12px; font-size:13.5px;">

@@ -1,5 +1,5 @@
 <script>
-        // ===== DYNAMIC BASE URL (Mendukung Subfolder Laragon /dashboard-painting maupun Localhost) =====
+        // ===== DYNAMIC BASE URL (Mendukung Subfolder Laragon /dashboard-pcb maupun Localhost) =====
         const APP_BASE_PATH = (function() {
             const p = window.location.pathname;
             if (p.startsWith('/dashboard-painting')) {
@@ -76,29 +76,661 @@
         const API_KEY_INTERNAL = "pcb101_rahasia_2026";
 
         // Format tanggal lokal (YYYY-MM-DD) yang aman dari pergeseran UTC
-        function tanggalLokalYYYYMMDD() {
-            const d = new Date();
+        function tanggalLokalYYYYMMDD(d) {
+            const dateObj = (d instanceof Date) ? d : new Date();
             const pad = n => String(n).padStart(2, '0');
-            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
         }
 
         // ===== IKON FULLSCREEN =====
         const ikonExpand = '<svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
         const ikonCompress = '<svg viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></svg>';
 
+        function isFullscreenAktif() {
+            // 1. Native HTML5 Fullscreen API (saat toggleFullscreen / klik tombol di web)
+            if (Boolean(
+                document.fullscreenElement ||
+                document.webkitFullscreenElement ||
+                document.mozFullScreenElement ||
+                document.msFullscreenElement
+            )) {
+                return true;
+            }
+
+            // 2. CSS Media Query display-mode: fullscreen (standar resmi W3C untuk layar penuh F11 / Kiosk)
+            try {
+                if (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches) {
+                    return true;
+                }
+            } catch (e) {}
+
+            // 3. Deteksi F11 atau browser kiosk mode window
+            // PENTING:
+            // Jendela biasa yang di-maximize (windowed) BUKAN fullscreen!
+            // Pada jendela biasa, tab bar + address bar SELALU ada di bagian atas browser,
+            // sehingga window.screenTop > 0 (biasanya 70-120px) dan innerHeight jauh lebih kecil dari screen.height.
+            // Pada fullscreen sejati (F11/Kiosk), seluruh UI browser hilang:
+            // - window.screenTop (atau screenY) adalah 0
+            // - innerHeight mengisi penuh layar monitor
+            const screenW = window.screen.width || screen.width;
+            const screenH = window.screen.height || screen.height;
+            const screenTop = (typeof window.screenTop !== 'undefined') ? window.screenTop : (window.screenY || 0);
+
+            // Jika screenTop bukan 0, pasti ada chrome/toolbar/taskbar di atas konten, sehingga BUKAN fullscreen
+            if (screenTop !== 0) {
+                return false;
+            }
+
+            // A. Zoom 100%: innerHeight & innerWidth harus seukuran penuh monitor (toleransi 4px)
+            if (Math.abs(window.innerHeight - screenH) <= 4 && Math.abs(window.innerWidth - screenW) <= 4) {
+                return true;
+            }
+
+            // B. Zoom Ctrl +/- pada mode F11:
+            // Konversikan CSS pixels ke physical pixels menggunakan devicePixelRatio
+            const dpr = window.devicePixelRatio || 1;
+            if (dpr > 0) {
+                const physicalH = Math.round(window.innerHeight * dpr);
+                const physicalW = Math.round(window.innerWidth * dpr);
+                if (Math.abs(physicalH - screenH) <= 25 && Math.abs(physicalW - screenW) <= 25) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => {
+            if (!isFullscreenAktif()) {
+                document.documentElement.requestFullscreen().then(() => {
+                    startKioskMode();
+                }).catch(err => {
                     console.log("Gagal masuk fullscreen: " + err.message);
+                    // Fallback jika API requestFullscreen dibatasi browser: tetap aktifkan mode kiosk
+                    startKioskMode();
                 });
             } else {
-                document.exitFullscreen();
+                if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(() => {});
+                }
+                stopKioskMode();
             }
         }
 
+        // ===== KIOSK FULLSCREEN ROTATION & AUTO-SCROLL CONTROLLER =====
+        const KIOSK_DURATIONS_PRESETS = [15, 20, 30]; // Preset detik per view
+        let currentKioskPresetIndex = 1; // Default: 20s
+
+        const kioskState = {
+            active: false,
+            userPaused: false,
+            isInterrupted: false,
+            formInteractionPaused: false,
+            formPauseReason: '',
+            interruptTimer: null,
+            formResumeTimer: null,
+
+            // Rotasi antara Dashboard dan KWh Meter
+            views: ['dashboard', 'kwh-control'],
+            currentViewIndex: 0,
+            secondsRemaining: 20,
+            countdownInterval: null,
+
+            // Auto-scroll controller di dalam view yang aktif (mendukung integer & fractional subpixel)
+            scrollAnimId: null,
+            scrollTimeoutId: null,
+            isScrollPaused: false,
+            scrollDirection: 'down',
+            virtualScrollY: 0,
+            scrollSpeed: 1.15,
+            holdTopDuration: 2000,   // Berhenti sejenak di atas sebelum scroll (2 detik)
+            holdBottomDuration: 2500 // Berhenti sejenak di bawah sebelum scroll ke atas (2.5 detik)
+        };
+
+        function isUserInteractingWithKioskProtectedElements() {
+            // 1. Modal Alasan Stop sedang terbuka
+            const modalAlasan = document.getElementById('modal-alasan-stop');
+            if (modalAlasan && modalAlasan.style.display && modalAlasan.style.display !== 'none') return true;
+
+            // 2. Modal Manage Part / Edit Part sedang terbuka
+            const modalManage = document.getElementById('modal-manage-part');
+            if (modalManage && modalManage.style.display && modalManage.style.display !== 'none') return true;
+
+            // 3. Modal Pilih C sedang terbuka
+            const modalPilihC = document.getElementById('modal-pilih-c');
+            if (modalPilihC && modalPilihC.style.display && modalPilihC.style.display !== 'none') return true;
+
+            // 4. Modal Detail Performance sedang terbuka
+            const modalPerf = document.getElementById('modal-detail-performance');
+            if (modalPerf && modalPerf.style.display && modalPerf.style.display !== 'none') return true;
+
+            // 5. Input, Select, atau Textarea sedang aktif / fokus pada Choose Part atau form modal
+            if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+                if (
+                    document.activeElement.id === 'ct-part-search' ||
+                    document.activeElement.id === 'ct-part-select' ||
+                    document.activeElement.closest('.panel-choose-part') ||
+                    document.activeElement.closest('#modal-alasan-stop') ||
+                    document.activeElement.closest('#modal-manage-part') ||
+                    document.activeElement.closest('#modal-pilih-c') ||
+                    document.activeElement.closest('#modal-detail-performance')
+                ) {
+                    return true;
+                }
+            }
+
+            // 6. Kotak Saran Pencarian Part (suggestions) sedang tampil
+            const suggestions = document.getElementById('ct-search-suggestions');
+            if (suggestions && suggestions.style.display && suggestions.style.display !== 'none') return true;
+
+            return false;
+        }
+
+        function pauseKioskForInteraction(reason = 'form') {
+            if (!kioskState.active) return;
+            kioskState.formInteractionPaused = true;
+            kioskState.formPauseReason = reason;
+            if (kioskState.formResumeTimer) {
+                clearTimeout(kioskState.formResumeTimer);
+                kioskState.formResumeTimer = null;
+            }
+            stopViewAutoScroll();
+            updateKioskHudStatus();
+        }
+
+        function resumeKioskAfterInteraction(delayMs = 2500) {
+            if (!kioskState.active) return;
+            if (kioskState.formResumeTimer) {
+                clearTimeout(kioskState.formResumeTimer);
+            }
+            kioskState.formResumeTimer = setTimeout(() => {
+                if (isUserInteractingWithKioskProtectedElements()) {
+                    return; // Masih aktif berinteraksi
+                }
+                kioskState.formInteractionPaused = false;
+                kioskState.formPauseReason = '';
+                updateKioskHudStatus();
+                if (kioskState.active && !kioskState.userPaused && !kioskState.isInterrupted) {
+                    startViewAutoScroll();
+                }
+            }, delayMs);
+        }
+
+        function getKioskDurationForView(view) {
+            return KIOSK_DURATIONS_PRESETS[currentKioskPresetIndex];
+        }
+
+        // HUD / Badge dinonaktifkan total agar tidak ada notifikasi yang muncul saat scroll / kiosk
+        function dismissKioskHud() {}
+        function showKioskHud() {}
+        function updateKioskHud() {}
+        function updateKioskDurationLabel() {}
+        function cycleKioskDuration() {}
+        function updateKioskHudStatus() {}
+
+        function toggleKioskPause(e) {
+            if (e) e.stopPropagation();
+            if (!kioskState.active) return;
+            kioskState.userPaused = !kioskState.userPaused;
+            const iconPause = document.getElementById('kiosk-icon-pause');
+            const iconPlay = document.getElementById('kiosk-icon-play');
+
+            if (kioskState.userPaused) {
+                if (iconPause) iconPause.style.display = 'none';
+                if (iconPlay) iconPlay.style.display = 'block';
+            } else {
+                if (iconPause) iconPause.style.display = 'block';
+                if (iconPlay) iconPlay.style.display = 'none';
+                runKioskScrollLoop();
+            }
+            updateKioskHudStatus();
+        }
+
+        function skipKioskNextView(e) {
+            if (e) e.stopPropagation();
+            if (!kioskState.active) return;
+            kioskSwitchToNextView();
+        }
+
+        function kioskSwitchToNextView() {
+            if (!isFullscreenAktif()) {
+                stopKioskMode();
+                return;
+            }
+
+            if (kioskState.formInteractionPaused || isUserInteractingWithKioskProtectedElements()) {
+                // Tunda pergantian view agar tidak mengganggu operator saat sedang memilih part atau mengisi alasan stop
+                return;
+            }
+
+            // Hentikan scroll aktif di view saat ini
+            stopViewAutoScroll();
+
+            // Pindah ke index view berikutnya
+            kioskState.currentViewIndex = (kioskState.currentViewIndex + 1) % kioskState.views.length;
+            const nextViewName = kioskState.views[kioskState.currentViewIndex];
+
+            // Update URL browser tanpa push history baru (replaceState agar tombol back tetap bersih)
+            const targetUrl = `${APP_BASE_PATH}/${nextViewName}?line=PCB`;
+            history.replaceState({ line: 'PCB', view: nextViewName }, '', targetUrl);
+
+            // Render view baru via SPA engine
+            renderView('PCB', nextViewName);
+
+            // Kembalikan posisi scroll layar ke paling atas
+            applyKioskScrollPosition(0);
+            kioskState.virtualScrollY = 0;
+
+            // Jika pindah ke kwh-control, pastikan chart meresize agar pas dengan layar
+            if (nextViewName === 'kwh-control') {
+                setTimeout(resizeAllKwhCharts, 150);
+            }
+
+            // Reset countdown detik untuk view baru
+            kioskState.secondsRemaining = getKioskDurationForView(nextViewName);
+            updateKioskHudStatus();
+
+            // Mulai auto-scroll untuk view baru jika panjang halamannya melebihi layar
+            setTimeout(() => {
+                if (kioskState.active && !kioskState.userPaused && !kioskState.isInterrupted) {
+                    startViewAutoScroll();
+                }
+            }, 800);
+        }
+
+        function resizeAllKwhCharts() {
+            const charts = [
+                chartKwhConsumptionInstance,
+                chartKwhCurrentInstance,
+                chartDailyConsumptionInstance,
+                chartDailyCostInstance,
+                chartMonthlyConsumptionInstance,
+                chartMonthlyCostInstance
+            ];
+            charts.forEach(c => {
+                if (c && typeof c.resize === 'function') {
+                    try { c.resize(); } catch (e) {}
+                }
+            });
+        }
+
+        function startKioskMode() {
+            stopKioskMode();
+            if (!isFullscreenAktif()) return;
+
+            kioskState.active = true;
+            kioskState.userPaused = false;
+            kioskState.isInterrupted = false;
+
+            // Tentukan view awal: jika saat ini sedang di kwh-control, mulai dari kwh-control. Selain itu, mulai dari dashboard.
+            if (currentView === 'kwh-control') {
+                kioskState.currentViewIndex = 1;
+            } else {
+                kioskState.currentViewIndex = 0;
+                if (currentView !== 'dashboard') {
+                    renderView('PCB', 'dashboard');
+                }
+            }
+
+            const activeViewName = kioskState.views[kioskState.currentViewIndex];
+            kioskState.secondsRemaining = getKioskDurationForView(activeViewName);
+
+            showKioskHud(true);
+            updateKioskDurationLabel();
+
+            const iconPause = document.getElementById('kiosk-icon-pause');
+            const iconPlay = document.getElementById('kiosk-icon-play');
+            if (iconPause) iconPause.style.display = 'block';
+            if (iconPlay) iconPlay.style.display = 'none';
+
+            applyKioskScrollPosition(0);
+            kioskState.virtualScrollY = 0;
+            updateKioskHudStatus();
+
+            // Jalankan countdown timer setiap 1 detik
+            kioskState.countdownInterval = setInterval(() => {
+                if (!kioskState.active || !isFullscreenAktif()) {
+                    stopKioskMode();
+                    return;
+                }
+                if (kioskState.userPaused || kioskState.isInterrupted || kioskState.formInteractionPaused || isUserInteractingWithKioskProtectedElements()) return;
+
+                kioskState.secondsRemaining--;
+                updateKioskHudStatus();
+
+                if (kioskState.secondsRemaining <= 0) {
+                    kioskSwitchToNextView();
+                }
+            }, 1000);
+
+            // Jalankan auto-scroll untuk view awal jika halaman panjang
+            setTimeout(() => {
+                if (kioskState.active && !kioskState.userPaused && !kioskState.isInterrupted && !kioskState.formInteractionPaused && !isUserInteractingWithKioskProtectedElements()) {
+                    startViewAutoScroll();
+                }
+            }, 1000);
+        }
+
+        function stopKioskMode() {
+            kioskState.active = false;
+            kioskState.formInteractionPaused = false;
+            kioskState.formPauseReason = '';
+            if (kioskState.countdownInterval) {
+                clearInterval(kioskState.countdownInterval);
+                kioskState.countdownInterval = null;
+            }
+            if (kioskState.interruptTimer) {
+                clearTimeout(kioskState.interruptTimer);
+                kioskState.interruptTimer = null;
+            }
+            if (kioskState.formResumeTimer) {
+                clearTimeout(kioskState.formResumeTimer);
+                kioskState.formResumeTimer = null;
+            }
+            stopViewAutoScroll();
+            showKioskHud(false);
+        }
+
+        // ===== SUB-CONTROLLER: AUTO-SCROLL DI DALAM VIEW =====
+        function getKioskScrollMetrics() {
+            const docEl = document.documentElement;
+            const body = document.body;
+            const mainEl = document.querySelector('.main');
+
+            const scrollHeight = Math.max(
+                docEl ? docEl.scrollHeight : 0,
+                body ? body.scrollHeight : 0,
+                mainEl ? mainEl.scrollHeight : 0
+            );
+
+            const viewportHeight = window.innerHeight || (docEl ? docEl.clientHeight : 0) || (mainEl ? mainEl.clientHeight : 0);
+            const maxScroll = Math.max(0, scrollHeight - viewportHeight);
+
+            const currentY = Math.max(
+                window.scrollY || 0,
+                window.pageYOffset || 0,
+                docEl ? docEl.scrollTop : 0,
+                body ? body.scrollTop : 0,
+                (mainEl && mainEl.scrollTop) ? mainEl.scrollTop : 0
+            );
+
+            return { scrollHeight, viewportHeight, maxScroll, currentY, mainEl };
+        }
+
+        function applyKioskScrollPosition(y) {
+            const roundedY = Math.round(Math.max(0, y));
+            window.scrollTo({ top: roundedY, behavior: 'auto' });
+            if (document.documentElement) document.documentElement.scrollTop = roundedY;
+            if (document.body) document.body.scrollTop = roundedY;
+            const mainEl = document.querySelector('.main');
+            if (mainEl && typeof mainEl.scrollTop !== 'undefined') {
+                mainEl.scrollTop = roundedY;
+            }
+        }
+
+        function startViewAutoScroll() {
+            stopViewAutoScroll();
+            if (!isFullscreenAktif()) {
+                stopKioskMode();
+                return;
+            }
+            if (!kioskState.active || kioskState.formInteractionPaused || isUserInteractingWithKioskProtectedElements()) return;
+
+            const metrics = getKioskScrollMetrics();
+            if (metrics.maxScroll <= 15) {
+                // Konten pas 1 layar tanpa butuh scroll
+                return;
+            }
+
+            kioskState.scrollDirection = 'down';
+            kioskState.isScrollPaused = false;
+            kioskState.virtualScrollY = metrics.currentY;
+
+            kioskState.scrollTimeoutId = setTimeout(() => {
+                if (kioskState.active && !kioskState.userPaused && !kioskState.isInterrupted && !kioskState.formInteractionPaused && !isUserInteractingWithKioskProtectedElements()) {
+                    kioskState.virtualScrollY = getKioskScrollMetrics().currentY;
+                    runKioskScrollLoop();
+                }
+            }, kioskState.holdTopDuration);
+        }
+
+        function stopViewAutoScroll() {
+            if (kioskState.scrollAnimId) {
+                cancelAnimationFrame(kioskState.scrollAnimId);
+                kioskState.scrollAnimId = null;
+            }
+            if (kioskState.scrollTimeoutId) {
+                clearTimeout(kioskState.scrollTimeoutId);
+                kioskState.scrollTimeoutId = null;
+            }
+        }
+
+        function runKioskScrollLoop() {
+            if (!isFullscreenAktif()) {
+                stopKioskMode();
+                return;
+            }
+            if (!kioskState.active || kioskState.userPaused || kioskState.isInterrupted || kioskState.formInteractionPaused || isUserInteractingWithKioskProtectedElements()) return;
+
+            if (kioskState.isScrollPaused) {
+                kioskState.scrollAnimId = requestAnimationFrame(runKioskScrollLoop);
+                return;
+            }
+
+            const metrics = getKioskScrollMetrics();
+            const maxScroll = metrics.maxScroll;
+
+            if (maxScroll <= 15) {
+                // Konten pas 1 layar
+                kioskState.scrollAnimId = requestAnimationFrame(runKioskScrollLoop);
+                return;
+            }
+
+            if (typeof kioskState.virtualScrollY !== 'number' || isNaN(kioskState.virtualScrollY)) {
+                kioskState.virtualScrollY = metrics.currentY;
+            }
+
+            if (kioskState.scrollDirection === 'down') {
+                if (kioskState.virtualScrollY >= maxScroll - 4) {
+                    // Tiba di bagian bawah: tahan sejenak lalu gulir balik ke atas
+                    applyKioskScrollPosition(maxScroll);
+                    kioskState.virtualScrollY = maxScroll;
+                    kioskState.isScrollPaused = true;
+                    kioskState.scrollTimeoutId = setTimeout(() => {
+                        if (!kioskState.active || kioskState.userPaused || kioskState.isInterrupted || kioskState.formInteractionPaused || isUserInteractingWithKioskProtectedElements()) return;
+                        kioskState.scrollDirection = 'up';
+                        kioskState.isScrollPaused = false;
+                        runKioskScrollLoop();
+                    }, kioskState.holdBottomDuration);
+                    return;
+                } else {
+                    kioskState.virtualScrollY += kioskState.scrollSpeed;
+                    applyKioskScrollPosition(kioskState.virtualScrollY);
+                }
+            } else {
+                if (kioskState.virtualScrollY <= 4) {
+                    // Tiba di atas lagi: tahan sejenak lalu ulangi gulir ke bawah
+                    applyKioskScrollPosition(0);
+                    kioskState.virtualScrollY = 0;
+                    kioskState.isScrollPaused = true;
+                    kioskState.scrollTimeoutId = setTimeout(() => {
+                        if (!kioskState.active || kioskState.userPaused || kioskState.isInterrupted || kioskState.formInteractionPaused || isUserInteractingWithKioskProtectedElements()) return;
+                        kioskState.scrollDirection = 'down';
+                        kioskState.isScrollPaused = false;
+                        runKioskScrollLoop();
+                    }, kioskState.holdTopDuration);
+                    return;
+                } else {
+                    kioskState.virtualScrollY -= (kioskState.scrollSpeed * 2.2);
+                    applyKioskScrollPosition(kioskState.virtualScrollY);
+                }
+            }
+
+            kioskState.scrollAnimId = requestAnimationFrame(runKioskScrollLoop);
+        }
+
+        // Tangani interaksi manual pengguna: jeda otomatis 6 detik saat wheel/touch/keyboard
+        function handleUserKioskInterruption() {
+            if (!kioskState.active || kioskState.userPaused) return;
+
+            kioskState.isInterrupted = true;
+            updateKioskHudStatus();
+
+            if (kioskState.interruptTimer) clearTimeout(kioskState.interruptTimer);
+            kioskState.interruptTimer = setTimeout(() => {
+                if (kioskState.active && !kioskState.userPaused && !kioskState.formInteractionPaused && !isUserInteractingWithKioskProtectedElements()) {
+                    kioskState.isInterrupted = false;
+                    kioskState.virtualScrollY = getKioskScrollMetrics().currentY;
+                    updateKioskHudStatus();
+                    runKioskScrollLoop();
+                }
+            }, 6000);
+        }
+
+        window.addEventListener('wheel', handleUserKioskInterruption, { passive: true });
+        window.addEventListener('touchmove', handleUserKioskInterruption, { passive: true });
+        window.addEventListener('keydown', (e) => {
+            if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Space'].includes(e.code)) {
+                handleUserKioskInterruption();
+            }
+        });
+
+        // Jeda auto-scroll dan rotasi otomatis saat user berinteraksi dengan Choose Part atau Alasan Stop (HANYA saat fokus input/modal, BUKAN hover mouse)
+        document.addEventListener('focusin', (e) => {
+            if (!kioskState.active) return;
+            if (e.target && (
+                e.target.id === 'ct-part-search' ||
+                e.target.id === 'ct-part-select' ||
+                (e.target.tagName && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) && (
+                    e.target.closest('.panel-choose-part') ||
+                    e.target.closest('#modal-alasan-stop') ||
+                    e.target.closest('#modal-manage-part') ||
+                    e.target.closest('#modal-pilih-c')
+                ))
+            )) {
+                const isAlasan = e.target.closest('#modal-alasan-stop');
+                pauseKioskForInteraction(isAlasan ? 'alasan-stop' : 'choose-part');
+            }
+        });
+
+        document.addEventListener('focusout', (e) => {
+            if (!kioskState.active) return;
+            if (e.target && (
+                e.target.id === 'ct-part-search' ||
+                e.target.id === 'ct-part-select' ||
+                (e.target.tagName && ['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName) && (
+                    e.target.closest('.panel-choose-part') ||
+                    e.target.closest('#modal-alasan-stop') ||
+                    e.target.closest('#modal-manage-part') ||
+                    e.target.closest('#modal-pilih-c')
+                ))
+            )) {
+                resumeKioskAfterInteraction(1500);
+            }
+        });
+
         document.addEventListener('fullscreenchange', () => {
             const iconEl = document.getElementById('fs-icon');
-            iconEl.innerHTML = document.fullscreenElement ? ikonCompress : ikonExpand;
+            if (iconEl) {
+                iconEl.innerHTML = isFullscreenAktif() ? ikonCompress : ikonExpand;
+            }
+            if (document.fullscreenElement) {
+                setTimeout(() => {
+                    startKioskMode();
+                }, 500);
+            } else {
+                stopKioskMode();
+            }
+        });
+
+        // Deteksi jika fullscreen diaktifkan via tombol F11 keyboard atau browser kiosk mode pada PC industrial
+        window.addEventListener('resize', () => {
+            const fsAktif = isFullscreenAktif();
+            const iconEl = document.getElementById('fs-icon');
+            if (iconEl && !document.fullscreenElement) {
+                iconEl.innerHTML = fsAktif ? ikonCompress : ikonExpand;
+            }
+            if (fsAktif) {
+                if (!kioskState.active) {
+                    setTimeout(() => {
+                        if (isFullscreenAktif() && !kioskState.active) {
+                            startKioskMode();
+                        }
+                    }, 400);
+                }
+            } else {
+                if (kioskState.active) {
+                    stopKioskMode();
+                }
+            }
+        });
+
+        // ===== SIDEBAR DRAWER AUTO-REVEAL ON HOVER CONTROLLER =====
+        let sidebarTimerHide = null;
+
+        function showSidebarDrawer() {
+            clearTimeout(sidebarTimerHide);
+            const sidebar = document.getElementById('mainSidebar');
+            const indicator = document.getElementById('sidebarEdgeIndicator');
+            if (sidebar) sidebar.classList.add('sidebar-visible');
+            if (indicator) indicator.classList.add('indicator-hidden');
+        }
+
+        function hideSidebarDrawer(delay = 320) {
+            clearTimeout(sidebarTimerHide);
+            sidebarTimerHide = setTimeout(() => {
+                const sidebar = document.getElementById('mainSidebar');
+                const indicator = document.getElementById('sidebarEdgeIndicator');
+                if (sidebar) sidebar.classList.remove('sidebar-visible');
+                if (indicator) indicator.classList.remove('indicator-hidden');
+            }, delay);
+        }
+
+        function toggleSidebarDrawer() {
+            const sidebar = document.getElementById('mainSidebar');
+            if (!sidebar) return;
+            if (sidebar.classList.contains('sidebar-visible')) {
+                hideSidebarDrawer(0);
+            } else {
+                showSidebarDrawer();
+            }
+        }
+
+        // Inisialisasi event listener untuk sidebar auto-reveal & status fullscreen awal
+        document.addEventListener('DOMContentLoaded', () => {
+            // Pastikan mode kiosk & auto-scroll HANYA aktif jika dibuka langsung dalam fullscreen sejati (F11 / kiosk PC)
+            if (isFullscreenAktif()) {
+                setTimeout(() => {
+                    if (isFullscreenAktif() && !kioskState.active) {
+                        startKioskMode();
+                    }
+                }, 800);
+            } else {
+                stopKioskMode();
+            }
+
+            const edgeZone = document.getElementById('sidebarEdgeZone');
+            const edgeIndicator = document.getElementById('sidebarEdgeIndicator');
+            const sidebar = document.getElementById('mainSidebar');
+
+            if (edgeZone) {
+                edgeZone.addEventListener('mouseenter', showSidebarDrawer);
+            }
+            if (edgeIndicator) {
+                edgeIndicator.addEventListener('mouseenter', showSidebarDrawer);
+            }
+            if (sidebar) {
+                sidebar.addEventListener('mouseenter', showSidebarDrawer);
+                sidebar.addEventListener('mouseleave', () => hideSidebarDrawer(350));
+
+                // Otomatis sembunyikan sidebar setelah klik link menu
+                const navLinks = sidebar.querySelectorAll('.nav-item');
+                navLinks.forEach(link => {
+                    link.addEventListener('click', () => {
+                        hideSidebarDrawer(200);
+                    });
+                });
+            }
         });
 
         // ===== GREETING & JAM =====
@@ -125,6 +757,21 @@
             const tanggal = `${namaHari[sekarang.getDay()]}, ${sekarang.getDate()} ${namaBulan[sekarang.getMonth()]} ${sekarang.getFullYear()}`;
             const waktu = sekarang.toLocaleTimeString('id-ID');
             document.getElementById("greeting-clock").innerText = `${sapaan} · ${tanggal} · ${waktu}`;
+
+            // Jika dashboard berjalan 24 jam dan berganti hari (lewat tengah malam), sinkronkan currentTanggal otomatis
+            if (!_urlParams.get('tanggal')) {
+                const hariIniLokal = tanggalLokalYYYYMMDD(sekarang);
+                if (currentTanggal !== hariIniLokal) {
+                    currentTanggal = hariIniLokal;
+                    const inputPerfTanggal = document.getElementById('perf-tanggal');
+                    if (inputPerfTanggal && !sesiProduksiAktif) {
+                        inputPerfTanggal.value = hariIniLokal;
+                    }
+                    if (currentView === 'dashboard') {
+                        updateData();
+                    }
+                }
+            }
         }
 
         // ===== FETCH DASHBOARD (kartu) =====
@@ -158,74 +805,107 @@
         }
 
         function getTanggalAktif() {
-            const input = document.getElementById('filter-tanggal');
-            if (input && input.value) return input.value;
-            return new Date().toISOString().split('T')[0];
+            if (currentView === 'chart') {
+                const input = document.getElementById('filter-tanggal');
+                if (input && input.value) return input.value;
+            }
+            const paramTgl = _urlParams.get('tanggal');
+            if (paramTgl && /^\d{4}-\d{2}-\d{2}$/.test(paramTgl)) return paramTgl;
+            return tanggalLokalYYYYMMDD();
+        }
+
+        let dashboardModeProduksi = localStorage.getItem('dashboardModeProduksi') || 'shift';
+
+        function setDashboardModeProduksi(mode) {
+            dashboardModeProduksi = mode;
+            localStorage.setItem('dashboardModeProduksi', mode);
+
+            const btnShift = document.getElementById('btn-mode-shift');
+            const btnHarian = document.getElementById('btn-mode-harian');
+            if (btnShift && btnHarian) {
+                if (mode === 'shift') {
+                    btnShift.classList.add('active');
+                    btnHarian.classList.remove('active');
+                } else {
+                    btnShift.classList.remove('active');
+                    btnHarian.classList.add('active');
+                }
+            }
+
+            updateData();
         }
 
         async function updateData(tanggal) {
-            const tgl = tanggal || getTanggalAktif();
-            let data = null;
+            const tgl = tanggal || (currentView === 'dashboard' ? (_urlParams.get('tanggal') || tanggalLokalYYYYMMDD()) : getTanggalAktif());
             try {
-                const response = await fetch(`api/data.php?line=${encodeURIComponent(currentLine)}&tanggal=${tgl}`, { cache: "no-store" });
-                if (response.ok) {
-                    data = await response.json();
+                const response = await fetch(`api/data.php?line=${encodeURIComponent(currentLine)}&tanggal=${tgl}&mode=${dashboardModeProduksi}`, { cache: "no-store" });
+                const data = await response.json();
+
+                if (!data || data.input === undefined) {
+                    console.warn('updateData: respons tidak valid atau terjadi error', data);
+                    return;
                 }
-            } catch (e) {
-                // UI standalone mode fallback
+
+                const newInput = isNaN(parseFloat(data.input)) ? 0 : parseFloat(data.input);
+                const newOutput = isNaN(parseFloat(data.output)) ? 0 : parseFloat(data.output);
+                const newYield = isNaN(parseFloat(data.yield_val)) ? 0 : parseFloat(data.yield_val);
+                const newOr = isNaN(parseFloat(data.or_value)) ? 0 : parseFloat(data.or_value);
+
+                // Satuan SHEET/PANEL (bukan PCS) -- lihat komentar di api/data.php
+                const newSheetInput = isNaN(parseFloat(data.input_sheet)) ? 0 : parseFloat(data.input_sheet);
+                const newSheetOutput = isNaN(parseFloat(data.output_sheet)) ? 0 : parseFloat(data.output_sheet);
+                const newSheetYield = isNaN(parseFloat(data.yield_sheet_val)) ? 0 : parseFloat(data.yield_sheet_val);
+
+                if (!sudahLoadPertama) {
+                    document.querySelectorAll('.metric-card .value').forEach(el => el.classList.remove('skeleton'));
+                    sudahLoadPertama = true;
+                }
+
+                // Selalu simpan nilai terbaru biar kartu produksi bisa restore dengan benar
+                prevInput = newInput; prevOutput = newOutput; prevYield = newYield; prevOr = newOr;
+                prevSheetInput = newSheetInput; prevSheetOutput = newSheetOutput; prevSheetYield = newSheetYield;
+
+                animateValue("input-value", prevInput, newInput, 600, 0, "");
+                animateValue("output-value", prevOutput, newOutput, 600, 0, "");
+                animateValue("yield-value", prevYield, newYield, 600, 1, "%");
+                animateValue("or-value", prevOr, newOr, 600, 1, "%");
+
+                animateValue("sheet-input-value", prevSheetInput, newSheetInput, 600, 0, "");
+                animateValue("sheet-output-value", prevSheetOutput, newSheetOutput, 600, 0, "");
+                animateValue("sheet-yield-value", prevSheetYield, newSheetYield, 600, 1, "%");
+
+                const hariIni = tanggalLokalYYYYMMDD();
+                let labelTgl;
+                if (data.mode === 'shift' && data.shift) {
+                    labelTgl = `Shift ${data.shift} (${data.rentang_shift})`;
+                } else {
+                    labelTgl = (tgl === hariIni) ? 'Hari Ini' : formatTanggalIndo(tgl);
+                }
+                document.querySelectorAll('.metric-tanggal-label').forEach(el => el.innerText = labelTgl);
+
+                // Sinkronkan status tombol toggle mode
+                const btnShift = document.getElementById('btn-mode-shift');
+                const btnHarian = document.getElementById('btn-mode-harian');
+                if (btnShift && btnHarian) {
+                    if (dashboardModeProduksi === 'shift') {
+                        btnShift.classList.add('active');
+                        btnHarian.classList.remove('active');
+                    } else {
+                        btnShift.classList.remove('active');
+                        btnHarian.classList.add('active');
+                    }
+                }
+            } catch (err) {
+                console.warn('updateData error:', err);
             }
-
-            if (!sudahLoadPertama) {
-                document.querySelectorAll('.metric-card .value').forEach(el => el.classList.remove('skeleton'));
-                sudahLoadPertama = true;
-            }
-
-            if (!data || data.input === undefined) {
-                return;
-            }
-
-            const newInput = isNaN(parseFloat(data.input)) ? 0 : parseFloat(data.input);
-            const newOutput = isNaN(parseFloat(data.output)) ? 0 : parseFloat(data.output);
-            const newYield = isNaN(parseFloat(data.yield_val)) ? 0 : parseFloat(data.yield_val);
-            const newOr = isNaN(parseFloat(data.or_value)) ? 0 : parseFloat(data.or_value);
-
-            // Satuan SHEET/PANEL (bukan PCS) -- lihat komentar di api/data.php
-            const newSheetInput = isNaN(parseFloat(data.input_sheet)) ? 0 : parseFloat(data.input_sheet);
-            const newSheetOutput = isNaN(parseFloat(data.output_sheet)) ? 0 : parseFloat(data.output_sheet);
-            const newSheetYield = isNaN(parseFloat(data.yield_sheet_val)) ? 0 : parseFloat(data.yield_sheet_val);
-
-            // Selalu simpan nilai terbaru biar kartu produksi bisa restore dengan benar
-            prevInput = newInput; prevOutput = newOutput; prevYield = newYield; prevOr = newOr;
-            prevSheetInput = newSheetInput; prevSheetOutput = newSheetOutput; prevSheetYield = newSheetYield;
-
-            animateValue("input-value", prevInput, newInput, 600, 0, "");
-            animateValue("output-value", prevOutput, newOutput, 600, 0, "");
-            animateValue("yield-value", prevYield, newYield, 600, 1, "%");
-            animateValue("or-value", prevOr, newOr, 600, 1, "%");
-
-            animateValue("sheet-input-value", prevSheetInput, newSheetInput, 600, 0, "");
-            animateValue("sheet-output-value", prevSheetOutput, newSheetOutput, 600, 0, "");
-            animateValue("sheet-yield-value", prevSheetYield, newSheetYield, 600, 1, "%");
-
-            const hariIni = new Date().toISOString().split('T')[0];
-            const labelTgl = (tgl === hariIni) ? 'Hari Ini' : formatTanggalIndo(tgl);
-            document.querySelectorAll('.metric-tanggal-label').forEach(el => el.innerText = labelTgl);
         }
 
         // ===== TOWER LIGHT STATUS MESIN (SELARAS DENGAN ESP32) =====
         async function updateStatusMesin() {
-            let status = 'running';
             try {
                 const response = await fetch(`api/get_status.php?line=${encodeURIComponent(currentLine)}`, { cache: "no-store" });
-                if (response.ok) {
-                    const hasil = await response.json();
-                    if (hasil && hasil.status_mesin) {
-                        status = hasil.status_mesin;
-                    }
-                }
-            } catch (e) {
-                // UI standalone mode fallback
-            }
+                const hasil = await response.json();
+                const status = hasil.status_mesin;
 
             // Matiin semua lampu & lepas class kedap-kedip dulu, baru nyalain yang sesuai
             const lampMerah = document.getElementById("lamp-merah");
@@ -249,28 +929,28 @@
             if (teksStatusEl) teksStatusEl.innerText = petaTeks[status] || "STOP";
 
             // Visualisasi Patlite fisik 6 kondisi:
-            // 1. Kondisi 1 (1 + 2,0 + 3,0): Mesin produksi normal (Hijau Nyala)
+            // 1. Kondisi 1: Mesin produksi normal (Hijau Nyala)
             if (status === 'running') {
                 if (lampHijau) lampHijau.classList.add("aktif");
             }
-            // 2. Kondisi 2 (1 + 2" + 3,0): Mesin produksi tapi tetap jalan (Hijau Nyala + Kuning Kedip)
+            // 2. Kondisi 2: Mesin produksi tapi tetap jalan (Hijau Nyala + Kuning Kedip)
             else if (status === 'running_kedip') {
                 if (lampHijau) lampHijau.classList.add("aktif");
                 if (lampKuning) lampKuning.classList.add("aktif", "lamp-berkedip");
             }
-            // 3. Kondisi 3 (1,0 + 2 + 3,0): Mesin berhenti (Kuning Nyala solid)
+            // 3. Kondisi 3: Mesin berhenti (Kuning Nyala solid)
             else if (status === 'standby') {
                 if (lampKuning) lampKuning.classList.add("aktif");
             }
-            // 4. Kondisi 4 (1,0 + 2" + 3,0): Mesin berhenti (Kuning Kedip)
+            // 4. Kondisi 4: Mesin berhenti (Kuning Kedip)
             else if (status === 'standby_kedip') {
                 if (lampKuning) lampKuning.classList.add("aktif", "lamp-berkedip");
             }
-            // 5. Kondisi 5 (1,0 + 2,0 + 3): Mesin berhenti (Merah Nyala solid) / Maintenance
+            // 5. Kondisi 5: Mesin berhenti (Merah Nyala solid) / Maintenance
             else if (status === 'stop' || status === 'maintenance') {
                 if (lampMerah) lampMerah.classList.add("aktif");
             }
-            // 6. Kondisi 6 (1,0 + 2,0 + 3,0): Mati (Semua lampu tower padam)
+            // 6. Kondisi 6: Mati (Semua lampu tower padam)
             else if (status === 'mati') {
                 // Semua lampu tetap padam
             }
@@ -291,6 +971,9 @@
             waktuMatiStopAktif = hasil.waktu_mati || hasil.updated_at;
             warnaPatliteStopAktif = hasil.warna_patlite || (status === 'standby' ? 'Kuning' : (status === 'standby_kedip' ? 'Kuning Kedip' : (status === 'mati' ? 'Mati / OFF' : (status === 'maintenance' ? 'Merah (Maintenance)' : 'Merah'))));
             infoStopSelesaiTerakhir = hasil.info_stop_selesai || null;
+            timelineStopList = hasil.timeline_stop || [];
+            jumlahStopBisaDiisi = (typeof hasil.jumlah_bisa_diisi !== 'undefined') ? hasil.jumlah_bisa_diisi : timelineStopList.filter(item => !item.is_ongoing && item.bisa_diisi).length;
+            timelineAdaStopOngoing = (typeof hasil.ada_stop_berlangsung !== 'undefined') ? hasil.ada_stop_berlangsung : timelineStopList.some(item => item.is_ongoing);
 
             const teksUpdateStatus = document.getElementById("teks-update-status");
             if (teksUpdateStatus) {
@@ -305,7 +988,6 @@
             // Mesin Berhenti: Stop (Merah), Standby (Kuning), Standby Kedip (Kuning Kedip), Mati (OFF)
             const isMesinBerhenti = (status === 'stop' || status === 'standby' || status === 'standby_kedip' || status === 'mati');
             const isSedangProduksi = (status === 'running' || status === 'running_kedip');
-
             // Peringatan: mesin sedang berhenti (Stop / Standby / Standby Kedip / Mati) dan alasannya belum diisi.
             // Khusus line PCB: line lain belum menggunakan sistem notifikasi ini dan punya settingan tersendiri.
             const warningAlasanEl = document.getElementById("stop-alasan-warning");
@@ -324,8 +1006,13 @@
                     if (status === 'standby_kedip') infoKondisi = "Kuning Kedip";
                     if (status === 'mati') infoKondisi = "Mesin Mati / Patlite OFF";
 
-                    teksPeringatan = `Mesin berhenti (${infoKondisi}) — klik untuk isi alasan (sisa ${jumlahBelum})`;
-                    teksJudul = `Alasan Mesin Berhenti (${infoKondisi} - sisa ${jumlahBelum})`;
+                    if (timelineAdaStopOngoing && jumlahStopBisaDiisi === 0) {
+                        teksPeringatan = `Mesin berhenti (${infoKondisi}) — Sedang berlangsung (klik untuk lihat timeline)`;
+                        teksJudul = `Alasan Mesin Berhenti (${infoKondisi} - Sedang Berlangsung)`;
+                    } else {
+                        teksPeringatan = `Mesin berhenti (${infoKondisi}) — klik untuk isi alasan (sisa ${jumlahBelum})`;
+                        teksJudul = `Alasan Mesin Berhenti (${infoKondisi} - sisa ${jumlahBelum})`;
+                    }
                 }
 
                 const teksPeringatanEl = document.getElementById("stop-alasan-warning-teks");
@@ -334,9 +1021,11 @@
                 if (judulModalEl) judulModalEl.innerText = teksJudul;
                 if (warningAlasanEl) warningAlasanEl.style.display = "flex";
 
-                // Jika mesin berhenti: Buka modal popup, tampilkan toast notifikasi & bunyikan alarm suara
-                if (alasanStopSudahDitampilkanUntuk !== hasil.updated_at) {
-                    alasanStopSudahDitampilkanUntuk = hasil.updated_at;
+                // Pemicu modal popup & toast: gunakan kombinasi waktu_mati dan updated_at
+                // agar saat shift baru dimulai (waktu_mati = 06:55 / 15:50 / 23:20), modal langsung muncul
+                const trackingKey = (hasil.waktu_mati || '') + '_' + (hasil.updated_at || '');
+                if (alasanStopSudahDitampilkanUntuk !== trackingKey) {
+                    alasanStopSudahDitampilkanUntuk = trackingKey;
                     if (isMesinBerhenti) {
                         bukaModalAlasanStop();
                         let labelNotif = status === 'stop' ? 'Lampu Merah (Stop)' : (status === 'standby_kedip' ? 'Kuning Kedip (Standby)' : (status === 'mati' ? 'Mesin Mati / Patlite OFF' : 'Lampu Kuning (Standby)'));
@@ -362,7 +1051,6 @@
                         mulaiSesiPerformance();
                     }
                     calonJamSelesai = null; // batalkan calon jam selesai yang sempat tersimpan waktu jeda
-
                     if (currentView === 'machine-control') {
                         perbaruiHasilPerformanceLive();
                         loadRingkasanAlasanStop();
@@ -390,6 +1078,9 @@
                 } else {
                     updateStatusBoxMC('idle');
                 }
+            }
+            } catch (err) {
+                console.warn('updateStatusMesin error:', err);
             }
         }
 
@@ -523,10 +1214,13 @@
         // Dipanggil saat operator mengisi alasan stop dengan kategori "Selesai Produksi"
         // (lihat selesaikanSesiKarenaSelesaiProduksi()). Mengisi Jam Selesai, menghitung & menyimpan
         // hasil performance sesi produksi part ini, lalu mengakhiri sesi (data dipisah dari sesi berikutnya).
+        let _sedangMematikan = false;
         async function matikanMesin(jamSelesaiOverride) {
             const inputMulai = document.getElementById('perf-jam-mulai');
             const inputSelesai = document.getElementById('perf-jam-selesai');
             if (!sesiProduksiAktif || !inputMulai || !inputMulai.value) return; // tidak ada sesi aktif buat diakhiri
+            if (_sedangMematikan) return; // guard double-call
+            _sedangMematikan = true;
 
             hentikanTimerLive();
             inputSelesai.value = jamSelesaiOverride || jamSekarangHHMM();
@@ -588,6 +1282,7 @@
             // supaya kalau halaman di-refresh setelah ini, tidak ada sesi lama yang
             // "kepulihkan" lagi secara keliru.
             await hapusSesiAktifDiServer();
+            _sedangMematikan = false;
         }
 
         // Cek apakah jam selesai sesi (format "HH:MM") sudah mencapai/lewat jam akhir shift
@@ -603,6 +1298,109 @@
                 return jamSelesaiHHMM >= shift.jamSelesai;
             }
             return jamSelesaiHHMM >= shift.jamSelesai;
+        }
+
+        // Cek apakah jam mulai & tanggal suatu sesi masih berada di dalam batas shift yang aktif saat ini
+        function apakahSesiDalamShiftSekarang(jamMulaiSesi, tglSesi) {
+            if (!jamMulaiSesi) return false;
+            const shift = dapatkanShiftSekarang();
+            const tgl = tglSesi || (currentTanggal || tanggalLokalYYYYMMDD());
+
+            if (shift.jamMulai > shift.jamSelesai) {
+                // Shift Malam lintas tengah malam (23:20 - 06:55):
+                // tanggal sesi bisa berupa tanggal shift (ketika jam >= 23:20)
+                // ATAU tanggal esoknya (ketika jam < 23:20, yaitu dini hari).
+                // Jadi kita toleransi selisih 1 hari antara tglSesi dan shift.tanggal.
+                const tglEsok = (() => {
+                    const d = new Date(shift.tanggal + 'T00:00:00');
+                    d.setDate(d.getDate() + 1);
+                    return d.toISOString().slice(0, 10);
+                })();
+                const tglValid = (tgl === shift.tanggal || tgl === tglEsok);
+                if (!tglValid) return false;
+                return jamMulaiSesi >= shift.jamMulai || jamMulaiSesi < shift.jamSelesai;
+            }
+
+            if (tgl !== shift.tanggal) return false;
+            return jamMulaiSesi >= shift.jamMulai && jamMulaiSesi < shift.jamSelesai;
+        }
+
+        // Reset penuh status Machine Control saat shift berganti / sesi kedaluwarsa
+        async function resetSesiKarenaGantiShift() {
+            hentikanTimerLive();
+            sesiProduksiAktif = false;
+
+            const shift = dapatkanShiftSekarang();
+            const partAktif = document.getElementById('perf-part-label')?.innerText;
+            const ctAktif = document.getElementById('perf-ct-pilihan')?.value;
+            const mesinSedangRunning = (statusMesinAsliTerakhir === 'running' || statusMesinAsliTerakhir === 'running_kedip');
+
+            // Reset input form jam mulai, selesai, dan tanggal
+            const inputMulai = document.getElementById('perf-jam-mulai');
+            const inputSelesai = document.getElementById('perf-jam-selesai');
+            const inputTgl = document.getElementById('perf-tanggal');
+            if (inputMulai) inputMulai.value = '';
+            if (inputSelesai) inputSelesai.value = '';
+            if (inputTgl) inputTgl.value = '';
+
+            // Reset timer display ke 00:00:00
+            const elTimer = document.getElementById('mc-live-timer');
+            if (elTimer) {
+                elTimer.innerText = '00:00:00';
+            }
+
+            // Reset kartu metrik ke '-' dan sembunyikan grid hasil live
+            resetKartuMetrik();
+
+            // Jika mesin masih sedang running dan ada part yang dipilih,
+            // lakukan handover otomatis ke shift yang baru (mulai dari jamMulai shift baru)
+            if (mesinSedangRunning && partAktif && partAktif !== '-' && ctAktif) {
+                if (elTimer) elTimer.style.display = '';
+                await mulaiSesiDenganPartTerpilih(shift.jamMulai);
+
+                const statusEl = document.getElementById('simpan-produksi-status');
+                if (statusEl) {
+                    statusEl.textContent = `ℹ️ Pergantian shift terdeteksi. Sesi produksi otomatis dilanjutkan untuk Shift ${shift.nama} (Mulai ${shift.jamMulai}).`;
+                    statusEl.style.display = '';
+                    statusEl.style.color = '#0d3b8c';
+                    setTimeout(() => {
+                        if (statusEl) statusEl.style.display = 'none';
+                    }, 8000);
+                }
+                return;
+            }
+
+            // Jika mesin tidak sedang running, reset penuh ke Idle & bersihkan pilihan part
+            if (elTimer) elTimer.style.display = 'none';
+            updateStatusBoxMC('idle');
+
+            const searchPart = document.getElementById('ct-part-search');
+            const selectPart = document.getElementById('ct-part-select');
+            if (searchPart) searchPart.value = '';
+            if (selectPart) selectPart.value = '';
+            tampilkanDetailCt('');
+            isiDropdownCtPerformance(null);
+            localStorage.removeItem('selected_part_' + currentLine);
+            await simpanPartTerpilih('');
+
+            const boxC = document.getElementById('mc-nilai-c-box');
+            const boxKosong = document.getElementById('mc-nilai-c-kosong');
+            if (boxC) boxC.style.display = 'none';
+            if (boxKosong) boxKosong.style.display = 'flex';
+
+            // Bersihkan sesi di database server
+            await hapusSesiAktifDiServer();
+
+            // Notifikasi ringkas di status info
+            const statusEl = document.getElementById('simpan-produksi-status');
+            if (statusEl) {
+                statusEl.textContent = 'ℹ️ Pergantian shift terdeteksi. Sesi produksi & timer shift sebelumnya telah otomatis di-reset ke status Idle.';
+                statusEl.style.display = '';
+                statusEl.style.color = '#0d3b8c';
+                setTimeout(() => {
+                    if (statusEl) statusEl.style.display = 'none';
+                }, 8000);
+            }
         }
 
         // ===== TIMER LIVE DURASI PRODUKSI =====
@@ -623,7 +1421,15 @@
             const inputMulai = document.getElementById('perf-jam-mulai');
             const inputTanggal = document.getElementById('perf-tanggal');
             const el = document.getElementById('mc-live-timer');
-            if (!inputMulai || !inputMulai.value || !el) return;
+            if (!sesiProduksiAktif || !inputMulai || !inputMulai.value || !el) return;
+
+            // Cek apakah shift sesi ini sudah selesai/berganti saat halaman dibiarkan terbuka
+            const tglSesi = inputTanggal && inputTanggal.value ? inputTanggal.value : (currentTanggal || tanggalLokalYYYYMMDD());
+            if (!apakahSesiDalamShiftSekarang(inputMulai.value, tglSesi)) {
+                // Shift telah berganti -- reset sesi dan timer live segera
+                resetSesiKarenaGantiShift();
+                return;
+            }
 
             const timeParts = inputMulai.value.split(':').map(Number);
             const jam = timeParts[0] || 0;
@@ -650,39 +1456,9 @@
                 selisihDetik = selisihDetik % 86400;
             }
 
-            // Cek apakah shift sesi ini sudah selesai/berganti saat halaman dibiarkan terbuka
-            const shiftSekarang = dapatkanShiftSekarang();
-            const tglSesi = inputTanggal && inputTanggal.value ? inputTanggal.value : tanggalLokalYYYYMMDD();
-            const sesiMasihValidShift = (() => {
-                if (tglSesi !== shiftSekarang.tanggal) return false;
-                if (shiftSekarang.jamMulai > shiftSekarang.jamSelesai) {
-                    return inputMulai.value >= shiftSekarang.jamMulai || inputMulai.value < shiftSekarang.jamSelesai;
-                }
-                return inputMulai.value >= shiftSekarang.jamMulai && inputMulai.value < shiftSekarang.jamSelesai;
-            })();
-
-            if (!sesiMasihValidShift && apakahSudahAkhirShift(jamSekarangHHMM())) {
-                // Shift telah berganti -- panggil finalisasi di server dan reset tampilan
-                hentikanTimerLive();
-                hapusSesiAktifDiServer().then(() => {
-                    sesiProduksiAktif = false;
-                    resetKartuMetrik();
-                    updateStatusBoxMC('idle');
-                    const statusEl = document.getElementById('simpan-produksi-status');
-                    if (statusEl) {
-                        statusEl.textContent = `ℹ️ Pergantian shift terdeteksi. Sesi shift sebelumnya telah otomatis difinalisasi dan disimpan ke riwayat.`;
-                        statusEl.style.display = '';
-                        statusEl.style.color = '#0d3b8c';
-                    }
-                });
-                return;
-            }
-
-            // Jika sesi sudah berjalan tidak wajar (> 16 jam, mustahil dalam 1 shift), reset otomatis
-            if (selisihDetik >= 57600) {
-                hentikanTimerLive();
-                sesiProduksiAktif = false;
-                updateStatusBoxMC('idle');
+            // Jika sesi sudah berjalan tidak wajar (> 10 jam, mustahil dalam 1 shift), reset otomatis
+            if (selisihDetik >= 36000) {
+                resetSesiKarenaGantiShift();
                 return;
             }
 
@@ -734,11 +1510,23 @@
         async function perbaruiHasilPerformanceLive() {
             if (currentView !== 'machine-control') return; // hemat request kalau operator lagi buka halaman lain
 
+            // Jika belum ada sesi produksi aktif di Machine Control, bersihkan kartu dan berhenti
+            if (!sesiProduksiAktif) {
+                resetKartuMetrik();
+                return;
+            }
 
             const inputTanggal = document.getElementById('perf-tanggal');
             const inputMulai = document.getElementById('perf-jam-mulai');
             const tanggal = inputTanggal && inputTanggal.value ? inputTanggal.value : (currentTanggal || tanggalLokalYYYYMMDD());
             let jamMulai = inputMulai ? inputMulai.value : '';
+
+            // Jika jam mulai tidak ada atau sudah lewat shift-nya, reset sesi sekarang
+            if (!jamMulai || !apakahSesiDalamShiftSekarang(jamMulai, tanggal)) {
+                await resetSesiKarenaGantiShift();
+                return;
+            }
+
             let ct = document.getElementById('perf-ct-pilihan')?.value;
             let namaPartUntukLive = document.getElementById('perf-part-label')?.innerText || '';
 
@@ -759,13 +1547,6 @@
                         sel.value = ct;
                     }
                 }
-            }
-
-            if (!jamMulai) {
-                // Gunakan default shift start jika jam mulai belum terisi di DOM
-                const shiftSekarang = dapatkanShiftSekarang();
-                jamMulai = shiftSekarang.jamMulai || '06:55';
-                if (inputMulai) inputMulai.value = jamMulai;
             }
 
             // Fallback CT agar kalkulasi tidak macet
@@ -789,6 +1570,10 @@
             try {
                 const res = await fetch(url, { cache: "no-store" });
                 const data = await res.json();
+                if (data.status === 'expired_shift') {
+                    await resetSesiKarenaGantiShift();
+                    return;
+                }
                 if (data.status !== 'success') {
                     console.warn('perbaruiHasilPerformanceLive: respons bukan success', data);
                     return; // biarkan tampilan sebelumnya, coba lagi di polling berikutnya
@@ -1093,6 +1878,9 @@
             const canvasProduksi = document.getElementById('chartProduksi');
             if (!canvasProduksi) return;
 
+            // Simpan posisi scroll sebelum update chart agar tidak lompat ke atas
+            const scrollPos = window.scrollY;
+
             pastikanPluginTerdaftar();
             isiDropdownTahun();
             isiDropdownBulan();
@@ -1109,8 +1897,9 @@
                 const hasil = await response.json();
                 const titik = hasil.data;
                 renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
-                updatePerformanceCharts(null, tipeChart, null, '5tahun');
+                await updatePerformanceCharts(null, tipeChart, null, '5tahun', null, scrollPos);
                 document.getElementById('judul-chart-produksi').textContent = 'Produksi (5 Tahun Terakhir)';
+                requestAnimationFrame(() => window.scrollTo(0, scrollPos));
                 return;
             }
 
@@ -1126,16 +1915,17 @@
                     const hasil = await response.json();
                     const titik = hasil.data;
                     renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
-                    updatePerformanceCharts(null, tipeChart, tahun, 'bulanan', bulanFormat);
+                    await updatePerformanceCharts(null, tipeChart, tahun, 'bulanan', bulanFormat, scrollPos);
                     document.getElementById('judul-chart-produksi').textContent = `Produksi (${NAMA_BULAN[bulanTerpilihDrilldown-1]} ${tahun})`;
                 } else {
                     const response = await fetch(`api/grafik_harian.php?line=${encodeURIComponent(currentLine)}&mode=tahunan&tahun=${tahun}`, { cache: "no-store" });
                     const hasil = await response.json();
                     const titik = hasil.data;
                     renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
-                    updatePerformanceCharts(null, tipeChart, tahun, null);
+                    await updatePerformanceCharts(null, tipeChart, tahun, null, null, scrollPos);
                     document.getElementById('judul-chart-produksi').textContent = `Produksi Tahun ${tahun}`;
                 }
+                requestAnimationFrame(() => window.scrollTo(0, scrollPos));
                 return;
             }
 
@@ -1154,8 +1944,9 @@
                 const hasil = await response.json();
                 const titik = hasil.data;
                 renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
-                updatePerformanceCharts(null, tipeChart, null, 'mingguan', minggu);
+                await updatePerformanceCharts(null, tipeChart, null, 'mingguan', minggu, scrollPos);
                 document.getElementById('judul-chart-produksi').textContent = `Produksi Minggu ${minggu}`;
+                requestAnimationFrame(() => window.scrollTo(0, scrollPos));
                 return;
             }
 
@@ -1170,21 +1961,22 @@
                 const hasil = await response.json();
                 const titik = hasil.data;
                 renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
-                updatePerformanceCharts(null, tipeChart, null, 'bulanan', bulanFormat);
+                await updatePerformanceCharts(null, tipeChart, null, 'bulanan', bulanFormat, scrollPos);
                 const [thn, bln] = bulanFormat.split('-');
                 document.getElementById('judul-chart-produksi').textContent = `Produksi ${NAMA_BULAN[parseInt(bln)-1]} ${thn}`;
+                requestAnimationFrame(() => window.scrollTo(0, scrollPos));
                 return;
             }
 
             // mode 'perjam' atau 'perhari': tampilkan per-jam untuk tanggal terpilih
             const tanggalInput = document.getElementById('filter-tanggal');
             if (tanggalInput && !tanggalInput.value) {
-                tanggalInput.value = new Date().toISOString().split('T')[0];
+                tanggalInput.value = tanggalLokalYYYYMMDD();
             }
             const tanggal = tanggalInput ? tanggalInput.value : getTanggalAktif();
             const teksTgl = document.getElementById('teks-tanggal');
             if (teksTgl) teksTgl.innerText = formatTanggalIndo(tanggal);
-            if (document.getElementById('input-value')) {
+            if (document.getElementById('input-value') && currentView === 'chart') {
                 updateData(tanggal);
             }
 
@@ -1192,9 +1984,10 @@
             const hasil = await response.json();
             const titik = hasil.data;
             renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
-            updatePerformanceCharts(tanggal, tipeChart, null);
+            await updatePerformanceCharts(tanggal, tipeChart, null, null, null, scrollPos);
             ambilPartAktif();
             document.getElementById('judul-chart-produksi').textContent = `Produksi ${formatTanggalIndo(tanggal)}`;
+            requestAnimationFrame(() => window.scrollTo(0, scrollPos));
         }
 
         // Helper: hitung nomor minggu ISO dari sebuah Date object
@@ -1211,7 +2004,7 @@
         // drill-down per-hari untuk `bulanFormat` (YYYY-MM). Dipanggil dari updateChart() supaya
         // selalu ikut ter-refresh tiap ganti tanggal/tahun/bulan, ganti bentuk chart, ganti mode,
         // dan auto-refresh.
-        async function updatePerformanceCharts(tanggal, tipeChart, tahun, modeKhusus, bulanFormat) {
+        async function updatePerformanceCharts(tanggal, tipeChart, tahun, modeKhusus, bulanFormat, scrollPos) {
             let url;
             if (modeKhusus === '5tahun') {
                 url = `api/grafik_performance.php?line=${encodeURIComponent(currentLine)}&mode=5tahun`;
@@ -1262,7 +2055,11 @@
                 if (elCanvasProd) elCanvasProd.style.display = 'block';
 
                 renderSingleMetricChart(stateLossTime, 'chartLossTime', tipeChart, labels, titik.map(p => p.I), WARNA_LOSS, 'Loss Time (menit)');
-                renderSingleMetricChart(stateProductTime, 'chartProductTime', tipeChart, labels, titik.map(p => p.D), WARNA_INPUT, 'Product Time (menit/pcs)');
+                renderSingleMetricChart(stateProductTime, 'chartProductTime', tipeChart, labels, titik.map(p => p.D), WARNA_PRODUCT_TIME, 'Product Time (menit/pcs)');
+
+                if (typeof scrollPos === 'number') {
+                    requestAnimationFrame(() => window.scrollTo(0, scrollPos));
+                }
             } catch (err) {
                 console.error('updatePerformanceCharts: gagal memuat grafik', err);
             }
@@ -1327,6 +2124,135 @@
             }
         };
 
+        // ===== PLUGIN: TAMPILKAN ANGKA DI ATAS TIAP BAR / TITIK GRAFIK =====
+        // Merender label angka langsung di atas tiap bar / titik pada grafik
+        // sehingga operator / user tidak perlu mengarahkan kursor mouse untuk membaca nilainya.
+        const chartTopValueLabelsPlugin = {
+            id: 'chartTopValueLabels',
+            afterDatasetsDraw(chart) {
+                // Bisa dinonaktifkan per chart melalui options.plugins.chartTopValueLabels: false
+                if (chart.options?.plugins?.chartTopValueLabels === false) return;
+
+                const { ctx, chartArea } = chart;
+                if (!chartArea) return;
+
+                ctx.save();
+
+                chart.data.datasets.forEach((dataset, datasetIndex) => {
+                    const meta = chart.getDatasetMeta(datasetIndex);
+                    if (!meta || meta.hidden) return;
+
+                    const type = meta.type || chart.config.type;
+                    const isBar = (type === 'bar');
+                    const isLine = (type === 'line' || type === 'area' || type === 'scatter');
+                    const isPie = (type === 'pie' || type === 'doughnut');
+
+                    meta.data.forEach((element, index) => {
+                        if (!element) return;
+
+                        let rawVal = dataset.data[index];
+                        if (rawVal === null || rawVal === undefined) return;
+                        let val = (typeof rawVal === 'object' && rawVal !== null) ? rawVal.y : rawVal;
+                        if (val === null || val === undefined || isNaN(val) || Number(val) <= 0) return;
+
+                        const num = Number(val);
+                        let text = '';
+                        if (chart.canvas && chart.canvas.id === 'chartProductTime') {
+                            text = num < 1 ? (Math.round(num * 1000) / 1000).toString() : (Math.round(num * 100) / 100).toString();
+                        } else if (chart.canvas && chart.canvas.id === 'chartLossTime') {
+                            text = Number.isInteger(num) ? `${num}m` : `${Math.round(num * 10) / 10}m`;
+                        } else if (chart.canvas && chart.canvas.id && chart.canvas.id.includes('cost')) {
+                            // Format mata uang kompak untuk grafik biaya (misal: 755 rb, 87 rb, 1.2 jt)
+                            text = num >= 1000000
+                                ? (num / 1000000).toFixed(1) + ' jt'
+                                : (num >= 1000 ? Math.round(num / 1000) + ' rb' : Math.round(num).toString());
+                        } else if (chart.canvas && chart.canvas.id && (chart.canvas.id.includes('consumption') || chart.canvas.id.includes('kwh'))) {
+                            // Format konsumsi kWh
+                            text = Number.isInteger(num) ? num.toString() : (Math.round(num * 10) / 10).toString();
+                        } else {
+                            text = Number.isInteger(num) ? num.toString() : (Math.round(num * 10) / 10).toString();
+                        }
+
+                        if (!text) return;
+
+                        let x = element.x;
+                        let y = element.y;
+
+                        if (isBar) {
+                            // Jarak vertikal di atas bar: selalu di atas bar, jangan pernah dibalik ke dalam bar
+                            let offsetY = 5;
+                            if (element.width && element.width < 14) {
+                                // Pada mode bulanan/banyak bar rapat (misal Input & Output 30 hari berdampingan),
+                                // selang-selingkan ketinggian label agar tidak bertabrakan secara horizontal
+                                offsetY = (datasetIndex % 2 === 0) ? 13 : 4;
+                            }
+                            y = element.y - offsetY;
+                            // Jaga agar label tetap berada dalam area canvas atas
+                            if (y < chartArea.top - 14) {
+                                y = chartArea.top - 14;
+                            }
+                        } else if (isLine) {
+                            // Jarak vertikal di atas titik line chart: selalu di atas titik,
+                            // jangan pernah dibalik ke bawah dot karena akan memotong garis chart
+                            y = element.y - 7;
+                            if (y < chartArea.top - 14) {
+                                y = chartArea.top - 14;
+                            }
+                        } else if (isPie) {
+                            const center = element.getCenterPoint ? element.getCenterPoint() : { x: element.x, y: element.y };
+                            x = center.x;
+                            y = center.y;
+                        }
+
+                        // Warna teks yang kontras & serasi dengan dataset
+                        let textColor = '#1e293b';
+                        if (dataset.label === 'Input') {
+                            textColor = '#1d4ed8'; // Biru solid Input
+                        } else if (dataset.label === 'Output') {
+                            textColor = '#047857'; // Hijau solid Output
+                        } else if (dataset.label && dataset.label.includes('Beban Puncak')) {
+                            textColor = '#d97706'; // Oranye Beban Puncak
+                        } else if (dataset.label && dataset.label.includes('Luar Beban Puncak')) {
+                            textColor = '#059669'; // Hijau Luar Beban Puncak
+                        } else if (dataset.borderColor && typeof dataset.borderColor === 'string' && !dataset.borderColor.startsWith('rgba') && dataset.borderColor !== 'transparent') {
+                            textColor = dataset.borderColor;
+                        } else if (dataset.backgroundColor && typeof dataset.backgroundColor === 'string' && !dataset.backgroundColor.startsWith('rgba')) {
+                            textColor = dataset.backgroundColor;
+                        } else if (Array.isArray(dataset.backgroundColor) && dataset.backgroundColor[index]) {
+                            textColor = dataset.backgroundColor[index];
+                        }
+
+                        // Penyesuaian ukuran font dinamis agar pas pada bar sempit
+                        let fontSize = 11;
+                        if (isBar && element.width) {
+                            if (element.width < 12) fontSize = 8;
+                            else if (element.width < 18) fontSize = 8.5;
+                            else if (element.width < 26) fontSize = 9.5;
+                        } else if (chart.width < 600) {
+                            fontSize = 9;
+                        }
+
+                        ctx.font = `700 ${fontSize}px Inter, -apple-system, sans-serif`;
+                        ctx.textAlign = 'center';
+                        // Baseline selalu 'bottom' agar teks berdiri rapi di atas titik y tanpa masuk ke bar/titik
+                        ctx.textBaseline = isPie ? 'middle' : 'bottom';
+
+                        // Stroke / outline putih tebal agar angka sangat tajam dan terbaca jelas
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 3;
+                        ctx.lineJoin = 'round';
+                        ctx.miterLimit = 2;
+                        ctx.strokeText(text, x, y);
+
+                        ctx.fillStyle = textColor;
+                        ctx.fillText(text, x, y);
+                    });
+                });
+
+                ctx.restore();
+            }
+        };
+
         // Chart.js CDN dimuat dengan `defer`, sedangkan script ini TIDAK, jadi `window.Chart`
         // bisa saja belum ada di titik ini. Plugin baru benar-benar didaftarkan (sekali saja)
         // saat chart pertama kali dibuat lewat pastikanPluginTerdaftar(), dipanggil dari tiap
@@ -1335,20 +2261,42 @@
         function pastikanPluginTerdaftar() {
             if (pluginHighlightSudahTerdaftar || !window.Chart) return;
             Chart.register(highlightBulanPlugin);
+            Chart.register(chartTopValueLabelsPlugin);
             pluginHighlightSudahTerdaftar = true;
         }
 
-        // Palet warna konsisten untuk semua jenis grafik
-        const WARNA_INPUT = { solid: '#0d3b8c', soft: 'rgba(13, 59, 140, 0.75)', fill: 'rgba(13, 59, 140, 0.18)' };
-        const WARNA_OUTPUT = { solid: '#16a34a', soft: 'rgba(22, 163, 74, 0.75)', fill: 'rgba(22, 163, 74, 0.18)' };
-        const WARNA_NG = { solid: '#dc2626', soft: 'rgba(220, 38, 38, 0.75)', fill: 'rgba(220, 38, 38, 0.18)' };
-        const WARNA_LOSS = { solid: '#ea580c', soft: 'rgba(234, 88, 12, 0.75)', fill: 'rgba(234, 88, 12, 0.18)' };
-        const WARNA_RATE = { solid: '#7c3aed', soft: 'rgba(124, 58, 237, 0.75)', fill: 'rgba(124, 58, 237, 0.18)' };
+        // Palet warna modern & bervariasi untuk semua jenis grafik
+        const WARNA_INPUT = { solid: '#2563eb', soft: 'rgba(37, 99, 235, 0.82)', fill: 'rgba(37, 99, 235, 0.18)' };
+        const WARNA_OUTPUT = { solid: '#10b981', soft: 'rgba(16, 185, 129, 0.82)', fill: 'rgba(16, 185, 129, 0.18)' };
+        const WARNA_NG = { solid: '#ef4444', soft: 'rgba(239, 68, 68, 0.82)', fill: 'rgba(239, 68, 68, 0.18)' };
+        const WARNA_LOSS = { solid: '#f97316', soft: 'rgba(249, 115, 22, 0.82)', fill: 'rgba(249, 115, 22, 0.18)' };
+        const WARNA_RATE = { solid: '#06b6d4', soft: 'rgba(6, 182, 212, 0.82)', fill: 'rgba(6, 182, 212, 0.18)' };
+        const WARNA_PRODUCT_TIME = { solid: '#8b5cf6', soft: 'rgba(139, 92, 246, 0.82)', fill: 'rgba(139, 92, 246, 0.18)' };
+
+        // Palet variasi multi-warna untuk bar & pie agar grafik kaya warna dan tidak monoton
+        const PALET_WARNA_VARIASI = [
+            '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899',
+            '#06b6d4', '#f97316', '#14b8a6', '#6366f1', '#ef4444',
+            '#84cc16', '#0ea5e9', '#d946ef', '#eab308'
+        ];
+
+        // Palet nuansa hangat bertingkat untuk Loss Time
+        const PALET_LOSS_VARIASI = [
+            '#f97316', '#fb923c', '#ea580c', '#f59e0b', '#d97706',
+            '#f43f5e', '#e11d48', '#fdba74', '#c2410c'
+        ];
+
+        // Palet nuansa violet/indigo/cyan bertingkat untuk Product Time
+        const PALET_PROD_VARIASI = [
+            '#8b5cf6', '#a78bfa', '#7c3aed', '#6366f1', '#818cf8',
+            '#06b6d4', '#22d3ee', '#9333ea', '#c084fc'
+        ];
 
         const LEGEND_STYLE = { position: 'top', align: 'end', labels: { color: '#6b6b80', usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, font: { family: 'Inter', size: 12 } } };
         const TOOLTIP_STYLE = { backgroundColor: '#ffffff', titleColor: '#2b2b3a', bodyColor: '#2b2b3a', borderColor: '#eaeaf2', borderWidth: 1, padding: 12, cornerRadius: 10, titleFont: { family: 'Inter', weight: '600' }, bodyFont: { family: 'Inter' }, boxPadding: 6 };
 
         function renderChart(tipe, labels, inputData, outputData, totalInput, totalOutput) {
+            pastikanPluginTerdaftar();
             const ctx = document.getElementById('chartProduksi').getContext('2d');
             chartProduksiLabelsAktif = labels;
 
@@ -1388,13 +2336,15 @@
                         labels: ['Input', 'Output'],
                         datasets: [{
                             data: [totalInput, totalOutput],
-                            backgroundColor: [WARNA_INPUT.soft, WARNA_OUTPUT.soft],
-                            hoverBackgroundColor: [WARNA_INPUT.solid, WARNA_OUTPUT.solid],
-                            borderWidth: 0
+                            backgroundColor: ['#2563eb', '#10b981'],
+                            hoverBackgroundColor: ['#1d4ed8', '#059669'],
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
                         }]
                     },
                     options: {
                         responsive: true,
+                        layout: { padding: 12 },
                         plugins: { legend: LEGEND_STYLE, tooltip: TOOLTIP_STYLE }
                     }
                 };
@@ -1409,13 +2359,14 @@
                     },
                     options: {
                         responsive: true,
+                        layout: { padding: { top: 24, left: 6, right: 8, bottom: 4 } },
                         plugins: {
                             legend: LEGEND_STYLE,
                             tooltip: { ...TOOLTIP_STYLE, callbacks: { title: (items) => chartProduksiLabelsAktif[items[0].raw.x] || '' } }
                         },
                         scales: {
                             x: { type: 'linear', ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 11 }, stepSize: 1, callback: (val) => chartProduksiLabelsAktif[val] || '' }, grid: { display: false } },
-                            y: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } }, grid: { color: '#f0f1f7' }, beginAtZero: true }
+                            y: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } }, grid: { color: '#f0f1f7' }, beginAtZero: true, grace: '18%' }
                         }
                     }
                 };
@@ -1428,13 +2379,14 @@
                     backgroundColor: tipe === 'area' ? warna.fill : warna.soft,
                     borderColor: warna.solid,
                     hoverBackgroundColor: warna.solid,
-                    borderRadius: isLineFamily ? 0 : 4,
+                    borderRadius: isLineFamily ? 0 : 5,
                     borderSkipped: false,
                     maxBarThickness: 28,
                     fill: tipe === 'area',
-                    tension: 0.3,
-                    pointRadius: isLineFamily ? 3 : 0,
-                    borderWidth: isLineFamily ? 2 : 0
+                    tension: 0.35,
+                    pointRadius: isLineFamily ? 4 : 0,
+                    pointHoverRadius: 6,
+                    borderWidth: isLineFamily ? 2.5 : 0
                 });
 
                 config = {
@@ -1448,6 +2400,7 @@
                     },
                     options: {
                         responsive: true,
+                        layout: { padding: { top: 24, left: 6, right: 8, bottom: 4 } },
                         animation: { duration: 400 },
                         interaction: { mode: 'index', intersect: false },
                         plugins: { legend: LEGEND_STYLE, tooltip: TOOLTIP_STYLE },
@@ -1458,7 +2411,7 @@
                         },
                         scales: {
                             x: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { display: false } },
-                            y: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } }, grid: { color: '#f0f1f7' }, beginAtZero: true }
+                            y: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } }, grid: { color: '#f0f1f7' }, beginAtZero: true, grace: '18%' }
                         }
                     }
                 };
@@ -1471,19 +2424,42 @@
         // `state` = { chart, tipe } -- objek kecil biar instance Chart.js-nya bisa dipakai ulang
         // (update data) atau dihancurkan & dibuat ulang (ganti bentuk), sama seperti chartProduksi.
         function renderSingleMetricChart(state, canvasId, tipe, labels, data, warna, labelSeries) {
+            pastikanPluginTerdaftar();
             const canvas = document.getElementById(canvasId);
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
+
+            const isBarFamily = (tipe === 'bar' || !tipe || tipe === 'default');
+
+            // Palet variasi warna per bar agar visual grafik lebih hidup dan bervariasi
+            const paletKoleksi = canvasId === 'chartLossTime' ? PALET_LOSS_VARIASI
+                                : (canvasId === 'chartProductTime' ? PALET_PROD_VARIASI : PALET_WARNA_VARIASI);
+
+            const barBgColors = labels.map((l, i) => {
+                if (typeof l === 'string' && l.includes('[LIVE]')) return (warna.solid || '#2563eb');
+                if (tipe === 'area') return warna.fill;
+                return paletKoleksi[i % paletKoleksi.length];
+            });
+
+            const barBorders = labels.map((l, i) => {
+                if (typeof l === 'string' && l.includes('[LIVE]')) return '#1d4ed8';
+                return isBarFamily ? paletKoleksi[i % paletKoleksi.length] : (warna.solid || 'transparent');
+            });
 
             if (state.chart !== null && state.tipe === tipe) {
                 if (tipe === 'pie') {
                     state.chart.data.labels = labels;
                     state.chart.data.datasets[0].data = data;
+                    state.chart.data.datasets[0].backgroundColor = labels.map((_, i) => PALET_WARNA_VARIASI[i % PALET_WARNA_VARIASI.length]);
                 } else if (tipe === 'scatter') {
                     state.chart.data.datasets[0].data = data.map((v, i) => ({ x: i, y: v }));
                 } else {
                     state.chart.data.labels = labels;
                     state.chart.data.datasets[0].data = data;
+                    if (isBarFamily) {
+                        state.chart.data.datasets[0].backgroundColor = barBgColors;
+                        state.chart.data.datasets[0].borderColor = barBorders;
+                    }
                 }
                 state.chart.update('none');
                 return;
@@ -1502,9 +2478,15 @@
                     type: 'pie',
                     data: {
                         labels: labels,
-                        datasets: [{ data: data, backgroundColor: labels.map((_, i) => i % 2 === 0 ? warna.soft : warna.fill), hoverBackgroundColor: warna.solid, borderWidth: 0 }]
+                        datasets: [{
+                            data: data,
+                            backgroundColor: labels.map((_, i) => PALET_WARNA_VARIASI[i % PALET_WARNA_VARIASI.length]),
+                            hoverBackgroundColor: labels.map((_, i) => PALET_WARNA_VARIASI[i % PALET_WARNA_VARIASI.length]),
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
+                        }]
                     },
-                    options: { responsive: true, plugins: { legend: LEGEND_STYLE, tooltip: TOOLTIP_STYLE } }
+                    options: { responsive: true, layout: { padding: 12 }, plugins: { legend: LEGEND_STYLE, tooltip: TOOLTIP_STYLE } }
                 };
             } else if (tipe === 'scatter') {
                 config = {
@@ -1512,10 +2494,11 @@
                     data: { datasets: [{ label: labelSeries, data: data.map((v, i) => ({ x: i, y: v })), backgroundColor: warna.soft, pointRadius: 5, pointHoverRadius: 7 }] },
                     options: {
                         responsive: true,
+                        layout: { padding: { top: 24, left: 6, right: 8, bottom: 4 } },
                         plugins: { legend: LEGEND_STYLE, tooltip: { ...TOOLTIP_STYLE, callbacks: { title: (items) => labels[items[0].raw.x] || '' } } },
                         scales: {
                             x: { type: 'linear', ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 11 }, stepSize: 1, callback: (val) => labels[val] || '' }, grid: { display: false } },
-                            y: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } }, grid: { color: '#f0f1f7' }, beginAtZero: true }
+                            y: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } }, grid: { color: '#f0f1f7' }, beginAtZero: true, grace: '18%' }
                         }
                     }
                 };
@@ -1528,26 +2511,28 @@
                         datasets: [{
                             label: labelSeries,
                             data: data,
-                            backgroundColor: tipe === 'area' ? warna.fill : warna.soft,
-                            borderColor: warna.solid,
-                            hoverBackgroundColor: warna.solid,
-                            borderRadius: isLineFamily ? 0 : 4,
+                            backgroundColor: isLineFamily ? (tipe === 'area' ? warna.fill : warna.soft) : barBgColors,
+                            borderColor: isLineFamily ? warna.solid : barBorders,
+                            hoverBackgroundColor: isLineFamily ? warna.solid : barBgColors,
+                            borderRadius: isLineFamily ? 0 : 5,
                             borderSkipped: false,
                             maxBarThickness: 28,
                             fill: tipe === 'area',
-                            tension: 0.3,
-                            pointRadius: isLineFamily ? 3 : 0,
-                            borderWidth: isLineFamily ? 2 : 0
+                            tension: 0.35,
+                            pointRadius: isLineFamily ? 4 : 0,
+                            pointHoverRadius: 6,
+                            borderWidth: isLineFamily ? 2.5 : (labels.some(l => typeof l === 'string' && l.includes('[LIVE]')) ? 2 : 0)
                         }]
                     },
                     options: {
                         responsive: true,
+                        layout: { padding: { top: 24, left: 6, right: 8, bottom: 4 } },
                         animation: { duration: 400 },
                         interaction: { mode: 'index', intersect: false },
                         plugins: { legend: LEGEND_STYLE, tooltip: TOOLTIP_STYLE },
                         scales: {
                             x: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { display: false } },
-                            y: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } }, grid: { color: '#f0f1f7' }, beginAtZero: true }
+                            y: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } }, grid: { color: '#f0f1f7' }, beginAtZero: true, grace: '18%' }
                         }
                     }
                 };
@@ -1564,8 +2549,6 @@
             if (filterTanggal !== undefined) {
                 tanggalFilterHistoriAktif = filterTanggal;
             }
-            // Simpan posisi scroll dulu, sebelum tabel dibangun ulang
-            const posisiScroll = window.scrollY;
 
             try {
                 let url = `api/histori.php?line=${encodeURIComponent(currentLine)}`;
@@ -1589,7 +2572,16 @@
                 if (elOutput) elOutput.innerText = totalOutput;
                 if (elYield) elYield.innerText = yieldKeseluruhan + "%";
                 if (!tbody) return;
-                tbody.innerHTML = "";
+
+                // Simpan posisi scroll sebelum manipulasi DOM tabel
+                const posisiScroll = window.scrollY;
+                const panel = tbody.closest('.panel');
+                const prevMinHeight = panel ? panel.style.minHeight : '';
+                if (panel && panel.offsetHeight > 0) {
+                    panel.style.minHeight = panel.offsetHeight + 'px';
+                }
+
+                const fragment = document.createDocumentFragment();
 
                 if (data.length === 0) {
                     const tr = document.createElement("tr");
@@ -1597,12 +2589,11 @@
                         ? `Belum ada catatan data riwayat produksi untuk tanggal ${formatTanggalIndo(tanggalFilterHistoriAktif)}.`
                         : `Belum ada catatan data riwayat produksi.`;
                     tr.innerHTML = `<td colspan="6" style="text-align:center; color:#9a9ab0; padding:20px;">${pesan}</td>`;
-                    tbody.appendChild(tr);
+                    fragment.appendChild(tr);
                 } else {
                     data.forEach(baris => {
                         const tr = document.createElement("tr");
                         const urlDownload = `${APP_BASE_PATH}/export/export_riwayat_performance.php?line=${encodeURIComponent(currentLine)}&tanggal=${baris.tanggal}&shift=${encodeURIComponent(baris.shift)}`;
-
 
                         tr.innerHTML = `
                             <td class="td-toggle"><a class="btn-toggle-detail" href="index.php?line=${encodeURIComponent(currentLine)}&view=detail&tanggal=${baris.tanggal}" data-nav data-line="${currentLine}" data-view="detail" data-tanggal="${baris.tanggal}" title="Lihat detail per jam">&#9656;</a></td>
@@ -1612,17 +2603,20 @@
                             <td><strong>${baris.eff_persen}%</strong></td>
                             <td><a href="${urlDownload}" class="btn-download-row" title="Download Excel Hasil Produksi (${baris.shift})">&#8681;</a></td>
                         `;
-                        tbody.appendChild(tr);
+                        fragment.appendChild(tr);
                     });
                 }
+
+                tbody.replaceChildren(fragment);
+
+                // Balikin posisi scroll ke tempat semula setelah browser render
+                requestAnimationFrame(() => {
+                    if (panel) panel.style.minHeight = prevMinHeight;
+                    window.scrollTo(0, posisiScroll);
+                });
             } catch (err) {
                 console.error("Gagal memuat histori data:", err);
             }
-
-            // Balikin posisi scroll ke tempat semula, setelah browser selesai gambar ulang
-            requestAnimationFrame(() => {
-                window.scrollTo(0, posisiScroll);
-            });
         }
 
         // ===== PENCARIAN SESI PRODUKSI (RIWAYAT PRODUKSI) =====
@@ -1633,12 +2627,13 @@
                 tgl = inputEl.value;
             }
             if (!tgl) {
-                tgl = new Date().toISOString().split('T')[0];
+                tgl = tanggalLokalYYYYMMDD();
             }
             if (inputEl) {
                 inputEl.value = tgl;
             }
 
+            const scrollPos = window.scrollY;
             const labelTgl = formatTanggalIndo(tgl);
             const labelAktifEl = document.getElementById('rw-label-tanggal-aktif');
             const sesiTglLabel = document.getElementById('rw-sesi-tgl-label');
@@ -1657,28 +2652,31 @@
 
             // Fetch data sesi produksi dari api/riwayat_performance
             try {
-                if (listEl) {
-                    listEl.style.display = '';
-                    listEl.innerHTML = '<div style="color:#6b6b80; font-size:12.5px; padding:12px 0;">Memuat sesi produksi...</div>';
+                const prevMinHeight = listEl ? listEl.style.minHeight : '';
+                if (listEl && listEl.offsetHeight > 0) {
+                    listEl.style.minHeight = listEl.offsetHeight + 'px';
                 }
+
                 const resp = await fetch(`api/riwayat_performance.php?line=${encodeURIComponent(currentLine)}&tanggal=${tgl}`, { cache: 'no-store' });
                 const d = await resp.json();
 
                 if (countBadge) countBadge.innerText = `${d.jumlah || 0} sesi`;
                 if (rataEffEl) rataEffEl.innerText = (d.rata_eff_v2_persen || 0) + '%';
 
-                if (listEl) listEl.innerHTML = '';
-
                 if (!d.riwayat || d.riwayat.length === 0) {
                     if (kosongEl) {
                         kosongEl.innerText = `Belum ada sesi produksi yang tercatat pada tanggal ${labelTgl}.`;
                         kosongEl.style.display = '';
                     }
-                    if (listEl) listEl.style.display = 'none';
+                    if (listEl) {
+                        listEl.innerHTML = '';
+                        listEl.style.display = 'none';
+                    }
                 } else {
                     if (kosongEl) kosongEl.style.display = 'none';
                     if (listEl) listEl.style.display = '';
 
+                    const fragment = document.createDocumentFragment();
                     d.riwayat.forEach(r => {
                         riwayatPerformanceById[r.id] = r;
 
@@ -1704,12 +2702,17 @@
                             <div class="riwayat-ph-card-actions">
                                 <button type="button" class="btn-detail-shift" onclick="bukaDetailPerformance(${r.id})">Lihat Detail</button>
                                 <a href="${APP_BASE_PATH}/export/export_riwayat_performance.php?id=${r.id}" class="btn-download-row" title="Download Excel sesi ini">&#8681;</a>
-
                             </div>
                         `;
-                        listEl.appendChild(kartu);
+                        fragment.appendChild(kartu);
                     });
+                    if (listEl) listEl.replaceChildren(fragment);
                 }
+
+                requestAnimationFrame(() => {
+                    if (listEl) listEl.style.minHeight = prevMinHeight;
+                    window.scrollTo(0, scrollPos);
+                });
             } catch (err) {
                 console.error("Gagal memuat sesi produksi:", err);
                 if (listEl) listEl.innerHTML = '<div style="color:#e05252; font-size:12.5px; padding:10px 0;">Gagal memuat sesi produksi. Silakan coba lagi.</div>';
@@ -1819,9 +2822,9 @@
         };
 
         function dsOffsetTanggal(tgl, hari) {
-            const d = new Date(tgl);
+            const d = new Date(tgl + 'T12:00:00');
             d.setDate(d.getDate() + hari);
-            return d.toISOString().split('T')[0];
+            return tanggalLokalYYYYMMDD(d);
         }
 
         // Dipanggil oleh renderView() saat pertama masuk ke view ini (dari tombol "Lihat Detail"
@@ -2010,9 +3013,109 @@
             putarSuaraNotifikasiMesinBerhenti();
         }
 
+        let timelineStopList = [];
+        let jumlahStopBisaDiisi = 0;
+        let timelineAdaStopOngoing = false;
+
+        function togglePilihSemuaStop(checked) {
+            document.querySelectorAll('.cb-stop-item').forEach(cb => {
+                cb.checked = checked;
+            });
+            updatePilihanStopDariCheckbox();
+        }
+
+        function updatePilihanStopDariCheckbox() {
+            const allCbs = document.querySelectorAll('.cb-stop-item');
+            const checkedCbs = document.querySelectorAll('.cb-stop-item:checked');
+            const cbAll = document.getElementById('cb-pilih-semua-stop');
+            if (cbAll) {
+                cbAll.checked = (allCbs.length > 0 && allCbs.length === checkedCbs.length);
+            }
+
+            const tombolSimpan = document.querySelector('#alasan-detail-wrapper .btn-simpan-keterangan');
+            if (tombolSimpan) {
+                if (checkedCbs.length === 0) {
+                    tombolSimpan.innerText = 'Pilih minimal 1 stop';
+                    tombolSimpan.disabled = true;
+                } else if (checkedCbs.length === 1) {
+                    tombolSimpan.innerText = 'Simpan Alasan';
+                    tombolSimpan.disabled = false;
+                } else {
+                    tombolSimpan.innerText = `Simpan Alasan (${checkedCbs.length} Stop)`;
+                    tombolSimpan.disabled = false;
+                }
+            }
+        }
+
         function bukaModalAlasanStop() {
             document.getElementById('alasan-stop-line').innerText = currentLine;
             resetPilihanAlasanStop();
+
+            // Filter HANYA kejadian stop yang BELUM diisi alasannya.
+            // Kejadian yang sudah ada alasannya disembunyikan agar modal lebih ringkas dan operator tidak perlu scroll banyak.
+            const daftarStopBelumDiisi = (timelineStopList || []).filter(item => {
+                return !item.alasan_stop || String(item.alasan_stop).trim() === '';
+            });
+
+            // Render Timeline Stop Shift Ini dengan Checkbox Bersih (Tanpa Keterangan Berlebih)
+            const timelineList = document.getElementById('alasan-stop-timeline-list');
+            const timelineCounter = document.getElementById('timeline-stop-counter');
+            const cbAll = document.getElementById('cb-pilih-semua-stop');
+
+            if (cbAll) {
+                cbAll.checked = false;
+                cbAll.disabled = (daftarStopBelumDiisi.length === 0);
+            }
+
+            if (timelineCounter) {
+                timelineCounter.innerText = `${daftarStopBelumDiisi.length} belum diisi`;
+            }
+
+            if (timelineList) {
+                if (daftarStopBelumDiisi.length === 0) {
+                    timelineList.innerHTML = '<div style="font-size:13px; color:#16a34a; text-align:center; padding:10px 0; font-weight:600;">✓ Semua riwayat stop pada shift ini sudah diisi alasannya</div>';
+                } else {
+                    timelineList.innerHTML = daftarStopBelumDiisi.map((item, idx) => {
+                        let dotColor = '#ef4444';
+                        const w = (item.warna_patlite || item.status || '').toLowerCase();
+                        if (w.includes('kedip')) dotColor = '#ca8a04';
+                        else if (w.includes('kuning')) dotColor = '#eab308';
+                        else if (w.includes('mati') || w.includes('off')) dotColor = '#64748b';
+
+                        let badgeHtml = '';
+                        if (item.is_ongoing) {
+                            badgeHtml = `<span style="font-size:12px; font-weight:600; color:#b45309; background:#fef3c7; border:1px solid #fde68a; padding:2px 8px; border-radius:4px;">⏳ Sedang Berlangsung</span>`;
+                        } else {
+                            badgeHtml = `<span style="font-size:12px; font-weight:700; color:#b91c1c; background:#fee2e2; border:1px solid #fecaca; padding:2px 8px; border-radius:4px;">⚠️ Belum Diisi</span>`;
+                        }
+
+                        let durasiDisplay = item.durasi_teks || '';
+                        if (durasiDisplay.endsWith('m') && !durasiDisplay.endsWith('menit')) {
+                            durasiDisplay = durasiDisplay.replace(/m$/, ' menit');
+                        } else if (!durasiDisplay) {
+                            durasiDisplay = `${item.durasi_menit || 0} menit`;
+                        }
+
+                        // Checkbox TIDAK langsung tercentang (operator bebas memilih/mencentang sendiri)
+                        return `
+                            <label style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; font-size:13.5px; cursor:pointer; margin:0;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <input type="checkbox" class="cb-stop-item" data-waktu="${escapeHtml(item.waktu_mulai)}" onchange="updatePilihanStopDariCheckbox()" style="width:16px; height:16px; cursor:pointer;">
+                                    <span style="display:inline-block; width:9px; height:9px; border-radius:50%; background:${dotColor}; flex-shrink:0;"></span>
+                                    <span style="font-weight:600; color:#1e293b; font-size:13.5px;">${escapeHtml(item.rentang)}</span>
+                                    <span style="color:#64748b; font-size:12.5px;">(${escapeHtml(durasiDisplay)})</span>
+                                </div>
+                                <div>
+                                    ${badgeHtml}
+                                </div>
+                            </label>
+                        `;
+                    }).join('');
+                }
+            }
+
+            updatePilihanStopDariCheckbox();
+
             const labelWaktu = document.getElementById('maint-waktu-mati-label');
             const valWaktu = document.getElementById('maint-waktu-mati-val');
             if (labelWaktu && valWaktu) {
@@ -2046,22 +3149,17 @@
                 }
             }
 
-            const infoSelesaiEl = document.getElementById('alasan-stop-info-selesai');
-            const ringkasanTeksEl = document.getElementById('alasan-stop-ringkasan-teks');
-            if (infoSelesaiEl && ringkasanTeksEl) {
-                if (infoStopSelesaiTerakhir && infoStopSelesaiTerakhir.is_selesai) {
-                    ringkasanTeksEl.innerText = `${infoStopSelesaiTerakhir.rentang} (Loss: ${infoStopSelesaiTerakhir.durasi})`;
-                    infoSelesaiEl.style.display = 'inline-flex';
-                } else {
-                    infoSelesaiEl.style.display = 'none';
-                }
-            }
-
             document.getElementById('modal-alasan-stop').style.display = 'flex';
+            if (typeof pauseKioskForInteraction === 'function') {
+                pauseKioskForInteraction('alasan-stop');
+            }
         }
 
         function tutupModalAlasanStop() {
             document.getElementById('modal-alasan-stop').style.display = 'none';
+            if (typeof resumeKioskAfterInteraction === 'function') {
+                resumeKioskAfterInteraction(1500);
+            }
         }
 
         function tutupModalJikaDiLuarAlasanStop(e) {
@@ -2188,11 +3286,18 @@
             }
 
             document.getElementById('alasan-detail-wrapper').style.display = 'block';
+            updatePilihanStopDariCheckbox();
         }
 
         async function simpanAlasanStop() {
             const alasan = document.getElementById('alasan-detail-select').value;
             if (!kategoriAlasanTerpilih || !alasan) return;
+
+            const checkedCbs = Array.from(document.querySelectorAll('.cb-stop-item:checked'));
+            if (checkedCbs.length === 0) {
+                alert("Silakan centang minimal 1 kejadian stop yang ingin diisi alasannya.");
+                return;
+            }
 
             const tombolSimpan = document.querySelector('#alasan-detail-wrapper .btn-simpan-keterangan');
             tombolSimpan.disabled = true;
@@ -2205,6 +3310,15 @@
             const warnaKirim = document.getElementById('alasan-stop-warna-patlite-val')?.value || warnaPatliteStopAktif || 'Merah';
             formData.append('warna_patlite', warnaKirim);
 
+            const waktuList = checkedCbs.map(cb => cb.getAttribute('data-waktu')).filter(Boolean);
+            if (waktuList.length === 1) {
+                formData.append('waktu', waktuList[0]);
+            } else if (waktuList.length > 1) {
+                formData.append('waktu_list', JSON.stringify(waktuList));
+            } else if (waktuMatiStopAktif) {
+                formData.append('waktu', waktuMatiStopAktif);
+            }
+
             try {
                 const res = await fetch('api/alasan_stop2.php', { method: 'POST', body: formData });
                 await res.json().catch(() => ({ status: 'success' }));
@@ -2212,7 +3326,6 @@
                 tutupModalAlasanStop();
                 updateStatusMesin();
                 if (currentView === 'machine-control') loadRingkasanAlasanStop();
-                if (currentView === 'riwayat' && riwayatTabAktif === 'stop') loadRiwayatStop();
 
                 const ALASAN_PEMICU_TUTUP_SESI = ['Ganti Type'];
                 if (kategoriAlasanTerpilih === 'Selesai' || ALASAN_PEMICU_TUTUP_SESI.includes(alasan)) {
@@ -2223,7 +3336,6 @@
                 tutupModalAlasanStop();
                 updateStatusMesin();
             } finally {
-
                 tombolSimpan.disabled = false;
                 tombolSimpan.innerText = 'Simpan Alasan';
             }
@@ -2236,7 +3348,7 @@
             const waktuMati = document.getElementById('maint-waktu-mati-val').value;
 
             if (!namaMesin) {
-                alert("Silakan masukkan Nama Mesin yang sedang maintenance.");
+                alert("Silakan pilih Nama Mesin yang sedang maintenance.");
                 document.getElementById('maint-nama-mesin').focus();
                 return;
             }
@@ -2316,6 +3428,9 @@
         //      ulang nilai yang sama tiap kali part yang sama diproduksi lagi.
         async function bukaModalPilihC() {
             if (!sesiProduksiAktif) return; // tidak ada sesi yang perlu difinalisasi, tidak perlu tanya (C)
+            if (typeof pauseKioskForInteraction === 'function') {
+                pauseKioskForInteraction('pilih-c');
+            }
 
             const namaPartSekarang = document.getElementById('perf-part-label').innerText;
             const item = DAFTAR_PART_CT.find(p => p.part === namaPartSekarang);
@@ -2385,6 +3500,9 @@
 
         function tutupModalPilihC() {
             document.getElementById('modal-pilih-c').style.display = 'none';
+            if (typeof resumeKioskAfterInteraction === 'function') {
+                resumeKioskAfterInteraction(1500);
+            }
         }
 
         function tutupModalJikaDiLuarPilihC(e) {
@@ -2502,10 +3620,16 @@
         }
 
         function formatJamMenitDariDetik(detik) {
-            const totalMenit = Math.round(detik / 60);
+            if (!detik || detik <= 0) return '0s';
+            if (detik < 60) return `${detik}s`;
+            const totalMenit = Math.floor(detik / 60);
             const jam = Math.floor(totalMenit / 60);
             const sisaMenit = totalMenit % 60;
-            return jam > 0 ? `${jam}j ${sisaMenit}m` : `${sisaMenit}m`;
+            const sisaDetik = detik % 60;
+            if (jam > 0) {
+                return `${jam}j ${sisaMenit}m`;
+            }
+            return sisaDetik > 0 ? `${sisaMenit}m ${sisaDetik}s` : `${sisaMenit}m`;
         }
 
         // ===== Format angka MENIT (desimal, dari API) jadi "Xm Ys" ala tampilan HMI mesin =====
@@ -2574,13 +3698,21 @@
             }
 
             const jamSekarang = jamSekarangHHMM();
+            const shift = dapatkanShiftSekarang();
+            const tglSesi = shift.tanggal || (currentTanggal || tanggalLokalYYYYMMDD());
             const url = `api/kalkulasi_performance_live.php?line=${encodeURIComponent(currentLine)}`
-                + `&tanggal=${encodeURIComponent(currentTanggal)}&jam_mulai=${encodeURIComponent(jamMulai)}`
+                + `&tanggal=${encodeURIComponent(tglSesi)}&jam_mulai=${encodeURIComponent(jamMulai)}`
                 + `&jam_selesai=${encodeURIComponent(jamSekarang)}&ct=${encodeURIComponent(ct)}&part=${encodeURIComponent(namaPart)}`;
 
             try {
                 const res = await fetch(url, { cache: "no-store" });
                 const data = await res.json();
+                if (data.status === 'expired_shift') {
+                    if (typeof resetSesiKarenaGantiShift === 'function') {
+                        await resetSesiKarenaGantiShift();
+                    }
+                    return;
+                }
                 if (data.status !== 'success') return; // biarkan tampilan sebelumnya, coba lagi di polling berikutnya
 
                 kosongEl.style.display = 'none';
@@ -2589,11 +3721,11 @@
                 document.getElementById('mr-nama-part').innerText = namaPart;
                 document.getElementById('mr-jam-mulai').innerText = `Mulai ${jamMulai}`;
 
-                // Ambil input & output dari kartu dashboard biar sinkron
-                const totalInput = parseInt(document.getElementById('input-value').innerText) || 0;
-                const totalOutput = parseInt(document.getElementById('output-value').innerText) || 0;
-                const ngProduct = Math.max(totalInput - totalOutput, 0);
-                const hPersen = totalInput > 0 ? Math.round((totalOutput / totalInput) * 1000) / 10 : 0;
+                // Ambil input, output, dan NG dari hasil kalkulasi sesi aktif
+                const totalInput = typeof data.total_input !== 'undefined' ? data.total_input : (parseInt(document.getElementById('input-value')?.innerText) || 0);
+                const totalOutput = typeof data.F_v2 !== 'undefined' ? data.F_v2 : (parseInt(document.getElementById('output-value')?.innerText) || 0);
+                const ngProduct = typeof data.E_v2 !== 'undefined' ? data.E_v2 : Math.max(totalInput - totalOutput, 0);
+                const hPersen = typeof data.H_v2_persen !== 'undefined' ? data.H_v2_persen : (totalInput > 0 ? Math.round((totalOutput / totalInput) * 1000) / 10 : 0);
                 const ePersen = totalInput > 0 ? Math.round((ngProduct / totalInput) * 1000) / 10 : 0;
 
                 document.getElementById('mr-total-product').innerText = `${totalInput} PCS`;
@@ -2648,18 +3780,36 @@
         async function loadRingkasanAlasanStop() {
             const labelLine = document.getElementById('alasan-ringkasan-line-label');
             const tbody = document.getElementById('tbody-ringkasan-alasan-stop');
-            if (!labelLine || !tbody) return;
+            const titleEl = document.getElementById('alasan-ringkasan-title');
+            const descEl = document.getElementById('alasan-ringkasan-desc');
+            if (!tbody) return;
 
-            const hariIni = new Date().toISOString().split('T')[0];
-            labelLine.innerText = currentLine;
+            const scrollPos = window.scrollY;
+            const shiftInfo = dapatkanShiftSekarang();
+            const shiftNama = shiftInfo ? shiftInfo.nama : 'Pagi';
+            const shiftTanggal = shiftInfo ? shiftInfo.tanggal : tanggalLokalYYYYMMDD();
 
             try {
-                const response = await fetch(`api/alasan_stop2.php?line=${encodeURIComponent(currentLine)}&tanggal=${hariIni}`, { cache: "no-store" });
+                const response = await fetch(`api/alasan_stop2.php?line=${encodeURIComponent(currentLine)}&tanggal=${shiftTanggal}&shift=${encodeURIComponent(shiftNama)}`, { cache: "no-store" });
                 if (!response.ok) throw new Error("HTTP " + response.status);
                 const hasil = await response.json();
 
+                const shiftLabel = hasil.shift || shiftNama;
+                const rentangLabel = hasil.rentang_shift || (shiftInfo ? `${shiftInfo.jamMulai} - ${shiftInfo.jamSelesai}` : '06:55 - 15:50');
+
+                if (titleEl) {
+                    titleEl.innerText = `Ringkasan Alasan Stop (Shift ${shiftLabel})`;
+                }
+                if (descEl) {
+                    descEl.innerText = `Total waktu berhenti pada Shift ${shiftLabel} (${rentangLabel}), dikelompokkan berdasarkan kategori dan alasan.`;
+                }
+                if (labelLine) {
+                    labelLine.innerText = `${currentLine} · Shift ${shiftLabel} (${rentangLabel})`;
+                }
+
                 if (!hasil || !hasil.ringkasan || hasil.ringkasan.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="ct-detail-empty">Belum ada catatan stop hari ini.</td></tr>';
+                    tbody.innerHTML = `<tr><td colspan="4" class="ct-detail-empty">Belum ada catatan stop pada Shift ${shiftLabel} (${rentangLabel}).</td></tr>`;
+                    requestAnimationFrame(() => window.scrollTo(0, scrollPos));
                     return;
                 }
 
@@ -2675,9 +3825,10 @@
                         </tr>
                     `;
                 }).join('');
+                requestAnimationFrame(() => window.scrollTo(0, scrollPos));
             } catch (err) {
                 console.warn('loadRingkasanAlasanStop: error', err);
-                tbody.innerHTML = '<tr><td colspan="4" class="ct-detail-empty">Belum ada catatan stop hari ini.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" class="ct-detail-empty">Belum ada catatan stop pada shift ini.</td></tr>';
             }
         }
 
@@ -2686,9 +3837,12 @@
         function renderView(line, view, tanggal) {
             currentLine = line;
             currentView = view;
-            if (tanggal) currentTanggal = tanggal;
+            if (tanggal) {
+                currentTanggal = tanggal;
+            } else if (view === 'dashboard') {
+                currentTanggal = _urlParams.get('tanggal') || tanggalLokalYYYYMMDD();
+            }
 
-            document.body.classList.add('has-bg-factory');
             document.body.dataset.line = 'PCB';
 
             // Update sidebar navigation active state
@@ -2763,7 +3917,11 @@
                     actionEl.innerHTML = `
                         <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
                     `;
-                } else if (view === 'pengaturan' || view === 'kwh-control') {
+                } else if (view === 'kwh-control') {
+                    actionEl.innerHTML = `
+                        <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
+                    `;
+                } else if (view === 'pengaturan') {
                     actionEl.innerHTML = '';
                 } else {
                     actionEl.innerHTML = `
@@ -2802,7 +3960,12 @@
                 loadKwhControlData();
             } else if (view === 'machine-control') {
                 loadRingkasanAlasanStop();
-                if (sesiProduksiAktif) {
+                const inputMulai = document.getElementById('perf-jam-mulai');
+                const inputTgl = document.getElementById('perf-tanggal');
+                const tgl = inputTgl && inputTgl.value ? inputTgl.value : (currentTanggal || tanggalLokalYYYYMMDD());
+                if (sesiProduksiAktif && inputMulai && inputMulai.value && !apakahSesiDalamShiftSekarang(inputMulai.value, tgl)) {
+                    resetSesiKarenaGantiShift();
+                } else if (sesiProduksiAktif) {
                     if (!timerLiveInterval) mulaiTimerLive();
                     updateStatusBoxMC(statusMesinSebelumnya === 'running' ? 'berjalan' : 'jeda');
                 } else {
@@ -2830,7 +3993,7 @@
             return false;
         }
 
-        // ===== OPSI BAR RIWAYAT: toggle antara tab Produksi, Machine Control, Shift, dan Stop & Patlite =====
+        // ===== OPSI BAR RIWAYAT: toggle antara tab Produksi, Machine Control, dan Shift =====
         let riwayatTabAktif = 'produksi';
 
         function pilihTabRiwayat(tab) {
@@ -2839,21 +4002,17 @@
             const btnProd = document.getElementById('opsi-produksi');
             const btnMc = document.getElementById('opsi-mc');
             const btnShift = document.getElementById('opsi-shift');
-            const btnStop = document.getElementById('opsi-stop');
             const tabProd = document.getElementById('riwayat-tab-produksi');
             const tabMc = document.getElementById('riwayat-tab-mc');
             const tabShift = document.getElementById('riwayat-tab-shift');
-            const tabStop = document.getElementById('riwayat-tab-stop');
 
             if (btnProd) btnProd.classList.toggle('aktif', tab === 'produksi');
             if (btnMc) btnMc.classList.toggle('aktif', tab === 'mc');
             if (btnShift) btnShift.classList.toggle('aktif', tab === 'shift');
-            if (btnStop) btnStop.classList.toggle('aktif', tab === 'stop');
 
             if (tabProd) tabProd.style.display = (tab === 'produksi') ? '' : 'none';
             if (tabMc) tabMc.style.display = (tab === 'mc') ? '' : 'none';
             if (tabShift) tabShift.style.display = (tab === 'shift') ? '' : 'none';
-            if (tabStop) tabStop.style.display = (tab === 'stop') ? '' : 'none';
 
             // Muat data on-demand tiap kali pindah tab, biar selalu up to date
             if (tab === 'produksi') {
@@ -2862,8 +4021,6 @@
                 loadRiwayatPerformance();
             } else if (tab === 'shift') {
                 loadRiwayatShift();
-            } else if (tab === 'stop') {
-                loadRiwayatStop();
             }
         }
 
@@ -2878,11 +4035,11 @@
             const input = document.getElementById('filter-tanggal-rstop');
             if (!input) return;
             if (tipe === 'hari_ini') {
-                input.value = new Date().toISOString().split('T')[0];
+                input.value = tanggalLokalYYYYMMDD();
             } else if (tipe === 'kemarin') {
                 const kem = new Date();
                 kem.setDate(kem.getDate() - 1);
-                input.value = kem.toISOString().split('T')[0];
+                input.value = tanggalLokalYYYYMMDD(kem);
             } else if (tipe === 'semua') {
                 input.value = '';
             }
@@ -2902,14 +4059,14 @@
             if (tanggal !== undefined) {
                 if (input) input.value = tanggal;
             } else if (input && !input.value && input.value !== '') {
-                input.value = new Date().toISOString().split('T')[0];
+                input.value = tanggalLokalYYYYMMDD();
             }
 
             const tgl = input ? input.value : '';
-            const hariIni = new Date().toISOString().split('T')[0];
+            const hariIni = tanggalLokalYYYYMMDD();
             const kem = new Date();
             kem.setDate(kem.getDate() - 1);
-            const tglKemarin = kem.toISOString().split('T')[0];
+            const tglKemarin = tanggalLokalYYYYMMDD(kem);
 
             let labelTgl = 'Semua Data';
             if (tgl === hariIni) {
@@ -2923,7 +4080,16 @@
             if (elTeks) elTeks.innerText = labelTgl;
             if (elLabel) elLabel.innerText = labelTgl;
 
-            tbody.innerHTML = '<tr><td colspan="6" class="ct-detail-empty">Memuat data riwayat stop...</td></tr>';
+            const posisiScroll = window.scrollY;
+            const panel = tbody.closest('.panel');
+            const prevMinHeight = panel ? panel.style.minHeight : '';
+            if (panel && panel.offsetHeight > 0) {
+                panel.style.minHeight = panel.offsetHeight + 'px';
+            }
+
+            if (tbody.children.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="ct-detail-empty">Memuat data riwayat stop...</td></tr>';
+            }
 
             const url = `api/riwayat_stop.php?line=${encodeURIComponent(currentLine)}${tgl ? '&tanggal=' + encodeURIComponent(tgl) : ''}`;
             try {
@@ -2938,28 +4104,33 @@
                 const list = d.daftar || [];
                 if (list.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="6" class="ct-detail-empty">Tidak ada riwayat kejadian stop pada filter tanggal ini.</td></tr>';
-                    return;
+                } else {
+                    tbody.innerHTML = list.map((item, idx) => {
+                        const kelasBadge = item.kategori === 'P' ? 'badge-kategori-p' : (item.kategori === 'Loss' ? 'badge-kategori-loss' : (item.kategori === 'Selesai' ? 'badge-kategori-selesai' : 'badge-kategori-kosong'));
+                        const badgePatlite = renderBadgePatlite(item.warna_patlite || item.status);
+                        const waktuFormatted = item.waktu ? item.waktu : '-';
+
+                        return `
+                            <tr>
+                                <td style="text-align:center; color:#64748b; font-weight:600;">${idx + 1}</td>
+                                <td style="font-family:monospace; font-size:12.5px; color:#1e293b;">${escapeHtml(waktuFormatted)}</td>
+                                <td><span class="badge-kategori ${kelasBadge}">${escapeHtml(item.kategori || '-')}</span></td>
+                                <td style="font-weight:600; color:#0f172a;">${escapeHtml(item.alasan || '-')}</td>
+                                <td>${badgePatlite}</td>
+                                <td style="font-weight:600; color:#1d4ed8;">${escapeHtml(item.durasi_teks || (item.durasi_menit + ' mnt'))}</td>
+                            </tr>
+                        `;
+                    }).join('');
                 }
 
-                tbody.innerHTML = list.map((item, idx) => {
-                    const kelasBadge = item.kategori === 'P' ? 'badge-kategori-p' : (item.kategori === 'Loss' ? 'badge-kategori-loss' : (item.kategori === 'Selesai' ? 'badge-kategori-selesai' : 'badge-kategori-kosong'));
-                    const badgePatlite = renderBadgePatlite(item.warna_patlite || item.status);
-                    const waktuFormatted = item.waktu ? item.waktu : '-';
-
-                    return `
-                        <tr>
-                            <td style="text-align:center; color:#64748b; font-weight:600;">${idx + 1}</td>
-                            <td style="font-family:monospace; font-size:12.5px; color:#1e293b;">${escapeHtml(waktuFormatted)}</td>
-                            <td><span class="badge-kategori ${kelasBadge}">${escapeHtml(item.kategori || '-')}</span></td>
-                            <td style="font-weight:600; color:#0f172a;">${escapeHtml(item.alasan || '-')}</td>
-                            <td>${badgePatlite}</td>
-                            <td style="font-weight:600; color:#1d4ed8;">${escapeHtml(item.durasi_teks || (item.durasi_menit + ' mnt'))}</td>
-                        </tr>
-                    `;
-                }).join('');
+                requestAnimationFrame(() => {
+                    if (panel) panel.style.minHeight = prevMinHeight;
+                    window.scrollTo(0, posisiScroll);
+                });
             } catch (err) {
                 console.error('loadRiwayatStop: error', err);
                 tbody.innerHTML = '<tr><td colspan="6" class="ct-detail-empty">Gagal memuat data riwayat stop.</td></tr>';
+                if (panel) panel.style.minHeight = prevMinHeight;
             }
         }
 
@@ -2981,7 +4152,7 @@
             if (tanggal) {
                 input.value = tanggal;
             } else if (!input.value) {
-                input.value = new Date().toISOString().split('T')[0];
+                input.value = tanggalLokalYYYYMMDD();
             }
             const tgl = input.value;
             const labelTgl = formatTanggalIndo(tgl);
@@ -3002,18 +4173,27 @@
             const daftar   = document.getElementById('daftar-riwayat-ph');
             const elKosong = document.getElementById('ph-kosong');
             if (!daftar) return;
-            daftar.innerHTML = '';
+
+            const posisiScroll = window.scrollY;
+            const prevMinHeight = daftar.style.minHeight;
+            if (daftar.offsetHeight > 0) {
+                daftar.style.minHeight = daftar.offsetHeight + 'px';
+            }
+
             riwayatPerformanceById = {};
 
             if (!d.riwayat || d.riwayat.length === 0) {
                 if (elKosong) elKosong.style.display = '';
+                daftar.innerHTML = '';
                 daftar.style.display  = 'none';
+                daftar.style.minHeight = prevMinHeight;
                 return;
             }
 
             if (elKosong) elKosong.style.display = 'none';
             daftar.style.display  = '';
 
+            const fragment = document.createDocumentFragment();
             d.riwayat.forEach(r => {
                 riwayatPerformanceById[r.id] = r;
 
@@ -3039,10 +4219,15 @@
                     <div class="riwayat-ph-card-actions">
                         <button type="button" class="btn-detail-shift" onclick="bukaDetailPerformance(${r.id})">Lihat Detail</button>
                         <a href="${APP_BASE_PATH}/export/export_riwayat_performance.php?id=${r.id}" class="btn-download-row" title="Download Excel sesi ini">&#8681;</a>
-
                     </div>
                 `;
-                daftar.appendChild(kartu);
+                fragment.appendChild(kartu);
+            });
+            daftar.replaceChildren(fragment);
+
+            requestAnimationFrame(() => {
+                daftar.style.minHeight = prevMinHeight;
+                window.scrollTo(0, posisiScroll);
             });
         }
 
@@ -3065,7 +4250,7 @@
             if (tanggal) {
                 input.value = tanggal;
             } else if (!input.value) {
-                input.value = new Date().toISOString().split('T')[0];
+                input.value = tanggalLokalYYYYMMDD();
             }
             const tgl = input.value;
             const labelTgl = formatTanggalIndo(tgl);
@@ -3079,8 +4264,14 @@
 
             const daftar = document.getElementById('daftar-riwayat-shift');
             if (!daftar) return;
-            daftar.innerHTML = '';
 
+            const posisiScroll = window.scrollY;
+            const prevMinHeight = daftar.style.minHeight;
+            if (daftar.offsetHeight > 0) {
+                daftar.style.minHeight = daftar.offsetHeight + 'px';
+            }
+
+            const fragment = document.createDocumentFragment();
             (d.shift || []).forEach(s => {
                 const kartu = document.createElement('div');
                 kartu.className = 'riwayat-ph-card';
@@ -3092,7 +4283,7 @@
                             <div class="riwayat-ph-card-sub">Belum berjalan</div>
                         </div>
                     `;
-                    daftar.appendChild(kartu);
+                    fragment.appendChild(kartu);
                     return;
                 }
 
@@ -3121,7 +4312,13 @@
                         <div class="riwayat-ph-metric highlight"><span>Machine Rate (L)</span><strong>${labelEff}</strong></div>
                     </div>
                 `;
-                daftar.appendChild(kartu);
+                fragment.appendChild(kartu);
+            });
+            daftar.replaceChildren(fragment);
+
+            requestAnimationFrame(() => {
+                daftar.style.minHeight = prevMinHeight;
+                window.scrollTo(0, posisiScroll);
             });
         }
         let idSesiRiwayatSedangDibuka = null;
@@ -3476,6 +4673,7 @@
         };
 
         async function loadKwhControlData(tanggalParam = null) {
+            pastikanPluginTerdaftar();
             if (isKwhLoading) return;
             isKwhLoading = true;
 
@@ -3485,7 +4683,7 @@
                 tgl = inputTanggal.value;
             }
             if (!tgl) {
-                tgl = new Date().toISOString().split('T')[0];
+                tgl = tanggalLokalYYYYMMDD();
             }
             if (inputTanggal) {
                 inputTanggal.value = tgl;
@@ -3598,6 +4796,7 @@
             if (chartKwhConsumptionInstance) {
                 chartKwhConsumptionInstance.data.labels = labels;
                 chartKwhConsumptionInstance.data.datasets[0].data = values;
+                chartKwhConsumptionInstance.data.datasets[0].backgroundColor = labels.map((_, i) => ['#3b82f6', '#0ea5e9', '#06b6d4', '#2563eb', '#6366f1', '#8b5cf6'][i % 6]);
                 chartKwhConsumptionInstance.update('none');
                 return;
             }
@@ -3610,8 +4809,8 @@
                     datasets: [{
                         label: 'kWh / hour',
                         data: values,
-                        backgroundColor: '#2563eb',
-                        borderRadius: 3,
+                        backgroundColor: labels.map((_, i) => ['#3b82f6', '#0ea5e9', '#06b6d4', '#2563eb', '#6366f1', '#8b5cf6'][i % 6]),
+                        borderRadius: 4,
                         barPercentage: 0.85,
                         categoryPercentage: 0.9,
                     }]
@@ -3619,7 +4818,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    layout: { padding: { left: 0, right: 2, top: 8, bottom: 0 } },
+                    layout: { padding: { left: 4, right: 4, top: 24, bottom: 0 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -3639,7 +4838,7 @@
                             ticks: { font: { size: 9 }, color: '#64748b', stepSize: 2 },
                             grid: { color: '#f1f5f9', borderDash: [2, 2] },
                             beginAtZero: true,
-                            suggestedMax: 16
+                            grace: '18%'
                         }
                     }
                 }
@@ -3648,6 +4847,7 @@
 
         // Render Grafik Line: Daily Current Line 3 (Kartu Awal)
         function renderKwhCurrentChart(hourlyData) {
+            pastikanPluginTerdaftar();
             const canvas = document.getElementById('chart-kwh-current');
             if (!canvas) return;
 
@@ -3683,7 +4883,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    layout: { padding: { left: 0, right: 2, top: 8, bottom: 0 } },
+                    layout: { padding: { left: 4, right: 4, top: 24, bottom: 0 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -3703,7 +4903,7 @@
                             ticks: { font: { size: 9 }, color: '#64748b', stepSize: 5 },
                             grid: { color: '#f1f5f9', borderDash: [2, 2] },
                             beginAtZero: true,
-                            suggestedMax: 30
+                            grace: '18%'
                         }
                     }
                 }
@@ -3711,6 +4911,7 @@
         }
 
         function renderDailyConsumptionChart(hourlyData, tglDisplay) {
+            pastikanPluginTerdaftar();
             const canvas = document.getElementById('chart-daily-consumption');
             if (!canvas) return;
 
@@ -3720,6 +4921,7 @@
             if (chartDailyConsumptionInstance) {
                 chartDailyConsumptionInstance.data.labels = labels;
                 chartDailyConsumptionInstance.data.datasets[0].data = values;
+                chartDailyConsumptionInstance.data.datasets[0].backgroundColor = labels.map((_, i) => ['#6366f1', '#8b5cf6', '#a855f7', '#3b82f6', '#06b6d4', '#0ea5e9'][i % 6]);
                 chartDailyConsumptionInstance.update('none');
                 return;
             }
@@ -3727,14 +4929,13 @@
             const ctx = canvas.getContext('2d');
             chartDailyConsumptionInstance = new Chart(ctx, {
                 type: 'bar',
-                plugins: [verticalBarLabelsPlugin],
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'kWh Total / hour',
                         data: values,
-                        backgroundColor: '#2563eb',
-                        borderRadius: 3,
+                        backgroundColor: labels.map((_, i) => ['#6366f1', '#8b5cf6', '#a855f7', '#3b82f6', '#06b6d4', '#0ea5e9'][i % 6]),
+                        borderRadius: 4,
                         barPercentage: 0.85,
                         categoryPercentage: 0.9,
                     }]
@@ -3742,7 +4943,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    layout: { padding: { left: 0, right: 4, top: 10, bottom: 0 } },
+                    layout: { padding: { left: 4, right: 6, top: 24, bottom: 0 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -3762,7 +4963,7 @@
                             ticks: { font: { size: 9 }, color: '#64748b' },
                             grid: { color: '#f1f5f9', borderDash: [2, 2] },
                             beginAtZero: true,
-                            suggestedMax: 35
+                            grace: '18%'
                         }
                     }
                 }
@@ -3770,6 +4971,7 @@
         }
 
         function renderDailyCostChart(dailyCostData, tglDisplay) {
+            pastikanPluginTerdaftar();
             const canvas = document.getElementById('chart-daily-cost');
             if (!canvas) return;
 
@@ -3790,15 +4992,14 @@
             const ctx = canvas.getContext('2d');
             chartDailyCostInstance = new Chart(ctx, {
                 type: 'bar',
-                plugins: [verticalBarLabelsPlugin],
                 data: {
                     labels: labels,
                     datasets: [
                         {
                             label: `Beban Puncak (${tglDisplay})`,
                             data: peakValues,
-                            backgroundColor: '#ffa200',
-                            borderRadius: 3,
+                            backgroundColor: '#f59e0b',
+                            borderRadius: 4,
                             barPercentage: 0.85,
                             categoryPercentage: 0.9,
                             stack: 'cost'
@@ -3806,8 +5007,8 @@
                         {
                             label: `Luar Beban Puncak (${tglDisplay})`,
                             data: offpeakValues,
-                            backgroundColor: '#15803d',
-                            borderRadius: 3,
+                            backgroundColor: '#10b981',
+                            borderRadius: 4,
                             barPercentage: 0.85,
                             categoryPercentage: 0.9,
                             stack: 'cost'
@@ -3817,7 +5018,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    layout: { padding: { left: 0, right: 4, top: 10, bottom: 0 } },
+                    layout: { padding: { left: 4, right: 6, top: 24, bottom: 0 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -3841,7 +5042,7 @@
                             },
                             grid: { color: '#f1f5f9', borderDash: [2, 2] },
                             beginAtZero: true,
-                            suggestedMax: 35000
+                            grace: '18%'
                         }
                     }
                 }
@@ -3849,6 +5050,7 @@
         }
 
         function renderMonthlyConsumptionChart(monthlyConsumptionData, tglDisplay) {
+            pastikanPluginTerdaftar();
             const canvas = document.getElementById('chart-monthly-consumption');
             if (!canvas) return;
 
@@ -3858,6 +5060,7 @@
             if (chartMonthlyConsumptionInstance) {
                 chartMonthlyConsumptionInstance.data.labels = labels;
                 chartMonthlyConsumptionInstance.data.datasets[0].data = values;
+                chartMonthlyConsumptionInstance.data.datasets[0].backgroundColor = labels.map((_, i) => ['#0284c7', '#0ea5e9', '#38bdf8', '#06b6d4', '#14b8a6', '#10b981'][i % 6]);
                 chartMonthlyConsumptionInstance.update('none');
                 return;
             }
@@ -3865,14 +5068,13 @@
             const ctx = canvas.getContext('2d');
             chartMonthlyConsumptionInstance = new Chart(ctx, {
                 type: 'bar',
-                plugins: [verticalBarLabelsPlugin],
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'kWh Total / day',
                         data: values,
-                        backgroundColor: '#2563eb',
-                        borderRadius: 3,
+                        backgroundColor: labels.map((_, i) => ['#0284c7', '#0ea5e9', '#38bdf8', '#06b6d4', '#14b8a6', '#10b981'][i % 6]),
+                        borderRadius: 4,
                         barPercentage: 0.85,
                         categoryPercentage: 0.9,
                     }]
@@ -3880,7 +5082,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    layout: { padding: { left: 0, right: 4, top: 10, bottom: 0 } },
+                    layout: { padding: { left: 4, right: 6, top: 24, bottom: 0 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -3900,7 +5102,7 @@
                             ticks: { font: { size: 9 }, color: '#64748b' },
                             grid: { color: '#f1f5f9', borderDash: [2, 2] },
                             beginAtZero: true,
-                            suggestedMax: 800
+                            grace: '18%'
                         }
                     }
                 }
@@ -3908,6 +5110,7 @@
         }
 
         function renderMonthlyCostChart(monthlyCostData, tglDisplay) {
+            pastikanPluginTerdaftar();
             const canvas = document.getElementById('chart-monthly-cost');
             if (!canvas) return;
 
@@ -3917,6 +5120,7 @@
             if (chartMonthlyCostInstance) {
                 chartMonthlyCostInstance.data.labels = labels;
                 chartMonthlyCostInstance.data.datasets[0].data = values;
+                chartMonthlyCostInstance.data.datasets[0].backgroundColor = labels.map((_, i) => ['#059669', '#10b981', '#34d399', '#15803d', '#16a34a', '#22c55e'][i % 6]);
                 chartMonthlyCostInstance.update('none');
                 return;
             }
@@ -3924,14 +5128,13 @@
             const ctx = canvas.getContext('2d');
             chartMonthlyCostInstance = new Chart(ctx, {
                 type: 'bar',
-                plugins: [verticalBarLabelsPlugin],
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'Total Harga / day',
                         data: values,
-                        backgroundColor: '#15803d',
-                        borderRadius: 3,
+                        backgroundColor: labels.map((_, i) => ['#059669', '#10b981', '#34d399', '#15803d', '#16a34a', '#22c55e'][i % 6]),
+                        borderRadius: 4,
                         barPercentage: 0.85,
                         categoryPercentage: 0.9,
                     }]
@@ -3939,7 +5142,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    layout: { padding: { left: 0, right: 4, top: 10, bottom: 0 } },
+                    layout: { padding: { left: 4, right: 6, top: 24, bottom: 0 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -3963,34 +5166,73 @@
                             },
                             grid: { color: '#f1f5f9', borderDash: [2, 2] },
                             beginAtZero: true,
-                            suggestedMax: 800000
+                            grace: '18%'
                         }
                     }
                 }
             });
         }
 
-        // ===== JALANKAN SEMUA =====
-        setInterval(() => { if (currentView === 'dashboard') { updateData(); loadMachineRatio(); } }, 3000);
-        // Polling status mesin selalu jalan di semua halaman (bukan cuma dashboard), supaya transisi
-        // Running <-> berhenti tetap terdeteksi buat sesi otomatis Kalkulator Performance meski user
-        // sedang membuka halaman lain (mis. Machine Control).
-        setInterval(updateStatusMesin, 3000);
-        setInterval(() => {
-            if (currentView === 'chart') updateChartAktif();
-            else if (currentView === 'riwayat') {
-                if (riwayatTabAktif === 'produksi') updateHistoriTable();
-                else if (riwayatTabAktif === 'mc') loadRiwayatPerformance();
-                else if (riwayatTabAktif === 'shift') loadRiwayatShift();
+        // ===== POLLING KOORDINATOR CERDAS (RINGAN & SUPER CEPAT) =====
+        let isPollingBusy = false;
+        let lastPollingStart = 0;
+        async function runUnifiedPolling() {
+            const now = Date.now();
+            if (isPollingBusy && (now - lastPollingStart > 8000)) {
+                console.warn('Watchdog: Polling stuck for >8s, resetting busy lock.');
+                isPollingBusy = false;
             }
-            else if (currentView === 'detail') loadDetailHarian(currentLine, currentTanggal);
-            else if (currentView === 'kwh-control') loadKwhControlData();
-            else if (currentView === 'machine-control') {
-                loadRingkasanAlasanStop();
-                perbaruiHasilPerformanceLive();
+            if (document.hidden || isPollingBusy) return;
+            isPollingBusy = true;
+            lastPollingStart = now;
+            try {
+                // 0. Cek shift reset untuk sesi aktif Machine Control
+                if (sesiProduksiAktif) {
+                    const inputMulai = document.getElementById('perf-jam-mulai');
+                    const inputTgl = document.getElementById('perf-tanggal');
+                    const tgl = inputTgl && inputTgl.value ? inputTgl.value : (currentTanggal || tanggalLokalYYYYMMDD());
+                    if (inputMulai && inputMulai.value && !apakahSesiDalamShiftSekarang(inputMulai.value, tgl)) {
+                        await resetSesiKarenaGantiShift();
+                    }
+                }
+
+                // 1. Status mesin (prioritas utama alarm & tower light)
+                await updateStatusMesin();
+
+                // 2. Data view aktif secara berurutan tanpa bertabrakan di single thread PHP
+                if (currentView === 'dashboard') {
+                    await updateData();
+                    await loadMachineRatio();
+                } else if (currentView === 'chart') {
+                    await updateChartAktif();
+                } else if (currentView === 'riwayat') {
+                    if (riwayatTabAktif === 'produksi') await updateHistoriTable();
+                    else if (riwayatTabAktif === 'mc') await loadRiwayatPerformance();
+                    else if (riwayatTabAktif === 'shift') await loadRiwayatShift();
+                } else if (currentView === 'detail') {
+                    await loadDetailHarian(currentLine, currentTanggal);
+                } else if (currentView === 'kwh-control') {
+                    await loadKwhControlData();
+                } else if (currentView === 'machine-control') {
+                    await loadRingkasanAlasanStop();
+                    perbaruiHasilPerformanceLive();
+                }
+            } catch (err) {
+                console.warn('Polling coordinator error:', err);
+            } finally {
+                isPollingBusy = false;
             }
-        }, 5000);
+        }
+
+        // Polling setiap 4 detik secara terkoordinasi (aman dan tidak membuat lemot)
+        setInterval(runUnifiedPolling, 4000);
         setInterval(updateGreetingClock, 1000);
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                runUnifiedPolling();
+            }
+        });
 
         // ===== PART AKTIF: simpan & pulihkan pilihan part di Machine Control =====
         // Dulu bagian ini polling ke get_part.php setiap 2 detik buat "nangkep" part yang
@@ -4105,18 +5347,7 @@
                 }
 
                 // Cek apakah sesi masih dalam shift yang sedang berjalan saat ini
-                const shiftSekarang = dapatkanShiftSekarang();
-                const sesiMasihDalamShiftIni = (() => {
-                    if (d.tanggal !== shiftSekarang.tanggal) return false;
-                    // Shift Malam lintas tengah malam (23:20 - 06:55): jam_mulai sesi valid
-                    // kalau >= 23:20 ATAU < 06:55 (dimulai malam itu atau dini hari).
-                    if (shiftSekarang.jamMulai > shiftSekarang.jamSelesai) {
-                        return d.jam_mulai >= shiftSekarang.jamMulai || d.jam_mulai < shiftSekarang.jamSelesai;
-                    }
-                    return d.jam_mulai >= shiftSekarang.jamMulai && d.jam_mulai < shiftSekarang.jamSelesai;
-                })();
-
-                if (!sesiMasihDalamShiftIni) {
+                if (!apakahSesiDalamShiftSekarang(d.jam_mulai, d.tanggal)) {
                     // Sesi basi dari shift sebelumnya / hari lalu -- tutup di server & jangan pulihkan
                     await hapusSesiAktifDiServer();
                     sesiProduksiAktif = false;
@@ -4211,6 +5442,9 @@
         renderView(currentLine, currentView, currentTanggal);
 
         function filterPartCt() {
+            if (typeof pauseKioskForInteraction === 'function') {
+                pauseKioskForInteraction('choose-part');
+            }
             const inputSearch = document.getElementById('ct-part-search');
             if (!inputSearch) return;
             const kata = inputSearch.value.trim().toUpperCase();
@@ -4261,6 +5495,9 @@
             const select = document.getElementById('ct-part-select');
             if (select) select.value = namaPart;
             tampilkanDetailCt(namaPart);
+            if (typeof resumeKioskAfterInteraction === 'function') {
+                resumeKioskAfterInteraction(2000);
+            }
         }
 
         // simpanKeServer default true: dipanggil true saat operator benar-benar memilih part
@@ -4292,13 +5529,13 @@
                 const detik = Math.round(ctVal * 60 * 100) / 100;
                 const pcs = parseInt(item.pcs, 10) || 1;
                 wadahNilai.innerHTML = `
-                    <div class="ct-value-row">
-                        <span class="ct-value-label">CT Standar</span>
-                        <span class="ct-value-number ct-value-primary">${ctVal} menit <span style="font-size:12px; font-weight:500; color:#64748b; margin-left:4px;">(${detik} detik)</span></span>
+                    <div class="ct-stat-card ct-stat-primary">
+                        <div class="ct-stat-label">CT STANDAR (CYCLE TIME)</div>
+                        <div class="ct-stat-value">${ctVal} <span class="ct-stat-unit">menit</span> <span class="ct-stat-sub">(${detik}s)</span></div>
                     </div>
-                    <div class="ct-value-row">
-                        <span class="ct-value-label">Pcs per Sheet</span>
-                        <span class="ct-value-number ct-value-secondary" style="color:#0284c7; font-weight:700;">${pcs} pcs / sheet</span>
+                    <div class="ct-stat-card ct-stat-secondary">
+                        <div class="ct-stat-label">PCS PER SHEET</div>
+                        <div class="ct-stat-value">${pcs} <span class="ct-stat-unit">pcs / sheet</span></div>
                     </div>
                 `;
             }
@@ -4311,7 +5548,12 @@
 
             // Simpan ke server SUPAYA persisten (cuma kalau ini benar-benar aksi pilih
             // manual dari operator, bukan sekadar restore pas halaman baru dibuka)
-            if (simpanKeServer) simpanPartTerpilih(namaPart);
+            if (simpanKeServer) {
+                simpanPartTerpilih(namaPart);
+                if (typeof resumeKioskAfterInteraction === 'function') {
+                    resumeKioskAfterInteraction(2500);
+                }
+            }
         }
 
         // ===== KONTROL PRODUKSI PART: SINKRONISASI PART TERPILIH =====
@@ -4618,6 +5860,11 @@
                 alert('Belum ada hasil kalkulasi untuk dikoreksi.');
                 return;
             }
+            // Pastikan jam selesai terisi — koreksi tidak boleh dijalankan tanpa jam selesai
+            const inputSelesai = document.getElementById('perf-jam-selesai');
+            if (inputSelesai && !inputSelesai.value) {
+                inputSelesai.value = jamSekarangHHMM();
+            }
             const fManual = document.getElementById('input-koreksi-f').value.trim();
             const eManual = document.getElementById('input-koreksi-e').value.trim();
             const cManual = document.getElementById('input-koreksi-c').value.trim();
@@ -4628,7 +5875,10 @@
         // ===== TOMBOL "SIMPAN PRODUKSI" =====
         // Hitung ulang sesi yang sedang tampil dan tandai baris riwayat baru sebagai final (disimpan_final=1),
         // kemudian MENGAKHIRI SESI PRODUKSI dan MERESET KESELURUHAN tampilan agar siap mulai sesi baru.
+        let _sedangMenyimpanFinal = false;
         async function simpanProduksiFinal() {
+            if (_sedangMenyimpanFinal) return; // guard double-click
+            _sedangMenyimpanFinal = true;
             const inputMulai = document.getElementById('perf-jam-mulai');
             const inputSelesai = document.getElementById('perf-jam-selesai');
             if (!sesiProduksiAktif && (!inputMulai || !inputMulai.value)) {
@@ -4723,6 +5973,7 @@
                     statusEl.style.color = '#1a7d3a';
                 }
             } finally {
+                _sedangMenyimpanFinal = false;
                 if (btnSimpan) {
                     btnSimpan.disabled = false;
                     btnSimpan.innerText = '💾 Simpan Produksi';
@@ -4735,6 +5986,9 @@
             const modal = document.getElementById('modal-manage-part');
             if (!modal) return;
             modal.style.display = 'flex';
+            if (typeof pauseKioskForInteraction === 'function') {
+                pauseKioskForInteraction('choose-part-manage');
+            }
             batalEditPart();
             const searchInput = document.getElementById('mp-search-input');
             if (searchInput) {
@@ -4748,6 +6002,9 @@
             if (modal) modal.style.display = 'none';
             batalEditPart();
             sembunyikanMpAlert();
+            if (typeof resumeKioskAfterInteraction === 'function') {
+                resumeKioskAfterInteraction(1500);
+            }
         }
 
         function tutupModalJikaDiLuarManagePart(e) {
@@ -5072,4 +6329,948 @@
         if (currentView === 'kwh-control') {
             loadKwhControlData();
         }
+
+        // =========================================================================
+        // SISTEM ESP-CAM, PHOTOSENSOR, MOSFET IRF520 & DETEKSI WADAH LAMPU PAINTING
+        // =========================================================================
+
+        let paintingCamConfig = {
+            mode: 'simulasi',
+            ip: '192.168.1.88',
+            url: 'http://192.168.1.88/stream',
+            resolution: 'VGA (640x480)',
+            fps: 24,
+            sensorType: 'LOW',
+            debounce: 50,
+            delay: 80,
+            ledMode: 'strobe',
+            ledPwm: 85,
+            pulseDuration: 120,
+            confidence: 75,
+            maxWadah: 4,
+            showHud: true
+        };
+
+        let camSimState = {
+            active: false,
+            animationId: null,
+            hangers: [],
+            conveyorX: 0,
+            conveyorSpeed: 1.5,
+            nextHangerId: 1049,
+            totalHangerPassed: 184,
+            totalHangerWithWadah: 146,
+            totalHangerEmpty: 38,
+            totalWadahInput: 368,
+            totalWadahOutput: 362,
+            isFlashActive: false,
+            isSensorTriggered: false,
+            lastTriggerTime: 0,
+            recentInspections: []
+        };
+
+        // Status Tombol Fisik Operator: 'hadir' (Hijau = Memproduksi) vs 'tidak_ada' (Merah = Tidak Ada Operator)
+        let operatorStatus = localStorage.getItem('painting_operator_status') || 'hadir';
+
+        function setOperatorStatus(status) {
+            operatorStatus = status;
+            try {
+                localStorage.setItem('painting_operator_status', status);
+            } catch (e) {}
+
+            sinkronkanTampilanOperator();
+        }
+
+        function sinkronkanTampilanOperator() {
+            const isHadir = (operatorStatus === 'hadir');
+
+            // 1. Dashboard Top Station Buttons & Badge
+            const btnDashGreen = document.getElementById('dash-btn-op-green');
+            const btnDashRed = document.getElementById('dash-btn-op-red');
+            const badgeDash = document.getElementById('dash-operator-badge');
+            const stateDash = document.getElementById('dash-operator-state');
+
+            if (btnDashGreen) btnDashGreen.classList.toggle('active', isHadir);
+            if (btnDashRed) btnDashRed.classList.toggle('active', !isHadir);
+
+            if (badgeDash) {
+                if (isHadir) {
+                    badgeDash.className = 'operator-status-badge active-green';
+                    badgeDash.innerHTML = '🟢 Memproduksi';
+                } else {
+                    badgeDash.className = 'operator-status-badge active-red';
+                    badgeDash.innerHTML = '🔴 Tidak Ada Operator';
+                }
+            }
+
+            if (stateDash) {
+                if (isHadir) {
+                    stateDash.textContent = 'HADIR (HIJAU)';
+                    stateDash.style.color = '#4ade80';
+                } else {
+                    stateDash.textContent = 'KOSONG (MERAH)';
+                    stateDash.style.color = '#f87171';
+                }
+            }
+
+            // 2. Camera Pop-up HUD & Mini Buttons
+            const btnCamGreen = document.getElementById('btn-op-mini-green');
+            const btnCamRed = document.getElementById('btn-op-mini-red');
+            const hudOpDot = document.getElementById('hud-operator-dot');
+            const hudOpText = document.getElementById('hud-operator-text');
+
+            if (btnCamGreen) btnCamGreen.classList.toggle('active', isHadir);
+            if (btnCamRed) btnCamRed.classList.toggle('active', !isHadir);
+
+            if (hudOpDot) {
+                hudOpDot.className = isHadir ? 'hud-dot green' : 'hud-dot red';
+                if (!isHadir) {
+                    hudOpDot.style.background = '#ef4444';
+                    hudOpDot.style.boxShadow = '0 0 6px #ef4444';
+                } else {
+                    hudOpDot.style.background = '#22c55e';
+                    hudOpDot.style.boxShadow = '0 0 6px #22c55e';
+                }
+            }
+
+            if (hudOpText) {
+                hudOpText.textContent = isHadir ? 'HADIR' : 'KOSONG';
+                hudOpText.style.color = isHadir ? '#4ade80' : '#f87171';
+            }
+
+            // 3. Settings Badge
+            const cfgBadge = document.getElementById('cfg-operator-status-badge');
+            if (cfgBadge) {
+                if (isHadir) {
+                    cfgBadge.className = 'operator-status-badge active-green';
+                    cfgBadge.innerHTML = '🟢 Operator Memproduksi';
+                } else {
+                    cfgBadge.className = 'operator-status-badge active-red';
+                    cfgBadge.innerHTML = '🔴 Tidak Ada Operator';
+                }
+            }
+        }
+
+        // Muat konfigurasi kamera dari localStorage jika ada
+        function muatPengaturanKamera() {
+            try {
+                const saved = localStorage.getItem('painting_cam_config');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    paintingCamConfig = Object.assign(paintingCamConfig, parsed);
+                }
+            } catch (e) {}
+
+            // Sinkronkan ke form pengaturan jika elemen ada
+            const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+            setVal('cfg-cam-mode', paintingCamConfig.mode);
+            setVal('cfg-cam-ip', paintingCamConfig.ip);
+            setVal('cfg-cam-url', paintingCamConfig.url);
+            setVal('cfg-cam-resolution', paintingCamConfig.resolution);
+            setVal('cfg-cam-fps', paintingCamConfig.fps);
+            setVal('cfg-sensor-type', paintingCamConfig.sensorType);
+            setVal('cfg-sensor-debounce', paintingCamConfig.debounce);
+            setVal('cfg-sensor-delay', paintingCamConfig.delay);
+            setVal('cfg-led-mode', paintingCamConfig.ledMode);
+            setVal('cfg-led-pwm', paintingCamConfig.ledPwm);
+            setVal('cfg-pulse-duration', paintingCamConfig.pulseDuration);
+            setVal('cfg-ai-confidence', paintingCamConfig.confidence);
+            setVal('cfg-max-wadah', paintingCamConfig.maxWadah);
+
+            const pwmLabel = document.getElementById('cfg-pwm-label');
+            if (pwmLabel) pwmLabel.textContent = paintingCamConfig.ledPwm + '%';
+            const pulseLabel = document.getElementById('cfg-pulse-label');
+            if (pulseLabel) pulseLabel.textContent = paintingCamConfig.pulseDuration + ' ms';
+            const confLabel = document.getElementById('cfg-conf-label');
+            if (confLabel) confLabel.textContent = paintingCamConfig.confidence + '%';
+
+            const cbHud = document.getElementById('cfg-show-hud');
+            if (cbHud) cbHud.checked = Boolean(paintingCamConfig.showHud);
+
+            // Sinkronkan ke HUD popup kamera
+            const hudIp = document.getElementById('hud-cam-ip');
+            if (hudIp) hudIp.textContent = paintingCamConfig.ip;
+            const hudRes = document.getElementById('hud-cam-res');
+            if (hudRes) hudRes.textContent = paintingCamConfig.resolution;
+            const hudFps = document.getElementById('hud-cam-fps');
+            if (hudFps) hudFps.textContent = paintingCamConfig.fps;
+            const camModeTag = document.getElementById('cam-mode-tag');
+            if (camModeTag) camModeTag.textContent = (paintingCamConfig.mode === 'riil') ? 'STREAM IP RIIL' : 'SIMULASI LIVE';
+        }
+
+        function simpanPengaturanKameraLengkap() {
+            const getVal = (id, def) => { const el = document.getElementById(id); return el ? el.value : def; };
+            paintingCamConfig.mode = getVal('cfg-cam-mode', 'simulasi');
+            paintingCamConfig.ip = getVal('cfg-cam-ip', '192.168.1.88');
+            paintingCamConfig.url = getVal('cfg-cam-url', 'http://192.168.1.88/stream');
+            paintingCamConfig.resolution = getVal('cfg-cam-resolution', 'VGA (640x480)');
+            paintingCamConfig.fps = parseInt(getVal('cfg-cam-fps', '24'), 10);
+            paintingCamConfig.sensorType = getVal('cfg-sensor-type', 'LOW');
+            paintingCamConfig.debounce = parseInt(getVal('cfg-sensor-debounce', '50'), 10);
+            paintingCamConfig.delay = parseInt(getVal('cfg-sensor-delay', '80'), 10);
+            paintingCamConfig.ledMode = getVal('cfg-led-mode', 'strobe');
+            paintingCamConfig.ledPwm = parseInt(getVal('cfg-led-pwm', '85'), 10);
+            paintingCamConfig.pulseDuration = parseInt(getVal('cfg-pulse-duration', '120'), 10);
+            paintingCamConfig.confidence = parseInt(getVal('cfg-ai-confidence', '75'), 10);
+            paintingCamConfig.maxWadah = parseInt(getVal('cfg-max-wadah', '4'), 10);
+
+            const cbHud = document.getElementById('cfg-show-hud');
+            paintingCamConfig.showHud = cbHud ? cbHud.checked : true;
+
+            try {
+                localStorage.setItem('painting_cam_config', JSON.stringify(paintingCamConfig));
+            } catch (e) {}
+
+            muatPengaturanKamera();
+            ubahModeKamera(paintingCamConfig.mode);
+
+            const msgEl = document.getElementById('cfg-cam-status-msg');
+            if (msgEl) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = '#dcfce7';
+                msgEl.style.color = '#15803d';
+                msgEl.style.border = '1px solid #bbf7d0';
+                msgEl.textContent = '✅ Pengaturan ESP-CAM, Photosensor, & Driver MOSFET IRF520 berhasil disimpan dan diterapkan!';
+                setTimeout(() => { msgEl.style.display = 'none'; }, 4000);
+            }
+        }
+
+        function ubahModeKamera(mode) {
+            const canvas = document.getElementById('cameraCanvas');
+            const streamImg = document.getElementById('cameraStreamImg');
+            const modeTag = document.getElementById('cam-mode-tag');
+            const errUrl = document.getElementById('err-stream-url');
+            if (errUrl) errUrl.textContent = paintingCamConfig.url;
+
+            if (mode === 'riil') {
+                if (canvas) canvas.style.display = 'none';
+                if (streamImg) {
+                    streamImg.style.display = 'block';
+                    sembunyikanErrorStreamKamera();
+                    streamImg.src = paintingCamConfig.url;
+                }
+                if (modeTag) {
+                    modeTag.textContent = 'STREAM IP RIIL';
+                    modeTag.style.background = 'rgba(34, 197, 94, 0.2)';
+                    modeTag.style.color = '#4ade80';
+                    modeTag.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+                }
+            } else {
+                sembunyikanErrorStreamKamera();
+                if (streamImg) {
+                    streamImg.style.display = 'none';
+                    streamImg.src = '';
+                }
+                if (canvas) canvas.style.display = 'block';
+                if (modeTag) {
+                    modeTag.textContent = 'SIMULASI LIVE';
+                    modeTag.style.background = 'rgba(56, 189, 248, 0.18)';
+                    modeTag.style.color = '#38bdf8';
+                    modeTag.style.borderColor = 'rgba(56, 189, 248, 0.35)';
+                }
+                if (!camSimState.active) {
+                    startCameraSimulator();
+                }
+            }
+        }
+
+        function toggleModeKameraLangsung() {
+            const targetMode = (paintingCamConfig.mode === 'riil') ? 'simulasi' : 'riil';
+            paintingCamConfig.mode = targetMode;
+            try {
+                localStorage.setItem('painting_cam_config', JSON.stringify(paintingCamConfig));
+            } catch(e) {}
+            ubahModeKamera(targetMode);
+            
+            const cfgMode = document.getElementById('cfg-cam-mode');
+            if (cfgMode) cfgMode.value = targetMode;
+        }
+
+        function tanganiErrorStreamKamera(img) {
+            if (paintingCamConfig.mode !== 'riil') return;
+            console.warn('Gagal memuat stream ESP-CAM dari:', img ? img.src : paintingCamConfig.url);
+            const overlayErr = document.getElementById('cameraStreamErrorOverlay');
+            if (overlayErr) {
+                overlayErr.style.display = 'flex';
+            }
+        }
+
+        function sembunyikanErrorStreamKamera() {
+            const overlayErr = document.getElementById('cameraStreamErrorOverlay');
+            if (overlayErr) {
+                overlayErr.style.display = 'none';
+            }
+        }
+
+        function switchSettingsTab(tabName) {
+            document.querySelectorAll('.settings-tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.settings-tab-panel').forEach(panel => panel.style.display = 'none');
+
+            const activeBtn = document.getElementById(`tab-btn-${tabName}`);
+            const activePanel = document.getElementById(`tab-panel-${tabName}`);
+            if (activeBtn) activeBtn.classList.add('active');
+            if (activePanel) activePanel.style.display = 'block';
+        }
+
+        function bukaSettingKameraDariPopup() {
+            navigateTo(currentLine, 'pengaturan');
+            switchSettingsTab('camera');
+        }
+
+        function bukaPanduanAIDariPopup() {
+            navigateTo(currentLine, 'pengaturan');
+            switchSettingsTab('ai');
+        }
+
+        function ambilSnapshotDataset() {
+            if (paintingCamConfig.mode === 'riil') {
+                const snapUrl = `http://${paintingCamConfig.ip}/capture?t=${Date.now()}`;
+                const win = window.open(snapUrl, '_blank');
+                if (!win) {
+                    window.location.href = snapUrl;
+                }
+            } else {
+                const canvas = document.getElementById('cameraCanvas');
+                if (!canvas) return;
+                const link = document.createElement('a');
+                link.download = `dataset_wadah_topdown_${Date.now()}.jpg`;
+                link.href = canvas.toDataURL('image/jpeg', 0.95);
+                link.click();
+            }
+        }
+
+        // ===== FLOATING POP-UP CONTROLLER: BUKA, TUTUP, MEMBESAR, MINIMIZE, DRAGGABLE =====
+        function bukaCameraPopup() {
+            const widget = document.getElementById('camera-float-widget');
+            if (!widget) return;
+            widget.style.display = 'flex';
+            const btnCam = document.getElementById('btnTopbarCamera');
+            if (btnCam) btnCam.classList.add('active');
+            localStorage.setItem('painting_cam_open', '1');
+
+            if (paintingCamConfig.mode === 'simulasi' && !camSimState.active) {
+                startCameraSimulator();
+            }
+        }
+
+        function tutupCameraPopup() {
+            const widget = document.getElementById('camera-float-widget');
+            if (!widget) return;
+            widget.style.display = 'none';
+            const btnCam = document.getElementById('btnTopbarCamera');
+            if (btnCam) btnCam.classList.remove('active');
+            localStorage.setItem('painting_cam_open', '0');
+        }
+
+        function toggleCameraPopup() {
+            const widget = document.getElementById('camera-float-widget');
+            if (!widget) return;
+            if (widget.style.display === 'none' || widget.style.display === '') {
+                bukaCameraPopup();
+            } else {
+                tutupCameraPopup();
+            }
+        }
+
+        function toggleMembesarKamera(forceEnlarge = null) {
+            const widget = document.getElementById('camera-float-widget');
+            if (!widget) return;
+
+            const iconExpand = document.getElementById('cam-icon-expand');
+            const iconCompress = document.getElementById('cam-icon-compress');
+            const detailsPanel = document.getElementById('cameraEnlargedDetails');
+            const labelEnlarge = document.getElementById('label-btn-enlarge');
+
+            const willEnlarge = (forceEnlarge !== null) ? forceEnlarge : !widget.classList.contains('enlarged');
+
+            if (willEnlarge) {
+                widget.classList.add('enlarged');
+                if (iconExpand) iconExpand.style.display = 'none';
+                if (iconCompress) iconCompress.style.display = 'block';
+                if (detailsPanel) detailsPanel.style.display = 'block';
+                if (labelEnlarge) labelEnlarge.textContent = 'Kecilkan';
+                renderRecentHangerList();
+            } else {
+                widget.classList.remove('enlarged');
+                if (iconExpand) iconExpand.style.display = 'block';
+                if (iconCompress) iconCompress.style.display = 'none';
+                if (detailsPanel) detailsPanel.style.display = 'none';
+                if (labelEnlarge) labelEnlarge.textContent = 'Membesar';
+            }
+        }
+
+        function toggleMinimizeKamera() {
+            const widget = document.getElementById('camera-float-widget');
+            if (!widget) return;
+            widget.classList.toggle('minimized');
+        }
+
+        // Inisialisasi Draggable Header Widget
+        function initDraggableCameraPopup() {
+            const widget = document.getElementById('camera-float-widget');
+            const handle = document.getElementById('cameraDragHandle');
+            if (!widget || !handle) return;
+
+            // Restore posisi tersimpan jika ada
+            try {
+                const savedPos = localStorage.getItem('painting_cam_pos');
+                if (savedPos) {
+                    const pos = JSON.parse(savedPos);
+                    if (pos.left !== undefined && pos.top !== undefined) {
+                        widget.style.left = `${pos.left}px`;
+                        widget.style.top = `${pos.top}px`;
+                        widget.style.right = 'auto';
+                        widget.style.bottom = 'auto';
+                    }
+                }
+            } catch (e) {}
+
+            let isDragging = false;
+            let startX, startY, initLeft, initTop;
+
+            function onStart(e) {
+                // Abaikan jika klik berasal dari tombol di header
+                if (e.target.closest('button')) return;
+
+                isDragging = true;
+                widget.classList.add('is-dragging');
+
+                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+                startX = clientX;
+                startY = clientY;
+
+                const rect = widget.getBoundingClientRect();
+                initLeft = rect.left;
+                initTop = rect.top;
+
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onEnd);
+                document.addEventListener('touchmove', onMove, { passive: false });
+                document.addEventListener('touchend', onEnd);
+            }
+
+            function onMove(e) {
+                if (!isDragging) return;
+                if (e.cancelable) e.preventDefault();
+
+                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+                const deltaX = clientX - startX;
+                const deltaY = clientY - startY;
+
+                let newLeft = initLeft + deltaX;
+                let newTop = initTop + deltaY;
+
+                // Batasan layar (clamp boundaries)
+                const maxLeft = Math.max(10, window.innerWidth - widget.offsetWidth - 12);
+                const maxTop = Math.max(50, window.innerHeight - widget.offsetHeight - 12);
+
+                newLeft = Math.max(12, Math.min(newLeft, maxLeft));
+                newTop = Math.max(56, Math.min(newTop, maxTop));
+
+                widget.style.left = `${newLeft}px`;
+                widget.style.top = `${newTop}px`;
+                widget.style.right = 'auto';
+                widget.style.bottom = 'auto';
+            }
+
+            function onEnd() {
+                if (!isDragging) return;
+                isDragging = false;
+                widget.classList.remove('is-dragging');
+
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onEnd);
+                document.removeEventListener('touchmove', onMove);
+                document.removeEventListener('touchend', onEnd);
+
+                const rect = widget.getBoundingClientRect();
+                try {
+                    localStorage.setItem('painting_cam_pos', JSON.stringify({ left: Math.round(rect.left), top: Math.round(rect.top) }));
+                } catch (e) {}
+            }
+
+            handle.addEventListener('mousedown', onStart);
+            handle.addEventListener('touchstart', onStart, { passive: true });
+        }
+
+        // ===== HARDWARE TEST: FLASH LED HPL COOL WHITE (IRF520 MOSFET) =====
+        function ujiFlashLedManual() {
+            const flashOverlay = document.getElementById('cameraFlashOverlay');
+            if (flashOverlay) {
+                flashOverlay.classList.add('active');
+                setTimeout(() => {
+                    flashOverlay.classList.remove('active');
+                }, paintingCamConfig.pulseDuration || 120);
+            }
+
+            // Tampilkan feedback visual di HUD
+            const hudMosfet = document.getElementById('hudMosfetTag');
+            if (hudMosfet) {
+                hudMosfet.textContent = '⚡ Flash IRF520: STROBE ACTIVE';
+                hudMosfet.style.color = '#38bdf8';
+                setTimeout(() => {
+                    hudMosfet.textContent = `⚡ Flash IRF520: READY (${paintingCamConfig.ledPwm}%)`;
+                    hudMosfet.style.color = '';
+                }, 1000);
+            }
+
+            const dashFlash = document.getElementById('dash-flash-state');
+            if (dashFlash) {
+                dashFlash.textContent = 'FLASHING';
+                setTimeout(() => {
+                    dashFlash.textContent = `PWM ${paintingCamConfig.ledPwm}%`;
+                }, 1000);
+            }
+        }
+
+        // ===== HARDWARE TEST: SIMULASI TRIGGER PHOTOSENSOR MANUAL =====
+        function simulasiTriggerPhotosensorManual() {
+            // Segera datangkan gantungan hanger tepat di depan sensor photosensor (x = 320)
+            const targetWadah = Math.floor(Math.random() * 4); // 0 (kosong), 1, 2, atau 3 wadah
+            const newHanger = {
+                id: `#H-${camSimState.nextHangerId++}`,
+                x: 320,
+                wadahCount: targetWadah,
+                inspected: false,
+                triggerProcessed: false
+            };
+
+            camSimState.hangers.unshift(newHanger);
+            if (!camSimState.active) {
+                startCameraSimulator();
+            }
+        }
+
+        // ===== ENGINE SIMULATOR VISUAL KONVEYOR & ESP-CAM PAINTING =====
+        function startCameraSimulator() {
+            const canvas = document.getElementById('cameraCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            camSimState.active = true;
+
+            // Inisialisasi awal 3 hanger di sepanjang lintasan konveyor jika kosong
+            if (camSimState.hangers.length === 0) {
+                camSimState.hangers = [
+                    { id: '#H-1048', x: 100, wadahCount: 2, inspected: true, triggerProcessed: true },
+                    { id: '#H-1049', x: 320, wadahCount: 1, inspected: false, triggerProcessed: false },
+                    { id: '#H-1050', x: 540, wadahCount: 0, inspected: false, triggerProcessed: false } // Hanger kosong
+                ];
+            }
+
+            // Loop Render Animasi dengan Perspektif TOP-DOWN (Tampak Atas / Overhead POV)
+            function renderFrame() {
+                if (!camSimState.active) return;
+
+                const width = canvas.width;
+                const height = canvas.height;
+
+                // 1. Gambar Latar Belakang Bilik Inspeksi (Tampak Atas Lantai/Bilik Tanpa Background Curtain)
+                ctx.fillStyle = '#060b14';
+                ctx.fillRect(0, 0, width, height);
+
+                // Grid lantai pabrik bawah konveyor (terlihat dari atas)
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
+                ctx.lineWidth = 1;
+                for (let x = 0; x < width; x += 36) {
+                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+                }
+                for (let y = 0; y < height; y += 36) {
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+                }
+
+                // Efek Spot Iluminasi Terpusat dari Lampu LED HPL Cool White (Tembak Langsung dari Atas)
+                const lightGrad = ctx.createRadialGradient(width / 2, height / 2 + 15, 30, width / 2, height / 2 + 15, width * 0.52);
+                lightGrad.addColorStop(0, 'rgba(56, 189, 248, 0.14)');
+                lightGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.04)');
+                lightGrad.addColorStop(1, 'rgba(6, 11, 20, 0.85)');
+                ctx.fillStyle = lightGrad;
+                ctx.fillRect(0, 0, width, height);
+
+                // 2. Gambar Rel Konveyor Overhead (Tampak Atas — I-Beam Rail & Rantai Penggerak)
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 26, width, 22);
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(0, 34, width, 6); // Celah jalur rel
+
+                // Rantai & pin konveyor tampak atas
+                ctx.fillStyle = '#64748b';
+                camSimState.conveyorX = (camSimState.conveyorX + camSimState.conveyorSpeed) % 24;
+                for (let rx = -24 + camSimState.conveyorX; rx < width + 24; rx += 24) {
+                    ctx.beginPath();
+                    ctx.arc(rx, 37, 3.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // 3. Modul Photosensor Di Atas (Overhead Optical Sensor & Laser Beam)
+                const sensorX = width / 2;
+                ctx.save();
+                ctx.setLineDash([4, 4]);
+                ctx.strokeStyle = camSimState.isSensorTriggered ? '#22c55e' : 'rgba(234, 179, 8, 0.45)';
+                ctx.lineWidth = camSimState.isSensorTriggered ? 2.5 : 1.2;
+                ctx.beginPath();
+                ctx.moveTo(sensorX, 48);
+                ctx.lineTo(sensorX, height - 24);
+                ctx.stroke();
+                ctx.restore();
+
+                // Ikon Modul Photosensor Tampak Atas
+                ctx.fillStyle = camSimState.isSensorTriggered ? '#22c55e' : '#eab308';
+                ctx.beginPath(); ctx.arc(sensorX, 22, 6, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
+
+                // 4. Watermark Indikator POV Tampak Atas (Top-Down Overhead)
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
+                ctx.font = 'bold 9.5px ui-monospace, monospace';
+                ctx.textAlign = 'left';
+                ctx.fillText('POV: TOP-DOWN (TAMPAK ATAS) • JARAK DEKAT • BEBAS BACKGROUND', 14, 18);
+
+                // 5. Update Posisi & Gambar Hangers Beserta Wadah Lampu Tampak Atas
+                const sensorTriggerRange = 16;
+                let sensorHitThisFrame = false;
+
+                for (let i = 0; i < camSimState.hangers.length; i++) {
+                    const h = camSimState.hangers[i];
+                    h.x += camSimState.conveyorSpeed;
+
+                    // Gambar Hanger & Wadah dari atas
+                    drawHanger(ctx, h.x, 37, h);
+
+                    // Deteksi Photosensor Trigger saat hanger tepat melewati sensorX
+                    if (Math.abs(h.x - sensorX) < sensorTriggerRange && !h.triggerProcessed) {
+                        sensorHitThisFrame = true;
+                        h.triggerProcessed = true;
+                        eksekusiInspeksiHanger(h);
+                    }
+                }
+
+                // Hapus hanger yang sudah lewat kanan & spawn hanger baru di kiri
+                camSimState.hangers = camSimState.hangers.filter(h => h.x < width + 120);
+
+                const leftmostHanger = camSimState.hangers.reduce((min, h) => Math.min(min, h.x), width);
+                if (leftmostHanger > 230) {
+                    let isKosong = false;
+                    let wadahCount = 0;
+                    if (operatorStatus === 'tidak_ada') {
+                        isKosong = true;
+                        wadahCount = 0;
+                    } else {
+                        isKosong = Math.random() < 0.15;
+                        wadahCount = isKosong ? 0 : (Math.floor(Math.random() * 3) + 1);
+                    }
+
+                    camSimState.hangers.push({
+                        id: `#H-${camSimState.nextHangerId++}`,
+                        x: -90,
+                        wadahCount: wadahCount,
+                        inspected: false,
+                        triggerProcessed: false
+                    });
+                }
+
+                // Update visual status photosensor
+                if (sensorHitThisFrame) {
+                    camSimState.isSensorTriggered = true;
+                    const dot = document.getElementById('hudSensorDot');
+                    const tag = document.getElementById('hudPhotosensorTag');
+                    const dashSensor = document.getElementById('dash-sensor-state');
+                    if (dot) dot.classList.add('active');
+                    if (tag) tag.innerHTML = '<span class="pulse-indicator active" id="hudSensorDot"></span> Photosensor: TRIGGERED';
+                    if (dashSensor) {
+                        dashSensor.textContent = 'TRIGGERED';
+                        dashSensor.style.color = '#4ade80';
+                    }
+                } else if (camSimState.isSensorTriggered && (Date.now() - camSimState.lastTriggerTime > 350)) {
+                    camSimState.isSensorTriggered = false;
+                    const dot = document.getElementById('hudSensorDot');
+                    const tag = document.getElementById('hudPhotosensorTag');
+                    const dashSensor = document.getElementById('dash-sensor-state');
+                    if (dot) dot.classList.remove('active');
+                    if (tag) tag.innerHTML = '<span class="pulse-indicator" id="hudSensorDot"></span> Photosensor: STANDBY';
+                    if (dashSensor) {
+                        dashSensor.textContent = 'READY';
+                        dashSensor.style.color = '#ffffff';
+                    }
+                }
+
+                camSimState.animationId = requestAnimationFrame(renderFrame);
+            }
+
+            renderFrame();
+        }
+
+        // Fungsi Menggambar Hanger & Wadah Lampu dari Perspektif TOP-DOWN (Tampak Atas)
+        function drawHanger(ctx, x, topY, h) {
+            ctx.save();
+            ctx.translate(x, topY);
+
+            // 1. Bracket Trolley Gantungan di Atas Rel (Tampak Atas)
+            ctx.fillStyle = '#475569';
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-16, -7, 32, 14, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            // Flag Plat Pemicu Photosensor (Sayap Pemicu Sensor)
+            ctx.fillStyle = '#eab308';
+            ctx.fillRect(8, -12, 10, 6);
+
+            // 2. Batang Frame Carrier Hanger Memanjang (Tampak Atas)
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, 7);
+            ctx.lineTo(0, 310);
+            ctx.stroke();
+
+            // Palang-palang Dudukan Slot Wadah Lampu (3 Tingkat Fixture Bay)
+            const palangY = [85, 165, 245];
+            palangY.forEach(py => {
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(-42, py);
+                ctx.lineTo(42, py);
+                ctx.stroke();
+
+                // Pin penahan wadah lampu
+                ctx.fillStyle = '#64748b';
+                ctx.beginPath(); ctx.arc(-38, py, 2.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(38, py, 2.5, 0, Math.PI * 2); ctx.fill();
+            });
+
+            // Label ID Hanger di bagian kepala gantungan
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = 'bold 9.5px ui-monospace, monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(h.id, 0, -12);
+
+            // 3. GAMBAR WADAH LAMPU TAMPAK ATAS (Top-Down Fixture Housing)
+            if (h.wadahCount > 0) {
+                for (let w = 0; w < h.wadahCount; w++) {
+                    const wy = palangY[w] - 18;
+                    const wWidth = 76;
+                    const wHeight = 36;
+
+                    // Body Housing Wadah Lampu (Bentuk Kotak Casing Putih/Metal tampak atas)
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.strokeStyle = '#cbd5e1';
+                    ctx.lineWidth = 1.8;
+                    ctx.beginPath();
+                    ctx.roundRect(-wWidth / 2, wy, wWidth, wHeight, 5);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Rongga Reflektor Dalam Wadah Lampu
+                    ctx.fillStyle = '#e2e8f0';
+                    ctx.strokeStyle = '#94a3b8';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.roundRect(-wWidth / 2 + 7, wy + 5, wWidth - 14, wHeight - 10, 3);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Garis Strip Dudukan Lampu / Emitter LED
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillRect(-wWidth / 2 + 14, wy + 16, wWidth - 28, 4);
+
+                    // Titik Emitter Lampu Kuning (Tampak Atas)
+                    ctx.fillStyle = '#fbbf24';
+                    [-16, 0, 16].forEach(dx => {
+                        ctx.beginPath();
+                        ctx.arc(dx, wy + 18, 2.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+
+                    // Tab Pengait / Kuping Baut di Kiri & Kanan Wadah
+                    ctx.fillStyle = '#cbd5e1';
+                    ctx.fillRect(-wWidth / 2 - 4, wy + 13, 4, 10);
+                    ctx.fillRect(wWidth / 2, wy + 13, 4, 10);
+
+                    // JIKA SUDAH DIINSPEKSI: Tampilkan Bounding Box Hijau AI
+                    if (h.inspected && paintingCamConfig.showHud) {
+                        ctx.strokeStyle = '#22c55e';
+                        ctx.lineWidth = 2.2;
+                        ctx.strokeRect(-wWidth / 2 - 5, wy - 5, wWidth + 10, wHeight + 10);
+
+                        // Tag Label Akurasi AI
+                        ctx.fillStyle = 'rgba(21, 128, 61, 0.9)';
+                        ctx.fillRect(-wWidth / 2 - 5, wy - 17, 84, 13);
+                        ctx.fillStyle = '#ffffff';
+                        ctx.font = 'bold 9px ui-monospace, monospace';
+                        ctx.textAlign = 'left';
+                        ctx.fillText(`Wadah #${w + 1} [98%]`, -wWidth / 2 - 2, wy - 7);
+                    }
+                }
+            } else {
+                // JIKA HANGER KOSONG (0 Wadah Lampu)
+                if (h.inspected && paintingCamConfig.showHud) {
+                    ctx.save();
+                    ctx.setLineDash([4, 4]);
+                    ctx.strokeStyle = (operatorStatus === 'tidak_ada') ? '#ef4444' : '#f59e0b';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(-48, 55, 96, 230);
+
+                    // Label Hanger Kosong
+                    ctx.fillStyle = (operatorStatus === 'tidak_ada') ? '#ef4444' : '#f59e0b';
+                    ctx.font = 'bold 10px ui-monospace, monospace';
+                    ctx.textAlign = 'center';
+                    const teksKosong = (operatorStatus === 'tidak_ada') ? '🔴 KOSONG (NO OPERATOR)' : '⚠️ KOSONG (0 WADAH)';
+                    ctx.fillText(teksKosong, 0, 48);
+                    ctx.restore();
+                }
+            }
+
+            ctx.restore();
+        }
+
+        // Eksekusi Saat Hanger Terdeteksi di Depan ESP-CAM
+        function eksekusiInspeksiHanger(h) {
+            camSimState.lastTriggerTime = Date.now();
+            h.inspected = true;
+
+            // 1. Pemicu Strobe Flash LED HPL via MOSFET IRF520
+            const flashOverlay = document.getElementById('cameraFlashOverlay');
+            if (flashOverlay && paintingCamConfig.ledMode !== 'off') {
+                flashOverlay.classList.add('active');
+                setTimeout(() => {
+                    flashOverlay.classList.remove('active');
+                }, paintingCamConfig.pulseDuration || 120);
+            }
+
+            // 2. Akumulasi Metrik Sesuai KONDISI UNIK LINE PAINTING:
+            // - Total Hanger Lewat SELALU bertambah (+1)
+            // - Jika Hanger Ada Wadah: Hanger Terisi (+1), Input Wadah bertambah sesuai h.wadahCount
+            // - Jika Hanger Kosong: Hanger Kosong (+1), Input Wadah TIDAK BERTAMBAH (+0)
+            camSimState.totalHangerPassed += 1;
+
+            if (h.wadahCount > 0) {
+                camSimState.totalHangerWithWadah += 1;
+                camSimState.totalWadahInput += h.wadahCount;
+                // Asumsi output dengan yield 98.4%
+                camSimState.totalWadahOutput += h.wadahCount;
+            } else {
+                camSimState.totalHangerEmpty += 1;
+            }
+
+            // 3. Update HUD Display
+            const hudHanger = document.getElementById('hud-hanger-id');
+            if (hudHanger) hudHanger.textContent = h.id;
+
+            const hudWadah = document.getElementById('hudWadahText');
+            if (hudWadah) {
+                if (h.wadahCount > 0) {
+                    hudWadah.textContent = `✅ TERISI (${h.wadahCount} Wadah Lampu)`;
+                    hudWadah.style.color = '#4ade80';
+                } else {
+                    hudWadah.textContent = (operatorStatus === 'tidak_ada') ? '🔴 KOSONG (Operator Tidak Ada)' : '⚠️ KOSONG (0 Wadah Lampu)';
+                    hudWadah.style.color = (operatorStatus === 'tidak_ada') ? '#f87171' : '#fbbf24';
+                }
+            }
+
+            // Update Banner di Dashboard Utama
+            const dashLastWadah = document.getElementById('dash-last-wadah');
+            if (dashLastWadah) {
+                dashLastWadah.textContent = (h.wadahCount > 0) ? `${h.wadahCount} Wadah (${h.id})` : `0 Wadah / Kosong (${h.id})`;
+                dashLastWadah.style.color = (h.wadahCount > 0) ? '#4ade80' : '#fbbf24';
+            }
+
+            // 4. Update Kartu Metrik Dashboard Utama Secara Real-Time
+            sinkronkanMetrikPaintingKeDashboard();
+
+            // 5. Catat ke Riwayat 5 Hanger Terakhir
+            const jamStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            camSimState.recentInspections.unshift({
+                time: jamStr,
+                id: h.id,
+                wadahCount: h.wadahCount,
+                confidence: (h.wadahCount > 0) ? (97.0 + Math.random() * 2.8).toFixed(1) : 100
+            });
+            if (camSimState.recentInspections.length > 5) {
+                camSimState.recentInspections.pop();
+            }
+
+            renderRecentHangerList();
+        }
+
+        // Sinkronisasi Metrik Painting ke Kartu Dashboard
+        function sinkronkanMetrikPaintingKeDashboard() {
+            // PCS Wadah Lampu
+            const inEl = document.getElementById('input-value');
+            const outEl = document.getElementById('output-value');
+            const yldEl = document.getElementById('yield-value');
+
+            // Hanger Konveyor
+            const hngInEl = document.getElementById('sheet-input-value');
+            const hngOkEl = document.getElementById('sheet-output-value');
+            const hng0El = document.getElementById('sheet-yield-value');
+
+            const yieldPct = (camSimState.totalWadahInput > 0) 
+                ? ((camSimState.totalWadahOutput / camSimState.totalWadahInput) * 100).toFixed(1) 
+                : '100.0';
+
+            if (inEl) inEl.innerText = camSimState.totalWadahInput;
+            if (outEl) outEl.innerText = camSimState.totalWadahOutput;
+            if (yldEl) yldEl.innerText = `${yieldPct}%`;
+
+            if (hngInEl) hngInEl.innerText = camSimState.totalHangerPassed;
+            if (hngOkEl) hngOkEl.innerText = camSimState.totalHangerWithWadah;
+            if (hng0El) hng0El.innerText = camSimState.totalHangerEmpty;
+
+            // Mini stats di panel membesar
+            const statTotalHanger = document.getElementById('cam-stat-total-hanger');
+            const statHangerTerisi = document.getElementById('cam-stat-hanger-terisi');
+            const statHangerKosong = document.getElementById('cam-stat-hanger-kosong');
+            const statTotalWadah = document.getElementById('cam-stat-total-wadah');
+
+            if (statTotalHanger) statTotalHanger.textContent = camSimState.totalHangerPassed;
+            if (statHangerTerisi) statHangerTerisi.textContent = camSimState.totalHangerWithWadah;
+            if (statHangerKosong) statHangerKosong.textContent = camSimState.totalHangerEmpty;
+            if (statTotalWadah) statTotalWadah.textContent = `${camSimState.totalWadahInput} pcs`;
+        }
+
+        function renderRecentHangerList() {
+            const listEl = document.getElementById('recentHangerList');
+            if (!listEl) return;
+
+            if (camSimState.recentInspections.length === 0) {
+                listEl.innerHTML = '<div class="recent-hanger-empty">Menunggu deteksi hanger pertama...</div>';
+                return;
+            }
+
+            listEl.innerHTML = camSimState.recentInspections.map(item => {
+                const badgeColor = item.wadahCount > 0 ? '#4ade80' : '#fbbf24';
+                const statusText = item.wadahCount > 0 ? `+${item.wadahCount} Wadah (${item.confidence}%)` : `Kosong (0 Wadah)`;
+                return `
+                    <div class="recent-hanger-item">
+                        <span style="color:#94a3b8;">${item.time}</span>
+                        <strong>${item.id}</strong>
+                        <span style="color:${badgeColor}; font-weight:700;">${statusText}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Jalankan Inisialisasi Kamera saat DOM Siap
+        document.addEventListener('DOMContentLoaded', () => {
+            initDraggableCameraPopup();
+            muatPengaturanKamera();
+            sinkronkanTampilanOperator();
+
+            // Buka popup kamera secara default agar langsung tampak di layar bagi operator
+            const openPref = localStorage.getItem('painting_cam_open');
+            if (openPref !== '0') {
+                bukaCameraPopup();
+            }
+
+            // Inisialisasi angka awal di kartu dashboard agar langsung menampilkan metrik painting
+            sinkronkanMetrikPaintingKeDashboard();
+        });
     </script>
