@@ -46,46 +46,6 @@
         @include('partials.choose-part')
     </div>
 
-    <!-- ===== ESP-CAM & HARDWARE STATUS BANNER (Line Painting Exclusive) ===== -->
-    <div class="panel camera-live-banner" style="margin-bottom:18px; padding:12px 18px; background:linear-gradient(135deg, #0b2554 0%, #153e7e 100%); color:#ffffff; border:1px solid rgba(255,255,255,0.15); border-radius:12px; box-shadow:0 4px 14px rgba(11,37,84,0.15);">
-        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-            <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span class="camera-status-dot pulse-online" style="width:10px; height:10px;"></span>
-                    <strong style="font-size:14px; letter-spacing:0.2px;">ESP-CAM Inspeksi Hanger:</strong>
-                    <span id="dash-cam-status-pill" style="font-size:12px; background:rgba(34,197,94,0.22); color:#4ade80; border:1px solid rgba(74,222,128,0.4); padding:2px 8px; border-radius:6px; font-weight:700;">ONLINE</span>
-                </div>
-
-                <div class="dash-cam-telemetry-tags" style="display:flex; align-items:center; gap:10px; font-size:12.5px; color:#cbd5e1;">
-                    <span style="display:inline-flex; align-items:center; gap:5px;">
-                        <span>👤</span> Operator: <strong id="dash-operator-state" style="color:#4ade80;">HADIR (HIJAU)</strong>
-                    </span>
-                    <span style="color:rgba(255,255,255,0.3);">|</span>
-                    <span style="display:inline-flex; align-items:center; gap:5px;">
-                        <span>🟢</span> Sensor: <strong id="dash-sensor-state" style="color:#ffffff;">READY</strong>
-                    </span>
-                    <span style="color:rgba(255,255,255,0.3);">|</span>
-                    <span style="display:inline-flex; align-items:center; gap:5px;">
-                        <span>⚡</span> Flash IRF520: <strong id="dash-flash-state" style="color:#ffffff;">PWM 85%</strong>
-                    </span>
-                    <span style="color:rgba(255,255,255,0.3);">|</span>
-                    <span style="display:inline-flex; align-items:center; gap:5px;">
-                        <span>📦</span> Deteksi Terakhir: <strong id="dash-last-wadah" style="color:#fde047;">2 Wadah (#H-1049)</strong>
-                    </span>
-                </div>
-            </div>
-
-            <div style="display:flex; align-items:center; gap:8px;">
-                <button type="button" class="btn-nav-action" style="background:#ffffff; color:#0b2554; border-color:#ffffff; font-weight:700; font-size:12.5px; padding:6px 14px; box-shadow:0 2px 8px rgba(0,0,0,0.15);" onclick="bukaCameraPopup()" title="Buka jendela kamera melayang yang dapat digeser dan diperbesar">
-                    📷 Buka Monitor Kamera (Floating)
-                </button>
-                <button type="button" class="btn-nav-action" style="background:rgba(255,255,255,0.15); color:#ffffff; border-color:rgba(255,255,255,0.25); font-weight:600; font-size:12.5px; padding:6px 12px;" onclick="navigateTo(currentLine, 'pengaturan'); switchSettingsTab('camera');" title="Pengaturan Kamera ESP">
-                    ⚙️ Setting
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- ===== KARTU METRIK PRODUKSI: 3 ATAS (PCS WADAH) & 3 BAWAH (HANGER KONVEYOR) ===== -->
     <div class="metrics-split-container">
         <!-- BARIS 1 (ATAS): METRIK PRODUKSI UNIT (PCS WADAH LAMPU) -->

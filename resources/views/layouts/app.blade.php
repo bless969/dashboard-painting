@@ -135,10 +135,6 @@
                         <span>Kamera Live</span>
                     </button>
 
-                    <button type="button" class="btn-toggle-maintenance" id="btn-simulasi-stop" style="{{ in_array($view_aktif, ['kwh-control', 'pengaturan']) ? 'display:none;' : 'display:inline-flex;' }} background:#fee2e2; border-color:#fca5a5; color:#dc2626; font-size:12px; padding:6px 12px; cursor:pointer; font-weight:600; align-items:center; gap:5px;" onclick="simulasiPopupStop()" title="Klik untuk menguji tampilan modal popup saat mesin berhenti / padlight mati">
-                        🚨 Simulasi Stop
-                    </button>
-
                     <div class="topbar-brand-badge-solid" title="PT Panasonic Gobel Indonesia — Painting Smart Factory">
                         <img src="{{ asset('assets/images/logo-gobel.png') }}" class="topbar-logo-solid-img" alt="Logo Gobel">
                         <div class="topbar-brand-solid-text">

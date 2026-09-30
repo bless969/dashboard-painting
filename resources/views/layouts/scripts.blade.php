@@ -3892,8 +3892,6 @@
             const vkwh = document.getElementById('view-kwh-control'); if (vkwh) vkwh.style.display = (view === 'kwh-control') ? '' : 'none';
             const statusBadgeEl = document.getElementById('status-badge');
             if (statusBadgeEl) statusBadgeEl.style.display = (view === 'dashboard') ? '' : 'none';
-            const simBtn = document.getElementById('btn-simulasi-stop');
-            if (simBtn) simBtn.style.display = (view === 'kwh-control' || view === 'pengaturan') ? 'none' : 'inline-flex';
 
             // Update tombol aksi di topbar
             const actionEl = document.getElementById('action-buttons');
@@ -6331,42 +6329,27 @@
         }
 
         // =========================================================================
-        // SISTEM ESP-CAM, PHOTOSENSOR, MOSFET IRF520 & DETEKSI WADAH LAMPU PAINTING
+        // SISTEM KONEKSI DUAL KAMERA (INPUT & OUTPUT) ESP32-CAM LINE PAINTING
         // =========================================================================
 
-        let paintingCamConfig = {
-            mode: 'simulasi',
-            ip: '192.168.1.88',
-            url: 'http://192.168.1.88/stream',
-            resolution: 'VGA (640x480)',
-            fps: 24,
-            sensorType: 'LOW',
-            debounce: 50,
-            delay: 80,
-            ledMode: 'strobe',
-            ledPwm: 85,
-            pulseDuration: 120,
-            confidence: 75,
-            maxWadah: 4,
-            showHud: true
+        let paintingCamInputConfig = {
+            ip: localStorage.getItem('painting_cam_input_ip') || '192.168.1.88',
+            url: localStorage.getItem('painting_cam_input_url') || 'http://192.168.1.88/stream',
+            captureUrl: localStorage.getItem('painting_cam_input_capture_url') || 'http://192.168.1.88/capture'
         };
 
-        let camSimState = {
-            active: false,
-            animationId: null,
-            hangers: [],
-            conveyorX: 0,
-            conveyorSpeed: 1.5,
-            nextHangerId: 1049,
-            totalHangerPassed: 184,
-            totalHangerWithWadah: 146,
-            totalHangerEmpty: 38,
-            totalWadahInput: 368,
-            totalWadahOutput: 362,
-            isFlashActive: false,
-            isSensorTriggered: false,
-            lastTriggerTime: 0,
-            recentInspections: []
+        let paintingCamOutputConfig = {
+            ip: localStorage.getItem('painting_cam_output_ip') || '192.168.1.89',
+            url: localStorage.getItem('painting_cam_output_url') || 'http://192.168.1.89/stream',
+            captureUrl: localStorage.getItem('painting_cam_output_capture_url') || 'http://192.168.1.89/capture'
+        };
+
+        let activeCameraChannel = localStorage.getItem('painting_cam_channel') || 'input'; // 'input', 'output', 'dual'
+        let activeSettingsPreviewTab = 'input'; // 'input', 'output', 'dual'
+
+        let cameraStatus = {
+            input: 'online',
+            output: 'online'
         };
 
         // Status Tombol Fisik Operator: 'hadir' (Hijau = Memproduksi) vs 'tidak_ada' (Merah = Tidak Ada Operator)
@@ -6388,7 +6371,6 @@
             const btnDashGreen = document.getElementById('dash-btn-op-green');
             const btnDashRed = document.getElementById('dash-btn-op-red');
             const badgeDash = document.getElementById('dash-operator-badge');
-            const stateDash = document.getElementById('dash-operator-state');
 
             if (btnDashGreen) btnDashGreen.classList.toggle('active', isHadir);
             if (btnDashRed) btnDashRed.classList.toggle('active', !isHadir);
@@ -6403,42 +6385,7 @@
                 }
             }
 
-            if (stateDash) {
-                if (isHadir) {
-                    stateDash.textContent = 'HADIR (HIJAU)';
-                    stateDash.style.color = '#4ade80';
-                } else {
-                    stateDash.textContent = 'KOSONG (MERAH)';
-                    stateDash.style.color = '#f87171';
-                }
-            }
-
-            // 2. Camera Pop-up HUD & Mini Buttons
-            const btnCamGreen = document.getElementById('btn-op-mini-green');
-            const btnCamRed = document.getElementById('btn-op-mini-red');
-            const hudOpDot = document.getElementById('hud-operator-dot');
-            const hudOpText = document.getElementById('hud-operator-text');
-
-            if (btnCamGreen) btnCamGreen.classList.toggle('active', isHadir);
-            if (btnCamRed) btnCamRed.classList.toggle('active', !isHadir);
-
-            if (hudOpDot) {
-                hudOpDot.className = isHadir ? 'hud-dot green' : 'hud-dot red';
-                if (!isHadir) {
-                    hudOpDot.style.background = '#ef4444';
-                    hudOpDot.style.boxShadow = '0 0 6px #ef4444';
-                } else {
-                    hudOpDot.style.background = '#22c55e';
-                    hudOpDot.style.boxShadow = '0 0 6px #22c55e';
-                }
-            }
-
-            if (hudOpText) {
-                hudOpText.textContent = isHadir ? 'HADIR' : 'KOSONG';
-                hudOpText.style.color = isHadir ? '#4ade80' : '#f87171';
-            }
-
-            // 3. Settings Badge
+            // 2. Settings Badge
             const cfgBadge = document.getElementById('cfg-operator-status-badge');
             if (cfgBadge) {
                 if (isHadir) {
@@ -6451,78 +6398,416 @@
             }
         }
 
-        // Muat konfigurasi kamera dari localStorage jika ada
-        function muatPengaturanKamera() {
+        // Ganti channel kamera di pop-up monitor ('input', 'output', 'dual')
+        function switchCameraChannel(channel) {
+            activeCameraChannel = channel;
             try {
-                const saved = localStorage.getItem('painting_cam_config');
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    paintingCamConfig = Object.assign(paintingCamConfig, parsed);
-                }
+                localStorage.setItem('painting_cam_channel', channel);
             } catch (e) {}
 
-            // Sinkronkan ke form pengaturan jika elemen ada
-            const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-            setVal('cfg-cam-mode', paintingCamConfig.mode);
-            setVal('cfg-cam-ip', paintingCamConfig.ip);
-            setVal('cfg-cam-url', paintingCamConfig.url);
-            setVal('cfg-cam-resolution', paintingCamConfig.resolution);
-            setVal('cfg-cam-fps', paintingCamConfig.fps);
-            setVal('cfg-sensor-type', paintingCamConfig.sensorType);
-            setVal('cfg-sensor-debounce', paintingCamConfig.debounce);
-            setVal('cfg-sensor-delay', paintingCamConfig.delay);
-            setVal('cfg-led-mode', paintingCamConfig.ledMode);
-            setVal('cfg-led-pwm', paintingCamConfig.ledPwm);
-            setVal('cfg-pulse-duration', paintingCamConfig.pulseDuration);
-            setVal('cfg-ai-confidence', paintingCamConfig.confidence);
-            setVal('cfg-max-wadah', paintingCamConfig.maxWadah);
+            // Update tombol tab channel di popup
+            const btnInput = document.getElementById('btn-cam-channel-input');
+            const btnOutput = document.getElementById('btn-cam-channel-output');
+            const btnDual = document.getElementById('btn-cam-channel-dual');
 
-            const pwmLabel = document.getElementById('cfg-pwm-label');
-            if (pwmLabel) pwmLabel.textContent = paintingCamConfig.ledPwm + '%';
-            const pulseLabel = document.getElementById('cfg-pulse-label');
-            if (pulseLabel) pulseLabel.textContent = paintingCamConfig.pulseDuration + ' ms';
-            const confLabel = document.getElementById('cfg-conf-label');
-            if (confLabel) confLabel.textContent = paintingCamConfig.confidence + '%';
+            if (btnInput) btnInput.classList.toggle('active', channel === 'input');
+            if (btnOutput) btnOutput.classList.toggle('active', channel === 'output');
+            if (btnDual) btnDual.classList.toggle('active', channel === 'dual');
 
-            const cbHud = document.getElementById('cfg-show-hud');
-            if (cbHud) cbHud.checked = Boolean(paintingCamConfig.showHud);
+            // Tampilkan viewport yang sesuai
+            const vpInput = document.getElementById('viewport-channel-input');
+            const vpOutput = document.getElementById('viewport-channel-output');
+            const vpDual = document.getElementById('viewport-channel-dual');
 
-            // Sinkronkan ke HUD popup kamera
-            const hudIp = document.getElementById('hud-cam-ip');
-            if (hudIp) hudIp.textContent = paintingCamConfig.ip;
-            const hudRes = document.getElementById('hud-cam-res');
-            if (hudRes) hudRes.textContent = paintingCamConfig.resolution;
-            const hudFps = document.getElementById('hud-cam-fps');
-            if (hudFps) hudFps.textContent = paintingCamConfig.fps;
-            const camModeTag = document.getElementById('cam-mode-tag');
-            if (camModeTag) camModeTag.textContent = (paintingCamConfig.mode === 'riil') ? 'STREAM IP RIIL' : 'SIMULASI LIVE';
+            if (vpInput) vpInput.style.display = (channel === 'input') ? 'block' : 'none';
+            if (vpOutput) vpOutput.style.display = (channel === 'output') ? 'block' : 'none';
+            if (vpDual) vpDual.style.display = (channel === 'dual') ? 'block' : 'none';
+
+            // Tampilkan quickbar yang sesuai
+            const qbInput = document.getElementById('quickbar-input');
+            const qbOutput = document.getElementById('quickbar-output');
+            const qbDual = document.getElementById('quickbar-dual');
+
+            if (qbInput) qbInput.style.display = (channel === 'input') ? 'flex' : 'none';
+            if (qbOutput) qbOutput.style.display = (channel === 'output') ? 'flex' : 'none';
+            if (qbDual) qbDual.style.display = (channel === 'dual') ? 'flex' : 'none';
+
+            // Update status pill header
+            updateHeaderStatusPill();
+
+            // Jika memilih dual view, pastikan ukuran widget proporsional
+            const widget = document.getElementById('camera-float-widget');
+            if (channel === 'dual' && widget && !widget.classList.contains('enlarged')) {
+                toggleMembesarKamera(true);
+            }
+
+            // Pastikan stream terhubung
+            terapkanUrlKeSemuaStream();
         }
 
-        function simpanPengaturanKameraLengkap() {
-            const getVal = (id, def) => { const el = document.getElementById(id); return el ? el.value : def; };
-            paintingCamConfig.mode = getVal('cfg-cam-mode', 'simulasi');
-            paintingCamConfig.ip = getVal('cfg-cam-ip', '192.168.1.88');
-            paintingCamConfig.url = getVal('cfg-cam-url', 'http://192.168.1.88/stream');
-            paintingCamConfig.resolution = getVal('cfg-cam-resolution', 'VGA (640x480)');
-            paintingCamConfig.fps = parseInt(getVal('cfg-cam-fps', '24'), 10);
-            paintingCamConfig.sensorType = getVal('cfg-sensor-type', 'LOW');
-            paintingCamConfig.debounce = parseInt(getVal('cfg-sensor-debounce', '50'), 10);
-            paintingCamConfig.delay = parseInt(getVal('cfg-sensor-delay', '80'), 10);
-            paintingCamConfig.ledMode = getVal('cfg-led-mode', 'strobe');
-            paintingCamConfig.ledPwm = parseInt(getVal('cfg-led-pwm', '85'), 10);
-            paintingCamConfig.pulseDuration = parseInt(getVal('cfg-pulse-duration', '120'), 10);
-            paintingCamConfig.confidence = parseInt(getVal('cfg-ai-confidence', '75'), 10);
-            paintingCamConfig.maxWadah = parseInt(getVal('cfg-max-wadah', '4'), 10);
+        // Ganti tab preview di halaman pengaturan ('input', 'output', 'dual')
+        function switchSettingsPreviewTab(tab) {
+            activeSettingsPreviewTab = tab;
 
-            const cbHud = document.getElementById('cfg-show-hud');
-            paintingCamConfig.showHud = cbHud ? cbHud.checked : true;
+            const btnInput = document.getElementById('btn-cfg-tab-input');
+            const btnOutput = document.getElementById('btn-cfg-tab-output');
+            const btnDual = document.getElementById('btn-cfg-tab-dual');
+
+            if (btnInput) btnInput.classList.toggle('active', tab === 'input');
+            if (btnOutput) btnOutput.classList.toggle('active', tab === 'output');
+            if (btnDual) btnDual.classList.toggle('active', tab === 'dual');
+
+            const conInput = document.getElementById('cfg-preview-container-input');
+            const conOutput = document.getElementById('cfg-preview-container-output');
+            const conDual = document.getElementById('cfg-preview-container-dual');
+
+            if (conInput) conInput.style.display = (tab === 'input') ? 'flex' : 'none';
+            if (conOutput) conOutput.style.display = (tab === 'output') ? 'flex' : 'none';
+            if (conDual) conDual.style.display = (tab === 'dual') ? 'flex' : 'none';
+
+            terapkanUrlKeSemuaStream();
+        }
+
+        function updateHeaderStatusPill() {
+            const pill = document.getElementById('cam-stream-status-pill');
+            const dot = document.getElementById('cam-status-dot');
+            if (!pill) return;
+
+            if (activeCameraChannel === 'input') {
+                const isOnline = (cameraStatus.input === 'online');
+                pill.textContent = isOnline ? 'INPUT: ONLINE' : 'INPUT: OFFLINE';
+                pill.style.color = isOnline ? '#4ade80' : '#f87171';
+                pill.style.background = isOnline ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
+                pill.style.borderColor = isOnline ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)';
+                if (dot) dot.style.background = isOnline ? '#22c55e' : '#ef4444';
+            } else if (activeCameraChannel === 'output') {
+                const isOnline = (cameraStatus.output === 'online');
+                pill.textContent = isOnline ? 'OUTPUT: ONLINE' : 'OUTPUT: OFFLINE';
+                pill.style.color = isOnline ? '#4ade80' : '#f87171';
+                pill.style.background = isOnline ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
+                pill.style.borderColor = isOnline ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)';
+                if (dot) dot.style.background = isOnline ? '#22c55e' : '#ef4444';
+            } else {
+                pill.textContent = 'DUAL VIEW (IN & OUT)';
+                pill.style.color = '#38bdf8';
+                pill.style.background = 'rgba(56,189,248,0.15)';
+                pill.style.borderColor = 'rgba(56,189,248,0.3)';
+                if (dot) dot.style.background = '#38bdf8';
+            }
+        }
+
+        // Terapkan URL stream ke seluruh elemen gambar kamera (Popup & Settings)
+        function terapkanUrlKeSemuaStream() {
+            const inUrl = paintingCamInputConfig.url || ('http://' + paintingCamInputConfig.ip + '/stream');
+            const outUrl = paintingCamOutputConfig.url || ('http://' + paintingCamOutputConfig.ip + '/stream');
+
+            // 1. Popup Images
+            const imgInput = document.getElementById('cameraStreamImgInput');
+            const imgOutput = document.getElementById('cameraStreamImgOutput');
+            const imgDualInput = document.getElementById('cameraStreamImgDualInput');
+            const imgDualOutput = document.getElementById('cameraStreamImgDualOutput');
+
+            if (imgInput && imgInput.src !== inUrl) imgInput.src = inUrl;
+            if (imgOutput && imgOutput.src !== outUrl) imgOutput.src = outUrl;
+            if (imgDualInput && imgDualInput.src !== inUrl) imgDualInput.src = inUrl;
+            if (imgDualOutput && imgDualOutput.src !== outUrl) imgDualOutput.src = outUrl;
+
+            // 2. Settings Preview Images
+            const prevInput = document.getElementById('settingsCameraPreviewInput');
+            const prevOutput = document.getElementById('settingsCameraPreviewOutput');
+            const prevDualInput = document.getElementById('settingsCameraPreviewDualInput');
+            const prevDualOutput = document.getElementById('settingsCameraPreviewDualOutput');
+
+            if (prevInput && prevInput.src !== inUrl) prevInput.src = inUrl;
+            if (prevOutput && prevOutput.src !== outUrl) prevOutput.src = outUrl;
+            if (prevDualInput && prevDualInput.src !== inUrl) prevDualInput.src = inUrl;
+            if (prevDualOutput && prevDualOutput.src !== outUrl) prevDualOutput.src = outUrl;
+        }
+
+        // Muat konfigurasi kedua kamera dari localStorage & sinkronkan input
+        function muatPengaturanKamera() {
+            try {
+                const savedIn = localStorage.getItem('painting_cam_input_config');
+                if (savedIn) paintingCamInputConfig = Object.assign(paintingCamInputConfig, JSON.parse(savedIn));
+
+                const savedOut = localStorage.getItem('painting_cam_output_config');
+                if (savedOut) paintingCamOutputConfig = Object.assign(paintingCamOutputConfig, JSON.parse(savedOut));
+            } catch (e) {}
+
+            // Normalisasi URL
+            if (!paintingCamInputConfig.url && paintingCamInputConfig.ip) {
+                paintingCamInputConfig.url = 'http://' + paintingCamInputConfig.ip + '/stream';
+            }
+            if (!paintingCamInputConfig.captureUrl && paintingCamInputConfig.ip) {
+                paintingCamInputConfig.captureUrl = 'http://' + paintingCamInputConfig.ip + '/capture';
+            }
+
+            if (!paintingCamOutputConfig.url && paintingCamOutputConfig.ip) {
+                paintingCamOutputConfig.url = 'http://' + paintingCamOutputConfig.ip + '/stream';
+            }
+            if (!paintingCamOutputConfig.captureUrl && paintingCamOutputConfig.ip) {
+                paintingCamOutputConfig.captureUrl = 'http://' + paintingCamOutputConfig.ip + '/capture';
+            }
+
+            // Sinkronkan ke input di formulir Pengaturan
+            const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+            setVal('cfg-cam-input-ip', paintingCamInputConfig.ip);
+            setVal('cfg-cam-input-url', paintingCamInputConfig.url);
+            setVal('cfg-cam-input-capture-url', paintingCamInputConfig.captureUrl);
+
+            setVal('cfg-cam-output-ip', paintingCamOutputConfig.ip);
+            setVal('cfg-cam-output-url', paintingCamOutputConfig.url);
+            setVal('cfg-cam-output-capture-url', paintingCamOutputConfig.captureUrl);
+
+            // Sinkronkan ke popup kamera
+            setVal('cam-quick-ip-input', paintingCamInputConfig.ip);
+            setVal('quick-reconnect-ip-input', paintingCamInputConfig.ip);
+
+            setVal('cam-quick-ip-output', paintingCamOutputConfig.ip);
+            setVal('quick-reconnect-ip-output', paintingCamOutputConfig.ip);
+
+            const errUrlIn = document.getElementById('err-stream-url-input');
+            if (errUrlIn) errUrlIn.textContent = paintingCamInputConfig.url;
+
+            const errUrlOut = document.getElementById('err-stream-url-output');
+            if (errUrlOut) errUrlOut.textContent = paintingCamOutputConfig.url;
+
+            const lblDualIn = document.getElementById('dual-label-ip-input');
+            if (lblDualIn) lblDualIn.textContent = paintingCamInputConfig.ip;
+
+            const lblDualOut = document.getElementById('dual-label-ip-output');
+            if (lblDualOut) lblDualOut.textContent = paintingCamOutputConfig.ip;
+
+            const endpIn = document.getElementById('cfg-preview-endpoint-input');
+            if (endpIn) endpIn.textContent = paintingCamInputConfig.url;
+
+            // Aktifkan channel yang tersimpan
+            switchCameraChannel(activeCameraChannel);
+        }
+
+        // Saat input IP diubah di pengaturan, otomatis update URL stream & capture
+        function onInputCamIpChange(channel, newIp) {
+            const cleanIp = newIp.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+            if (channel === 'input') {
+                const urlInput = document.getElementById('cfg-cam-input-url');
+                const capInput = document.getElementById('cfg-cam-input-capture-url');
+                const endpLabel = document.getElementById('cfg-preview-endpoint-input');
+                if (urlInput) urlInput.value = 'http://' + cleanIp + '/stream';
+                if (capInput) capInput.value = 'http://' + cleanIp + '/capture';
+                if (endpLabel) endpLabel.textContent = 'http://' + cleanIp + '/stream';
+            } else {
+                const urlOutput = document.getElementById('cfg-cam-output-url');
+                const capOutput = document.getElementById('cfg-cam-output-capture-url');
+                if (urlOutput) urlOutput.value = 'http://' + cleanIp + '/stream';
+                if (capOutput) capOutput.value = 'http://' + cleanIp + '/capture';
+            }
+        }
+
+        // Sambungkan IP secara cepat dari input manapun (channel: 'input' atau 'output')
+        function sambungkanIpCepat(channel, inputId) {
+            const input = document.getElementById(inputId);
+            if (!input || !input.value.trim()) return;
+
+            let ip = input.value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+            const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+
+            if (channel === 'input') {
+                paintingCamInputConfig.ip = ip;
+                paintingCamInputConfig.url = 'http://' + ip + '/stream';
+                paintingCamInputConfig.captureUrl = 'http://' + ip + '/capture';
+
+                try {
+                    localStorage.setItem('painting_cam_input_ip', ip);
+                    localStorage.setItem('painting_cam_input_url', paintingCamInputConfig.url);
+                    localStorage.setItem('painting_cam_input_capture_url', paintingCamInputConfig.captureUrl);
+                    localStorage.setItem('painting_cam_input_config', JSON.stringify(paintingCamInputConfig));
+                } catch (e) {}
+
+                setVal('cfg-cam-input-ip', ip);
+                setVal('cfg-cam-input-url', paintingCamInputConfig.url);
+                setVal('cfg-cam-input-capture-url', paintingCamInputConfig.captureUrl);
+                setVal('cam-quick-ip-input', ip);
+                setVal('quick-reconnect-ip-input', ip);
+
+                const errUrlIn = document.getElementById('err-stream-url-input');
+                if (errUrlIn) errUrlIn.textContent = paintingCamInputConfig.url;
+
+                const lblDualIn = document.getElementById('dual-label-ip-input');
+                if (lblDualIn) lblDualIn.textContent = ip;
+
+                refreshStreamKamera('input');
+            } else {
+                paintingCamOutputConfig.ip = ip;
+                paintingCamOutputConfig.url = 'http://' + ip + '/stream';
+                paintingCamOutputConfig.captureUrl = 'http://' + ip + '/capture';
+
+                try {
+                    localStorage.setItem('painting_cam_output_ip', ip);
+                    localStorage.setItem('painting_cam_output_url', paintingCamOutputConfig.url);
+                    localStorage.setItem('painting_cam_output_capture_url', paintingCamOutputConfig.captureUrl);
+                    localStorage.setItem('painting_cam_output_config', JSON.stringify(paintingCamOutputConfig));
+                } catch (e) {}
+
+                setVal('cfg-cam-output-ip', ip);
+                setVal('cfg-cam-output-url', paintingCamOutputConfig.url);
+                setVal('cfg-cam-output-capture-url', paintingCamOutputConfig.captureUrl);
+                setVal('cam-quick-ip-output', ip);
+                setVal('quick-reconnect-ip-output', ip);
+
+                const errUrlOut = document.getElementById('err-stream-url-output');
+                if (errUrlOut) errUrlOut.textContent = paintingCamOutputConfig.url;
+
+                const lblDualOut = document.getElementById('dual-label-ip-output');
+                if (lblDualOut) lblDualOut.textContent = ip;
+
+                refreshStreamKamera('output');
+            }
+        }
+
+        // Muat ulang stream kamera (channel: 'input', 'output', atau 'both')
+        function refreshStreamKamera(channel) {
+            const t = Date.now();
+
+            if (channel === 'input' || channel === 'both') {
+                const baseUrl = paintingCamInputConfig.url || ('http://' + paintingCamInputConfig.ip + '/stream');
+                const freshUrl = baseUrl.includes('?') ? (baseUrl + '&_t=' + t) : (baseUrl + '?_t=' + t);
+
+                const imgIn = document.getElementById('cameraStreamImgInput');
+                if (imgIn) imgIn.src = freshUrl;
+                const imgDualIn = document.getElementById('cameraStreamImgDualInput');
+                if (imgDualIn) imgDualIn.src = freshUrl;
+                const prevIn = document.getElementById('settingsCameraPreviewInput');
+                if (prevIn) prevIn.src = freshUrl;
+                const prevDualIn = document.getElementById('settingsCameraPreviewDualInput');
+                if (prevDualIn) prevDualIn.src = freshUrl;
+
+                const overlayIn = document.getElementById('cameraOfflineOverlayInput');
+                if (overlayIn) overlayIn.style.display = 'none';
+                const prevErrIn = document.getElementById('settingsPreviewErrorInput');
+                if (prevErrIn) prevErrIn.style.display = 'none';
+            }
+
+            if (channel === 'output' || channel === 'both') {
+                const baseUrl = paintingCamOutputConfig.url || ('http://' + paintingCamOutputConfig.ip + '/stream');
+                const freshUrl = baseUrl.includes('?') ? (baseUrl + '&_t=' + t) : (baseUrl + '?_t=' + t);
+
+                const imgOut = document.getElementById('cameraStreamImgOutput');
+                if (imgOut) imgOut.src = freshUrl;
+                const imgDualOut = document.getElementById('cameraStreamImgDualOutput');
+                if (imgDualOut) imgDualOut.src = freshUrl;
+                const prevOut = document.getElementById('settingsCameraPreviewOutput');
+                if (prevOut) prevOut.src = freshUrl;
+                const prevDualOut = document.getElementById('settingsCameraPreviewDualOutput');
+                if (prevDualOut) prevDualOut.src = freshUrl;
+
+                const overlayOut = document.getElementById('cameraOfflineOverlayOutput');
+                if (overlayOut) overlayOut.style.display = 'none';
+                const prevErrOut = document.getElementById('settingsPreviewErrorOutput');
+                if (prevErrOut) prevErrOut.style.display = 'none';
+            }
+        }
+
+        // Buka tab snapshot foto JPEG dari ESP32-CAM (/capture)
+        function bukaCaptureTab(channel) {
+            const cfg = (channel === 'output') ? paintingCamOutputConfig : paintingCamInputConfig;
+            const capUrl = cfg.captureUrl || ('http://' + cfg.ip + '/capture');
+            const t = Date.now();
+            const freshCapUrl = capUrl.includes('?') ? (capUrl + '&_t=' + t) : (capUrl + '?_t=' + t);
+            window.open(freshCapUrl, '_blank');
+        }
+
+        // Handler saat stream kamera di popup berhasil terhubung
+        function onCameraStreamSuccess(channel) {
+            cameraStatus[channel] = 'online';
+
+            const overlay = document.getElementById(channel === 'input' ? 'cameraOfflineOverlayInput' : 'cameraOfflineOverlayOutput');
+            if (overlay) overlay.style.display = 'none';
+
+            const dot = document.getElementById(channel === 'input' ? 'dot-channel-input' : 'dot-channel-output');
+            if (dot) {
+                dot.className = 'cam-channel-dot online';
+            }
+            const dotDual = document.getElementById(channel === 'input' ? 'dot-dual-input' : 'dot-dual-output');
+            if (dotDual) {
+                dotDual.className = 'cam-channel-dot online';
+            }
+
+            updateHeaderStatusPill();
+        }
+
+        // Handler saat stream kamera di popup gagal terhubung / error
+        function onCameraStreamError(channel) {
+            cameraStatus[channel] = 'offline';
+
+            const overlay = document.getElementById(channel === 'input' ? 'cameraOfflineOverlayInput' : 'cameraOfflineOverlayOutput');
+            if (overlay) overlay.style.display = 'flex';
+
+            const dot = document.getElementById(channel === 'input' ? 'dot-channel-input' : 'dot-channel-output');
+            if (dot) {
+                dot.className = 'cam-channel-dot offline';
+            }
+            const dotDual = document.getElementById(channel === 'input' ? 'dot-dual-input' : 'dot-dual-output');
+            if (dotDual) {
+                dotDual.className = 'cam-channel-dot offline';
+            }
+
+            updateHeaderStatusPill();
+        }
+
+        // Handler saat stream kamera di preview pengaturan berhasil
+        function onSettingsPreviewSuccess(channel) {
+            const errBox = document.getElementById(channel === 'input' ? 'settingsPreviewErrorInput' : 'settingsPreviewErrorOutput');
+            if (errBox) errBox.style.display = 'none';
+
+            const pill = document.getElementById(channel === 'input' ? 'cfg-cam-input-status-pill' : 'cfg-cam-output-status-pill');
+            if (pill) {
+                pill.textContent = 'ONLINE';
+                pill.style.color = '#16a34a';
+                pill.style.background = '#dcfce7';
+                pill.style.borderColor = '#bbf7d0';
+            }
+        }
+
+        // Handler saat stream kamera di preview pengaturan error
+        function onSettingsPreviewError(channel) {
+            const errBox = document.getElementById(channel === 'input' ? 'settingsPreviewErrorInput' : 'settingsPreviewErrorOutput');
+            if (errBox) errBox.style.display = 'flex';
+
+            const pill = document.getElementById(channel === 'input' ? 'cfg-cam-input-status-pill' : 'cfg-cam-output-status-pill');
+            if (pill) {
+                pill.textContent = 'BELUM TERHUBUNG';
+                pill.style.color = '#dc2626';
+                pill.style.background = '#fee2e2';
+                pill.style.borderColor = '#fca5a5';
+            }
+        }
+
+        // Simpan seluruh konfigurasi kamera (Input & Output) dari tab pengaturan
+        function simpanPengaturanKameraLengkap() {
+            const getVal = (id, def) => { const el = document.getElementById(id); return el ? el.value.trim() : def; };
+
+            paintingCamInputConfig.ip = getVal('cfg-cam-input-ip', '192.168.1.88');
+            paintingCamInputConfig.url = getVal('cfg-cam-input-url', 'http://' + paintingCamInputConfig.ip + '/stream');
+            paintingCamInputConfig.captureUrl = getVal('cfg-cam-input-capture-url', 'http://' + paintingCamInputConfig.ip + '/capture');
+
+            paintingCamOutputConfig.ip = getVal('cfg-cam-output-ip', '192.168.1.89');
+            paintingCamOutputConfig.url = getVal('cfg-cam-output-url', 'http://' + paintingCamOutputConfig.ip + '/stream');
+            paintingCamOutputConfig.captureUrl = getVal('cfg-cam-output-capture-url', 'http://' + paintingCamOutputConfig.ip + '/capture');
 
             try {
-                localStorage.setItem('painting_cam_config', JSON.stringify(paintingCamConfig));
+                localStorage.setItem('painting_cam_input_ip', paintingCamInputConfig.ip);
+                localStorage.setItem('painting_cam_input_url', paintingCamInputConfig.url);
+                localStorage.setItem('painting_cam_input_capture_url', paintingCamInputConfig.captureUrl);
+                localStorage.setItem('painting_cam_input_config', JSON.stringify(paintingCamInputConfig));
+
+                localStorage.setItem('painting_cam_output_ip', paintingCamOutputConfig.ip);
+                localStorage.setItem('painting_cam_output_url', paintingCamOutputConfig.url);
+                localStorage.setItem('painting_cam_output_capture_url', paintingCamOutputConfig.captureUrl);
+                localStorage.setItem('painting_cam_output_config', JSON.stringify(paintingCamOutputConfig));
             } catch (e) {}
 
             muatPengaturanKamera();
-            ubahModeKamera(paintingCamConfig.mode);
+            refreshStreamKamera('both');
 
             const msgEl = document.getElementById('cfg-cam-status-msg');
             if (msgEl) {
@@ -6530,84 +6815,18 @@
                 msgEl.style.background = '#dcfce7';
                 msgEl.style.color = '#15803d';
                 msgEl.style.border = '1px solid #bbf7d0';
-                msgEl.textContent = '✅ Pengaturan ESP-CAM, Photosensor, & Driver MOSFET IRF520 berhasil disimpan dan diterapkan!';
+                msgEl.textContent = '✅ Konfigurasi Kamera Input & Output ESP32-CAM berhasil disimpan dan diterapkan!';
                 setTimeout(() => { msgEl.style.display = 'none'; }, 4000);
             }
         }
 
-        function ubahModeKamera(mode) {
-            const canvas = document.getElementById('cameraCanvas');
-            const streamImg = document.getElementById('cameraStreamImg');
-            const modeTag = document.getElementById('cam-mode-tag');
-            const errUrl = document.getElementById('err-stream-url');
-            if (errUrl) errUrl.textContent = paintingCamConfig.url;
-
-            if (mode === 'riil') {
-                if (canvas) canvas.style.display = 'none';
-                if (streamImg) {
-                    streamImg.style.display = 'block';
-                    sembunyikanErrorStreamKamera();
-                    streamImg.src = paintingCamConfig.url;
-                }
-                if (modeTag) {
-                    modeTag.textContent = 'STREAM IP RIIL';
-                    modeTag.style.background = 'rgba(34, 197, 94, 0.2)';
-                    modeTag.style.color = '#4ade80';
-                    modeTag.style.borderColor = 'rgba(34, 197, 94, 0.4)';
-                }
-            } else {
-                sembunyikanErrorStreamKamera();
-                if (streamImg) {
-                    streamImg.style.display = 'none';
-                    streamImg.src = '';
-                }
-                if (canvas) canvas.style.display = 'block';
-                if (modeTag) {
-                    modeTag.textContent = 'SIMULASI LIVE';
-                    modeTag.style.background = 'rgba(56, 189, 248, 0.18)';
-                    modeTag.style.color = '#38bdf8';
-                    modeTag.style.borderColor = 'rgba(56, 189, 248, 0.35)';
-                }
-                if (!camSimState.active) {
-                    startCameraSimulator();
-                }
-            }
-        }
-
-        function toggleModeKameraLangsung() {
-            const targetMode = (paintingCamConfig.mode === 'riil') ? 'simulasi' : 'riil';
-            paintingCamConfig.mode = targetMode;
-            try {
-                localStorage.setItem('painting_cam_config', JSON.stringify(paintingCamConfig));
-            } catch(e) {}
-            ubahModeKamera(targetMode);
-            
-            const cfgMode = document.getElementById('cfg-cam-mode');
-            if (cfgMode) cfgMode.value = targetMode;
-        }
-
-        function tanganiErrorStreamKamera(img) {
-            if (paintingCamConfig.mode !== 'riil') return;
-            console.warn('Gagal memuat stream ESP-CAM dari:', img ? img.src : paintingCamConfig.url);
-            const overlayErr = document.getElementById('cameraStreamErrorOverlay');
-            if (overlayErr) {
-                overlayErr.style.display = 'flex';
-            }
-        }
-
-        function sembunyikanErrorStreamKamera() {
-            const overlayErr = document.getElementById('cameraStreamErrorOverlay');
-            if (overlayErr) {
-                overlayErr.style.display = 'none';
-            }
-        }
-
+        // Tab switcher di halaman pengaturan
         function switchSettingsTab(tabName) {
             document.querySelectorAll('.settings-tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.settings-tab-panel').forEach(panel => panel.style.display = 'none');
 
-            const activeBtn = document.getElementById(`tab-btn-${tabName}`);
-            const activePanel = document.getElementById(`tab-panel-${tabName}`);
+            const activeBtn = document.getElementById('tab-btn-' + tabName);
+            const activePanel = document.getElementById('tab-panel-' + tabName);
             if (activeBtn) activeBtn.classList.add('active');
             if (activePanel) activePanel.style.display = 'block';
         }
@@ -6615,28 +6834,6 @@
         function bukaSettingKameraDariPopup() {
             navigateTo(currentLine, 'pengaturan');
             switchSettingsTab('camera');
-        }
-
-        function bukaPanduanAIDariPopup() {
-            navigateTo(currentLine, 'pengaturan');
-            switchSettingsTab('ai');
-        }
-
-        function ambilSnapshotDataset() {
-            if (paintingCamConfig.mode === 'riil') {
-                const snapUrl = `http://${paintingCamConfig.ip}/capture?t=${Date.now()}`;
-                const win = window.open(snapUrl, '_blank');
-                if (!win) {
-                    window.location.href = snapUrl;
-                }
-            } else {
-                const canvas = document.getElementById('cameraCanvas');
-                if (!canvas) return;
-                const link = document.createElement('a');
-                link.download = `dataset_wadah_topdown_${Date.now()}.jpg`;
-                link.href = canvas.toDataURL('image/jpeg', 0.95);
-                link.click();
-            }
         }
 
         // ===== FLOATING POP-UP CONTROLLER: BUKA, TUTUP, MEMBESAR, MINIMIZE, DRAGGABLE =====
@@ -6648,9 +6845,7 @@
             if (btnCam) btnCam.classList.add('active');
             localStorage.setItem('painting_cam_open', '1');
 
-            if (paintingCamConfig.mode === 'simulasi' && !camSimState.active) {
-                startCameraSimulator();
-            }
+            terapkanUrlKeSemuaStream();
         }
 
         function tutupCameraPopup() {
@@ -6678,8 +6873,6 @@
 
             const iconExpand = document.getElementById('cam-icon-expand');
             const iconCompress = document.getElementById('cam-icon-compress');
-            const detailsPanel = document.getElementById('cameraEnlargedDetails');
-            const labelEnlarge = document.getElementById('label-btn-enlarge');
 
             const willEnlarge = (forceEnlarge !== null) ? forceEnlarge : !widget.classList.contains('enlarged');
 
@@ -6687,15 +6880,10 @@
                 widget.classList.add('enlarged');
                 if (iconExpand) iconExpand.style.display = 'none';
                 if (iconCompress) iconCompress.style.display = 'block';
-                if (detailsPanel) detailsPanel.style.display = 'block';
-                if (labelEnlarge) labelEnlarge.textContent = 'Kecilkan';
-                renderRecentHangerList();
             } else {
                 widget.classList.remove('enlarged');
                 if (iconExpand) iconExpand.style.display = 'block';
                 if (iconCompress) iconCompress.style.display = 'none';
-                if (detailsPanel) detailsPanel.style.display = 'none';
-                if (labelEnlarge) labelEnlarge.textContent = 'Membesar';
             }
         }
 
@@ -6717,8 +6905,8 @@
                 if (savedPos) {
                     const pos = JSON.parse(savedPos);
                     if (pos.left !== undefined && pos.top !== undefined) {
-                        widget.style.left = `${pos.left}px`;
-                        widget.style.top = `${pos.top}px`;
+                        widget.style.left = pos.left + 'px';
+                        widget.style.top = pos.top + 'px';
                         widget.style.right = 'auto';
                         widget.style.bottom = 'auto';
                     }
@@ -6729,8 +6917,7 @@
             let startX, startY, initLeft, initTop;
 
             function onStart(e) {
-                // Abaikan jika klik berasal dari tombol di header
-                if (e.target.closest('button')) return;
+                if (e.target.closest('button') || e.target.closest('input')) return;
 
                 isDragging = true;
                 widget.classList.add('is-dragging');
@@ -6764,15 +6951,14 @@
                 let newLeft = initLeft + deltaX;
                 let newTop = initTop + deltaY;
 
-                // Batasan layar (clamp boundaries)
                 const maxLeft = Math.max(10, window.innerWidth - widget.offsetWidth - 12);
                 const maxTop = Math.max(50, window.innerHeight - widget.offsetHeight - 12);
 
                 newLeft = Math.max(12, Math.min(newLeft, maxLeft));
                 newTop = Math.max(56, Math.min(newTop, maxTop));
 
-                widget.style.left = `${newLeft}px`;
-                widget.style.top = `${newTop}px`;
+                widget.style.left = newLeft + 'px';
+                widget.style.top = newTop + 'px';
                 widget.style.right = 'auto';
                 widget.style.bottom = 'auto';
             }
@@ -6797,480 +6983,15 @@
             handle.addEventListener('touchstart', onStart, { passive: true });
         }
 
-        // ===== HARDWARE TEST: FLASH LED HPL COOL WHITE (IRF520 MOSFET) =====
-        function ujiFlashLedManual() {
-            const flashOverlay = document.getElementById('cameraFlashOverlay');
-            if (flashOverlay) {
-                flashOverlay.classList.add('active');
-                setTimeout(() => {
-                    flashOverlay.classList.remove('active');
-                }, paintingCamConfig.pulseDuration || 120);
-            }
-
-            // Tampilkan feedback visual di HUD
-            const hudMosfet = document.getElementById('hudMosfetTag');
-            if (hudMosfet) {
-                hudMosfet.textContent = '⚡ Flash IRF520: STROBE ACTIVE';
-                hudMosfet.style.color = '#38bdf8';
-                setTimeout(() => {
-                    hudMosfet.textContent = `⚡ Flash IRF520: READY (${paintingCamConfig.ledPwm}%)`;
-                    hudMosfet.style.color = '';
-                }, 1000);
-            }
-
-            const dashFlash = document.getElementById('dash-flash-state');
-            if (dashFlash) {
-                dashFlash.textContent = 'FLASHING';
-                setTimeout(() => {
-                    dashFlash.textContent = `PWM ${paintingCamConfig.ledPwm}%`;
-                }, 1000);
-            }
-        }
-
-        // ===== HARDWARE TEST: SIMULASI TRIGGER PHOTOSENSOR MANUAL =====
-        function simulasiTriggerPhotosensorManual() {
-            // Segera datangkan gantungan hanger tepat di depan sensor photosensor (x = 320)
-            const targetWadah = Math.floor(Math.random() * 4); // 0 (kosong), 1, 2, atau 3 wadah
-            const newHanger = {
-                id: `#H-${camSimState.nextHangerId++}`,
-                x: 320,
-                wadahCount: targetWadah,
-                inspected: false,
-                triggerProcessed: false
-            };
-
-            camSimState.hangers.unshift(newHanger);
-            if (!camSimState.active) {
-                startCameraSimulator();
-            }
-        }
-
-        // ===== ENGINE SIMULATOR VISUAL KONVEYOR & ESP-CAM PAINTING =====
-        function startCameraSimulator() {
-            const canvas = document.getElementById('cameraCanvas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-
-            camSimState.active = true;
-
-            // Inisialisasi awal 3 hanger di sepanjang lintasan konveyor jika kosong
-            if (camSimState.hangers.length === 0) {
-                camSimState.hangers = [
-                    { id: '#H-1048', x: 100, wadahCount: 2, inspected: true, triggerProcessed: true },
-                    { id: '#H-1049', x: 320, wadahCount: 1, inspected: false, triggerProcessed: false },
-                    { id: '#H-1050', x: 540, wadahCount: 0, inspected: false, triggerProcessed: false } // Hanger kosong
-                ];
-            }
-
-            // Loop Render Animasi dengan Perspektif TOP-DOWN (Tampak Atas / Overhead POV)
-            function renderFrame() {
-                if (!camSimState.active) return;
-
-                const width = canvas.width;
-                const height = canvas.height;
-
-                // 1. Gambar Latar Belakang Bilik Inspeksi (Tampak Atas Lantai/Bilik Tanpa Background Curtain)
-                ctx.fillStyle = '#060b14';
-                ctx.fillRect(0, 0, width, height);
-
-                // Grid lantai pabrik bawah konveyor (terlihat dari atas)
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
-                ctx.lineWidth = 1;
-                for (let x = 0; x < width; x += 36) {
-                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
-                }
-                for (let y = 0; y < height; y += 36) {
-                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
-                }
-
-                // Efek Spot Iluminasi Terpusat dari Lampu LED HPL Cool White (Tembak Langsung dari Atas)
-                const lightGrad = ctx.createRadialGradient(width / 2, height / 2 + 15, 30, width / 2, height / 2 + 15, width * 0.52);
-                lightGrad.addColorStop(0, 'rgba(56, 189, 248, 0.14)');
-                lightGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.04)');
-                lightGrad.addColorStop(1, 'rgba(6, 11, 20, 0.85)');
-                ctx.fillStyle = lightGrad;
-                ctx.fillRect(0, 0, width, height);
-
-                // 2. Gambar Rel Konveyor Overhead (Tampak Atas — I-Beam Rail & Rantai Penggerak)
-                ctx.fillStyle = '#1e293b';
-                ctx.fillRect(0, 26, width, 22);
-                ctx.fillStyle = '#0f172a';
-                ctx.fillRect(0, 34, width, 6); // Celah jalur rel
-
-                // Rantai & pin konveyor tampak atas
-                ctx.fillStyle = '#64748b';
-                camSimState.conveyorX = (camSimState.conveyorX + camSimState.conveyorSpeed) % 24;
-                for (let rx = -24 + camSimState.conveyorX; rx < width + 24; rx += 24) {
-                    ctx.beginPath();
-                    ctx.arc(rx, 37, 3.5, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-
-                // 3. Modul Photosensor Di Atas (Overhead Optical Sensor & Laser Beam)
-                const sensorX = width / 2;
-                ctx.save();
-                ctx.setLineDash([4, 4]);
-                ctx.strokeStyle = camSimState.isSensorTriggered ? '#22c55e' : 'rgba(234, 179, 8, 0.45)';
-                ctx.lineWidth = camSimState.isSensorTriggered ? 2.5 : 1.2;
-                ctx.beginPath();
-                ctx.moveTo(sensorX, 48);
-                ctx.lineTo(sensorX, height - 24);
-                ctx.stroke();
-                ctx.restore();
-
-                // Ikon Modul Photosensor Tampak Atas
-                ctx.fillStyle = camSimState.isSensorTriggered ? '#22c55e' : '#eab308';
-                ctx.beginPath(); ctx.arc(sensorX, 22, 6, 0, Math.PI * 2); ctx.fill();
-                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
-
-                // 4. Watermark Indikator POV Tampak Atas (Top-Down Overhead)
-                ctx.fillStyle = 'rgba(56, 189, 248, 0.75)';
-                ctx.font = 'bold 9.5px ui-monospace, monospace';
-                ctx.textAlign = 'left';
-                ctx.fillText('POV: TOP-DOWN (TAMPAK ATAS) • JARAK DEKAT • BEBAS BACKGROUND', 14, 18);
-
-                // 5. Update Posisi & Gambar Hangers Beserta Wadah Lampu Tampak Atas
-                const sensorTriggerRange = 16;
-                let sensorHitThisFrame = false;
-
-                for (let i = 0; i < camSimState.hangers.length; i++) {
-                    const h = camSimState.hangers[i];
-                    h.x += camSimState.conveyorSpeed;
-
-                    // Gambar Hanger & Wadah dari atas
-                    drawHanger(ctx, h.x, 37, h);
-
-                    // Deteksi Photosensor Trigger saat hanger tepat melewati sensorX
-                    if (Math.abs(h.x - sensorX) < sensorTriggerRange && !h.triggerProcessed) {
-                        sensorHitThisFrame = true;
-                        h.triggerProcessed = true;
-                        eksekusiInspeksiHanger(h);
-                    }
-                }
-
-                // Hapus hanger yang sudah lewat kanan & spawn hanger baru di kiri
-                camSimState.hangers = camSimState.hangers.filter(h => h.x < width + 120);
-
-                const leftmostHanger = camSimState.hangers.reduce((min, h) => Math.min(min, h.x), width);
-                if (leftmostHanger > 230) {
-                    let isKosong = false;
-                    let wadahCount = 0;
-                    if (operatorStatus === 'tidak_ada') {
-                        isKosong = true;
-                        wadahCount = 0;
-                    } else {
-                        isKosong = Math.random() < 0.15;
-                        wadahCount = isKosong ? 0 : (Math.floor(Math.random() * 3) + 1);
-                    }
-
-                    camSimState.hangers.push({
-                        id: `#H-${camSimState.nextHangerId++}`,
-                        x: -90,
-                        wadahCount: wadahCount,
-                        inspected: false,
-                        triggerProcessed: false
-                    });
-                }
-
-                // Update visual status photosensor
-                if (sensorHitThisFrame) {
-                    camSimState.isSensorTriggered = true;
-                    const dot = document.getElementById('hudSensorDot');
-                    const tag = document.getElementById('hudPhotosensorTag');
-                    const dashSensor = document.getElementById('dash-sensor-state');
-                    if (dot) dot.classList.add('active');
-                    if (tag) tag.innerHTML = '<span class="pulse-indicator active" id="hudSensorDot"></span> Photosensor: TRIGGERED';
-                    if (dashSensor) {
-                        dashSensor.textContent = 'TRIGGERED';
-                        dashSensor.style.color = '#4ade80';
-                    }
-                } else if (camSimState.isSensorTriggered && (Date.now() - camSimState.lastTriggerTime > 350)) {
-                    camSimState.isSensorTriggered = false;
-                    const dot = document.getElementById('hudSensorDot');
-                    const tag = document.getElementById('hudPhotosensorTag');
-                    const dashSensor = document.getElementById('dash-sensor-state');
-                    if (dot) dot.classList.remove('active');
-                    if (tag) tag.innerHTML = '<span class="pulse-indicator" id="hudSensorDot"></span> Photosensor: STANDBY';
-                    if (dashSensor) {
-                        dashSensor.textContent = 'READY';
-                        dashSensor.style.color = '#ffffff';
-                    }
-                }
-
-                camSimState.animationId = requestAnimationFrame(renderFrame);
-            }
-
-            renderFrame();
-        }
-
-        // Fungsi Menggambar Hanger & Wadah Lampu dari Perspektif TOP-DOWN (Tampak Atas)
-        function drawHanger(ctx, x, topY, h) {
-            ctx.save();
-            ctx.translate(x, topY);
-
-            // 1. Bracket Trolley Gantungan di Atas Rel (Tampak Atas)
-            ctx.fillStyle = '#475569';
-            ctx.strokeStyle = '#94a3b8';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.roundRect(-16, -7, 32, 14, 4);
-            ctx.fill();
-            ctx.stroke();
-
-            // Flag Plat Pemicu Photosensor (Sayap Pemicu Sensor)
-            ctx.fillStyle = '#eab308';
-            ctx.fillRect(8, -12, 10, 6);
-
-            // 2. Batang Frame Carrier Hanger Memanjang (Tampak Atas)
-            ctx.strokeStyle = '#334155';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(0, 7);
-            ctx.lineTo(0, 310);
-            ctx.stroke();
-
-            // Palang-palang Dudukan Slot Wadah Lampu (3 Tingkat Fixture Bay)
-            const palangY = [85, 165, 245];
-            palangY.forEach(py => {
-                ctx.strokeStyle = '#475569';
-                ctx.lineWidth = 2.5;
-                ctx.beginPath();
-                ctx.moveTo(-42, py);
-                ctx.lineTo(42, py);
-                ctx.stroke();
-
-                // Pin penahan wadah lampu
-                ctx.fillStyle = '#64748b';
-                ctx.beginPath(); ctx.arc(-38, py, 2.5, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(38, py, 2.5, 0, Math.PI * 2); ctx.fill();
-            });
-
-            // Label ID Hanger di bagian kepala gantungan
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = 'bold 9.5px ui-monospace, monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText(h.id, 0, -12);
-
-            // 3. GAMBAR WADAH LAMPU TAMPAK ATAS (Top-Down Fixture Housing)
-            if (h.wadahCount > 0) {
-                for (let w = 0; w < h.wadahCount; w++) {
-                    const wy = palangY[w] - 18;
-                    const wWidth = 76;
-                    const wHeight = 36;
-
-                    // Body Housing Wadah Lampu (Bentuk Kotak Casing Putih/Metal tampak atas)
-                    ctx.fillStyle = '#f8fafc';
-                    ctx.strokeStyle = '#cbd5e1';
-                    ctx.lineWidth = 1.8;
-                    ctx.beginPath();
-                    ctx.roundRect(-wWidth / 2, wy, wWidth, wHeight, 5);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // Rongga Reflektor Dalam Wadah Lampu
-                    ctx.fillStyle = '#e2e8f0';
-                    ctx.strokeStyle = '#94a3b8';
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.roundRect(-wWidth / 2 + 7, wy + 5, wWidth - 14, wHeight - 10, 3);
-                    ctx.fill();
-                    ctx.stroke();
-
-                    // Garis Strip Dudukan Lampu / Emitter LED
-                    ctx.fillStyle = '#94a3b8';
-                    ctx.fillRect(-wWidth / 2 + 14, wy + 16, wWidth - 28, 4);
-
-                    // Titik Emitter Lampu Kuning (Tampak Atas)
-                    ctx.fillStyle = '#fbbf24';
-                    [-16, 0, 16].forEach(dx => {
-                        ctx.beginPath();
-                        ctx.arc(dx, wy + 18, 2.5, 0, Math.PI * 2);
-                        ctx.fill();
-                    });
-
-                    // Tab Pengait / Kuping Baut di Kiri & Kanan Wadah
-                    ctx.fillStyle = '#cbd5e1';
-                    ctx.fillRect(-wWidth / 2 - 4, wy + 13, 4, 10);
-                    ctx.fillRect(wWidth / 2, wy + 13, 4, 10);
-
-                    // JIKA SUDAH DIINSPEKSI: Tampilkan Bounding Box Hijau AI
-                    if (h.inspected && paintingCamConfig.showHud) {
-                        ctx.strokeStyle = '#22c55e';
-                        ctx.lineWidth = 2.2;
-                        ctx.strokeRect(-wWidth / 2 - 5, wy - 5, wWidth + 10, wHeight + 10);
-
-                        // Tag Label Akurasi AI
-                        ctx.fillStyle = 'rgba(21, 128, 61, 0.9)';
-                        ctx.fillRect(-wWidth / 2 - 5, wy - 17, 84, 13);
-                        ctx.fillStyle = '#ffffff';
-                        ctx.font = 'bold 9px ui-monospace, monospace';
-                        ctx.textAlign = 'left';
-                        ctx.fillText(`Wadah #${w + 1} [98%]`, -wWidth / 2 - 2, wy - 7);
-                    }
-                }
-            } else {
-                // JIKA HANGER KOSONG (0 Wadah Lampu)
-                if (h.inspected && paintingCamConfig.showHud) {
-                    ctx.save();
-                    ctx.setLineDash([4, 4]);
-                    ctx.strokeStyle = (operatorStatus === 'tidak_ada') ? '#ef4444' : '#f59e0b';
-                    ctx.lineWidth = 2;
-                    ctx.strokeRect(-48, 55, 96, 230);
-
-                    // Label Hanger Kosong
-                    ctx.fillStyle = (operatorStatus === 'tidak_ada') ? '#ef4444' : '#f59e0b';
-                    ctx.font = 'bold 10px ui-monospace, monospace';
-                    ctx.textAlign = 'center';
-                    const teksKosong = (operatorStatus === 'tidak_ada') ? '🔴 KOSONG (NO OPERATOR)' : '⚠️ KOSONG (0 WADAH)';
-                    ctx.fillText(teksKosong, 0, 48);
-                    ctx.restore();
-                }
-            }
-
-            ctx.restore();
-        }
-
-        // Eksekusi Saat Hanger Terdeteksi di Depan ESP-CAM
-        function eksekusiInspeksiHanger(h) {
-            camSimState.lastTriggerTime = Date.now();
-            h.inspected = true;
-
-            // 1. Pemicu Strobe Flash LED HPL via MOSFET IRF520
-            const flashOverlay = document.getElementById('cameraFlashOverlay');
-            if (flashOverlay && paintingCamConfig.ledMode !== 'off') {
-                flashOverlay.classList.add('active');
-                setTimeout(() => {
-                    flashOverlay.classList.remove('active');
-                }, paintingCamConfig.pulseDuration || 120);
-            }
-
-            // 2. Akumulasi Metrik Sesuai KONDISI UNIK LINE PAINTING:
-            // - Total Hanger Lewat SELALU bertambah (+1)
-            // - Jika Hanger Ada Wadah: Hanger Terisi (+1), Input Wadah bertambah sesuai h.wadahCount
-            // - Jika Hanger Kosong: Hanger Kosong (+1), Input Wadah TIDAK BERTAMBAH (+0)
-            camSimState.totalHangerPassed += 1;
-
-            if (h.wadahCount > 0) {
-                camSimState.totalHangerWithWadah += 1;
-                camSimState.totalWadahInput += h.wadahCount;
-                // Asumsi output dengan yield 98.4%
-                camSimState.totalWadahOutput += h.wadahCount;
-            } else {
-                camSimState.totalHangerEmpty += 1;
-            }
-
-            // 3. Update HUD Display
-            const hudHanger = document.getElementById('hud-hanger-id');
-            if (hudHanger) hudHanger.textContent = h.id;
-
-            const hudWadah = document.getElementById('hudWadahText');
-            if (hudWadah) {
-                if (h.wadahCount > 0) {
-                    hudWadah.textContent = `✅ TERISI (${h.wadahCount} Wadah Lampu)`;
-                    hudWadah.style.color = '#4ade80';
-                } else {
-                    hudWadah.textContent = (operatorStatus === 'tidak_ada') ? '🔴 KOSONG (Operator Tidak Ada)' : '⚠️ KOSONG (0 Wadah Lampu)';
-                    hudWadah.style.color = (operatorStatus === 'tidak_ada') ? '#f87171' : '#fbbf24';
-                }
-            }
-
-            // Update Banner di Dashboard Utama
-            const dashLastWadah = document.getElementById('dash-last-wadah');
-            if (dashLastWadah) {
-                dashLastWadah.textContent = (h.wadahCount > 0) ? `${h.wadahCount} Wadah (${h.id})` : `0 Wadah / Kosong (${h.id})`;
-                dashLastWadah.style.color = (h.wadahCount > 0) ? '#4ade80' : '#fbbf24';
-            }
-
-            // 4. Update Kartu Metrik Dashboard Utama Secara Real-Time
-            sinkronkanMetrikPaintingKeDashboard();
-
-            // 5. Catat ke Riwayat 5 Hanger Terakhir
-            const jamStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            camSimState.recentInspections.unshift({
-                time: jamStr,
-                id: h.id,
-                wadahCount: h.wadahCount,
-                confidence: (h.wadahCount > 0) ? (97.0 + Math.random() * 2.8).toFixed(1) : 100
-            });
-            if (camSimState.recentInspections.length > 5) {
-                camSimState.recentInspections.pop();
-            }
-
-            renderRecentHangerList();
-        }
-
-        // Sinkronisasi Metrik Painting ke Kartu Dashboard
-        function sinkronkanMetrikPaintingKeDashboard() {
-            // PCS Wadah Lampu
-            const inEl = document.getElementById('input-value');
-            const outEl = document.getElementById('output-value');
-            const yldEl = document.getElementById('yield-value');
-
-            // Hanger Konveyor
-            const hngInEl = document.getElementById('sheet-input-value');
-            const hngOkEl = document.getElementById('sheet-output-value');
-            const hng0El = document.getElementById('sheet-yield-value');
-
-            const yieldPct = (camSimState.totalWadahInput > 0) 
-                ? ((camSimState.totalWadahOutput / camSimState.totalWadahInput) * 100).toFixed(1) 
-                : '100.0';
-
-            if (inEl) inEl.innerText = camSimState.totalWadahInput;
-            if (outEl) outEl.innerText = camSimState.totalWadahOutput;
-            if (yldEl) yldEl.innerText = `${yieldPct}%`;
-
-            if (hngInEl) hngInEl.innerText = camSimState.totalHangerPassed;
-            if (hngOkEl) hngOkEl.innerText = camSimState.totalHangerWithWadah;
-            if (hng0El) hng0El.innerText = camSimState.totalHangerEmpty;
-
-            // Mini stats di panel membesar
-            const statTotalHanger = document.getElementById('cam-stat-total-hanger');
-            const statHangerTerisi = document.getElementById('cam-stat-hanger-terisi');
-            const statHangerKosong = document.getElementById('cam-stat-hanger-kosong');
-            const statTotalWadah = document.getElementById('cam-stat-total-wadah');
-
-            if (statTotalHanger) statTotalHanger.textContent = camSimState.totalHangerPassed;
-            if (statHangerTerisi) statHangerTerisi.textContent = camSimState.totalHangerWithWadah;
-            if (statHangerKosong) statHangerKosong.textContent = camSimState.totalHangerEmpty;
-            if (statTotalWadah) statTotalWadah.textContent = `${camSimState.totalWadahInput} pcs`;
-        }
-
-        function renderRecentHangerList() {
-            const listEl = document.getElementById('recentHangerList');
-            if (!listEl) return;
-
-            if (camSimState.recentInspections.length === 0) {
-                listEl.innerHTML = '<div class="recent-hanger-empty">Menunggu deteksi hanger pertama...</div>';
-                return;
-            }
-
-            listEl.innerHTML = camSimState.recentInspections.map(item => {
-                const badgeColor = item.wadahCount > 0 ? '#4ade80' : '#fbbf24';
-                const statusText = item.wadahCount > 0 ? `+${item.wadahCount} Wadah (${item.confidence}%)` : `Kosong (0 Wadah)`;
-                return `
-                    <div class="recent-hanger-item">
-                        <span style="color:#94a3b8;">${item.time}</span>
-                        <strong>${item.id}</strong>
-                        <span style="color:${badgeColor}; font-weight:700;">${statusText}</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
         // Jalankan Inisialisasi Kamera saat DOM Siap
         document.addEventListener('DOMContentLoaded', () => {
             initDraggableCameraPopup();
             muatPengaturanKamera();
             sinkronkanTampilanOperator();
 
-            // Buka popup kamera secara default agar langsung tampak di layar bagi operator
             const openPref = localStorage.getItem('painting_cam_open');
             if (openPref !== '0') {
                 bukaCameraPopup();
             }
-
-            // Inisialisasi angka awal di kartu dashboard agar langsung menampilkan metrik painting
-            sinkronkanMetrikPaintingKeDashboard();
         });
     </script>
