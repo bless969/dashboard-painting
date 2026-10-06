@@ -13,6 +13,21 @@ Route::get('/detail', [DashboardController::class, 'detail'])->name('detail');
 Route::get('/detail-shift', [DashboardController::class, 'detailShift'])->name('detail-shift');
 Route::get('/pengaturan', [DashboardController::class, 'pengaturan'])->name('pengaturan');
 Route::get('/kwh-control', [DashboardController::class, 'kwhControl'])->name('kwh-control');
+Route::get('/ai-vision', [DashboardController::class, 'aiVision'])->name('ai-vision');
+
+// API endpoint untuk saling berbagi IP dengan master-painting
+use Illuminate\Http\Request;
+Route::get('/api/set-cam-ip', function (Request $request) {
+    if ($request->has('ip')) {
+        file_put_contents(storage_path('app/cam_ip.txt'), $request->ip);
+    }
+    return response()->json(['status' => 'ok'])->header('Access-Control-Allow-Origin', '*');
+});
+
+Route::get('/api/get-cam-ip', function () {
+    $ip = @file_get_contents(storage_path('app/cam_ip.txt'));
+    return response()->json(['ip' => trim($ip)])->header('Access-Control-Allow-Origin', '*');
+});
 
 // Kompatibilitas untuk request dengan /index.php?line=...&view=...
 Route::get('/index.php', [DashboardController::class, 'index']);

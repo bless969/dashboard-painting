@@ -118,6 +118,16 @@ class DashboardController extends Controller
     }
 
     /**
+     * Halaman AI Vision & Konfigurasi ESP-CAM
+     */
+    public function aiVision(Request $request)
+    {
+        $data = $this->prepareCommonData($request, 'ai-vision');
+
+        return $this->renderPageView('pages.ai-vision', $data);
+    }
+
+    /**
      * Fallback / Compatibility router untuk query param ?view=... dan /index.php
      */
     public function index(Request $request)
@@ -132,6 +142,7 @@ class DashboardController extends Controller
             'detail-shift' => $this->detailShift($request),
             'pengaturan' => $this->pengaturan($request),
             'kwh-control' => $this->kwhControl($request),
+            'ai-vision' => $this->aiVision($request),
             default => $this->dashboard($request),
         };
     }

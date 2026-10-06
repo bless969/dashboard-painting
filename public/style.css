@@ -494,8 +494,8 @@ body {
     top: 14px !important;
     right: 20px !important;
     display: flex !important;
-    flex-direction: column !important;
-    align-items: flex-end !important;
+    flex-direction: row !important;
+    align-items: center !important;
     gap: 8px !important;
     z-index: 15 !important;
 }
@@ -4910,4 +4910,5 @@ tr.row-berjalan {
     color: #cbd5e1;
     padding: 2px 4px;
 }
+
 

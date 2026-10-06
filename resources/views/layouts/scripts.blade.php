@@ -3866,6 +3866,7 @@
             if (view === 'machine-control') judul = 'Machine Control — Line PCB';
             if (view === 'pengaturan') judul = 'Pengaturan — Line PCB';
             if (view === 'kwh-control') judul = 'KWh Meter — Line 3 (PCB)';
+            if (view === 'ai-vision') judul = 'AI Vision & Kamera — Line PCB';
             const titleEl = document.getElementById('page-title');
             if (titleEl) titleEl.innerText = judul;
 
@@ -3876,6 +3877,7 @@
                     (view === 'machine-control') ? 'Machine Control — PCB' :
                     (view === 'pengaturan') ? 'Pengaturan — PCB' :
                     (view === 'kwh-control') ? 'KWh Meter — Line 3' :
+                    (view === 'ai-vision') ? 'AI Vision & Kamera — PCB' :
                     (view === 'chart') ? 'Chart — PCB' :
                     (['riwayat', 'detail', 'detail-shift'].includes(view)) ? 'Riwayat — PCB' :
                     'Dashboard PCB';
@@ -3890,6 +3892,7 @@
             const vmc = document.getElementById('view-machine-control'); if (vmc) vmc.style.display = (view === 'machine-control') ? '' : 'none';
             const vp = document.getElementById('view-pengaturan'); if (vp) vp.style.display = (view === 'pengaturan') ? '' : 'none';
             const vkwh = document.getElementById('view-kwh-control'); if (vkwh) vkwh.style.display = (view === 'kwh-control') ? '' : 'none';
+            const vai = document.getElementById('view-ai-vision'); if (vai) vai.style.display = (view === 'ai-vision') ? '' : 'none';
             const statusBadgeEl = document.getElementById('status-badge');
             if (statusBadgeEl) statusBadgeEl.style.display = (view === 'dashboard') ? '' : 'none';
 
@@ -3908,17 +3911,11 @@
                         <a href="${APP_BASE_PATH}/riwayat?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="riwayat">&larr; Kembali ke Riwayat</a>
                     `;
                 } else if (view === 'machine-control') {
-                    actionEl.innerHTML = `
-                        <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
-                    `;
+                    actionEl.innerHTML = '';
                 } else if (view === 'chart') {
-                    actionEl.innerHTML = `
-                        <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
-                    `;
+                    actionEl.innerHTML = '';
                 } else if (view === 'kwh-control') {
-                    actionEl.innerHTML = `
-                        <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
-                    `;
+                    actionEl.innerHTML = '';
                 } else if (view === 'pengaturan') {
                     actionEl.innerHTML = '';
                 } else {
