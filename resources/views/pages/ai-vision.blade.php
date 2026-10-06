@@ -13,16 +13,35 @@
                 Untuk mengatur jaringan (WiFi), IP Address, dan target stream dari kamera ESP32-CAM, silakan buka dashboard master-painting.
             </p>
             <!-- Tombol ke Master Painting dengan /cctv -->
-            <a href="http://master-painting.test/cctv" target="_blank" class="btn-simpan-produksi" style="text-decoration:none; display:inline-block; padding:10px 16px; background:#0d3b8c; color:white; border-radius:6px; font-weight:600; font-size:13px;">
-                ⚙️ Buka Konfigurasi Master Painting &rarr;
-            </a>
+            <div style="display:flex; gap:10px;">
+                <a href="http://master-painting.test/cctv" target="_blank" class="btn-simpan-produksi" style="text-decoration:none; display:inline-block; padding:10px 16px; background:#0d3b8c; color:white; border-radius:6px; font-weight:600; font-size:13px;">
+                    ⚙️ Buka Konfigurasi Master Painting &rarr;
+                </a>
+                <button type="button" id="btn-selesai-konfigurasi" class="btn-simpan-produksi" style="padding:10px 16px; background:#16a34a; color:white; border:none; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer;">
+                    ✅ Selesai Konfigurasi
+                </button>
+            </div>
         </div>
 
         <div style="display:flex; gap:20px; flex-wrap:wrap;">
-            <!-- Kolom Stream Video -->
-            <div style="flex:1; min-width:300px; background:#000; border-radius:10px; overflow:hidden; position:relative; min-height:350px; display:flex; align-items:center; justify-content:center; flex-direction:column;">
-                <span id="ai-video-placeholder" style="color:#666; font-size:14px; position:absolute; z-index:1;">[ Menunggu Stream Video dari Kamera... ]</span>
-                <img id="ai-mjpeg-stream" crossorigin="anonymous" style="display:none; position:relative; z-index:2; width:100%; height:auto;" alt="ESP32-CAM Stream">
+            <!-- Kolom Pilihan Training (Menggantikan Layar Hitam) -->
+            <div style="flex:1; min-width:300px; background:#f8fafc; border:1.5px solid #dbe4f3; border-radius:10px; padding:20px; display:flex; flex-direction:column;">
+                <label style="display:block; font-size:15px; font-weight:600; color:#0d3b8c; margin-bottom:12px;">Pilih Jenis Training:</label>
+                <select id="training-type" class="filter-select" style="width:100%; padding:14px; font-size:15px; border-radius:8px; border:1px solid #cbd5e1; outline:none; background-color:#fff; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                    <option value="input">Training Input</option>
+                    <option value="output">Training Output</option>
+                </select>
+                
+                <div style="margin-top:15px; font-size:13px; color:#64748b; line-height:1.5;">
+                    Silakan pilih mode training yang sesuai dengan model Teachable Machine Anda. 
+                    Mode ini menentukan jenis perhitungan atau validasi barang produksi yang sedang berjalan.
+                </div>
+
+                <!-- Elemen tersembunyi agar fungsi JS tetap berjalan -->
+                <div style="display:none;">
+                    <span id="ai-video-placeholder"></span>
+                    <img id="ai-mjpeg-stream" crossorigin="anonymous" alt="ESP32-CAM Stream">
+                </div>
             </div>
             
             <!-- Kolom Pengaturan Stream -->
@@ -87,9 +106,10 @@
     if (savedTmUrl) document.getElementById('tm-url-input').value = savedTmUrl;
     if (savedStreamUrl) document.getElementById('stream-url-input').value = savedStreamUrl;
 
-    // --- FITUR AUTO SYNC DARI MASTER-PAINTING ---
+    // --- FITUR SINKRONISASI DARI MASTER-PAINTING ---
     let lastAutoConnectedUrl = null;
-    setInterval(async () => {
+    
+    async function syncCameraConfig() {
         try {
             const res = await fetch('/api/get-cam-ip');
             const data = await res.json();
@@ -103,16 +123,27 @@
                     document.getElementById('stream-url-input').value = targetUrl;
                 }
 
-                // Klik tombol stream JIKA belum tersambung dan belum pernah coba connect ke URL ini secara otomatis
-                if (camStatus !== 'Tersambung' && lastAutoConnectedUrl !== targetUrl) {
+                // Klik tombol stream JIKA belum tersambung atau IP berubah
+                if (camStatus !== 'Tersambung' || lastAutoConnectedUrl !== targetUrl) {
                     lastAutoConnectedUrl = targetUrl;
                     btnStartStream.click();
                 }
+
+                alert('Berhasil menyinkronkan konfigurasi dengan master-painting! URL Stream telah diperbarui.');
+            } else {
+                alert('Gagal mendapatkan IP dari master-painting. Pastikan master-painting aktif.');
             }
         } catch (e) {
-            // Abaikan jika error fetch
+            alert('Gagal terhubung ke server saat menyinkronkan konfigurasi.');
         }
-    }, 3000); // Cek setiap 3 detik
+    }
+
+    const btnSelesaiKonfig = document.getElementById('btn-selesai-konfigurasi');
+    if (btnSelesaiKonfig) {
+        btnSelesaiKonfig.addEventListener('click', () => {
+            syncCameraConfig();
+        });
+    }
     // ---------------------------------------------
 
     btnLoadModel.addEventListener('click', async () => {

@@ -3918,6 +3918,10 @@
                     actionEl.innerHTML = '';
                 } else if (view === 'pengaturan') {
                     actionEl.innerHTML = '';
+                } else if (view === 'ai-vision') {
+                    actionEl.innerHTML = `
+                        <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
+                    `;
                 } else {
                     actionEl.innerHTML = `
                         <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
