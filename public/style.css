@@ -494,8 +494,8 @@ body {
     top: 14px !important;
     right: 20px !important;
     display: flex !important;
-    flex-direction: row !important;
-    align-items: center !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
     gap: 8px !important;
     z-index: 15 !important;
 }
@@ -1696,16 +1696,17 @@ body {
 }
 
 .summary-chip .chip-label {
-    font-size: 12px;
-    color: #9a9ab0;
+    font-size: 13px;
+    font-weight: 800;
+    color: #334155;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
 .summary-chip .chip-value {
-    font-size: 22px;
-    font-weight: 700;
-    color: #2b2b3a;
+    font-size: 26px;
+    font-weight: 800;
+    color: #0d3b8c;
 }
 
 .summary-chip.highlight {
@@ -1713,10 +1714,15 @@ body {
 }
 
 .summary-chip.highlight .chip-label {
-    color: #c3d4f5;
+    font-size: 13px;
+    font-weight: 800;
+    color: #e2e8f0;
+    letter-spacing: 0.5px;
 }
 
 .summary-chip.highlight .chip-value {
+    font-size: 26px;
+    font-weight: 800;
     color: #ffffff;
 }
 
@@ -1744,26 +1750,29 @@ body {
 /* ===== BADGE SHIFT (Pagi / Sore / Malam) ===== */
 .badge-shift {
     display: inline-block;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
+    padding: 5px 13px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.3px;
 }
 
 .badge-shift-pagi {
-    background: #fdf1d8;
-    color: #b8860b;
+    background: #fef3c7;
+    color: #92400e;
+    border: 1.5px solid #fde68a;
 }
 
 .badge-shift-sore {
-    background: #fce8d6;
-    color: #c2650f;
+    background: #ffedd5;
+    color: #9a3412;
+    border: 1.5px solid #fed7aa;
 }
 
 .badge-shift-malam {
-    background: #dde8fb;
-    color: #0d3b8c;
+    background: #dbeafe;
+    color: #1e40af;
+    border: 1.5px solid #bfdbfe;
 }
 
 /* ===== TOMBOL "LIHAT DETAIL" SHIFT (buka halaman baru) ===== */
@@ -3100,45 +3109,50 @@ tr.row-berjalan {
 
 #view-detail-shift .ds-summary-card {
     background: #fff;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
     padding: 16px 18px;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.07);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05);
 }
 
 #view-detail-shift .ds-summary-card.ds-eff-card {
-    border: 1.5px solid transparent;
+    border: 1.5px solid #e2e8f0;
 }
 
 #view-detail-shift .ds-summary-card .ds-label {
-    font-size: 10.5px;
+    font-size: 12px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .5px;
-    color: #9a9ab0;
+    color: #334155;
     margin-bottom: 5px;
 }
 
 #view-detail-shift .ds-summary-card .ds-val {
-    font-size: 26px;
-    font-weight: 700;
+    font-size: 30px;
+    font-weight: 800;
     color: #0d3b8c;
+    line-height: 1.15;
 }
 
 #view-detail-shift .ds-summary-card.ds-eff-card .ds-val {
-    font-size: 30px;
+    font-size: 32px;
 }
 
 #view-detail-shift .ds-summary-card .ds-unit {
-    font-size: 11px;
-    color: #9a9ab0;
-    margin-top: 2px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #64748b;
+    margin-top: 3px;
 }
 
 #view-detail-shift .ds-section {
     background: #fff;
-    border-radius: 12px;
-    padding: 20px 22px;
-    margin-bottom: 16px;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.07);
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
 }
 
 #view-detail-shift .ds-section-header {
@@ -3146,42 +3160,53 @@ tr.row-berjalan {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 14px;
-    padding-bottom: 10px;
-    border-bottom: 1.5px solid #f0f1f7;
+    padding-bottom: 12px;
+    border-bottom: 1.5px solid #edf2f7;
 }
 
 #view-detail-shift .ds-section-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: #1a1a2e;
+    font-size: 15.5px;
+    font-weight: 800;
+    color: #0f172a;
 }
 
 #view-detail-shift .ds-section-meta {
-    font-size: 12px;
-    color: #9a9ab0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
 }
 
 #view-detail-shift table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 13.5px;
 }
 
 #view-detail-shift th {
     text-align: left;
-    padding: 8px 12px;
-    color: #9a9ab0;
-    font-weight: 600;
-    font-size: 10.5px;
+    padding: 13px 18px;
+    color: #475569;
+    font-weight: 700;
+    font-size: 12px;
     text-transform: uppercase;
-    letter-spacing: .4px;
-    border-bottom: 1.5px solid #f0f1f7;
+    letter-spacing: .5px;
+    background: transparent;
+    border-bottom: 1.5px solid #edf2f7;
 }
 
 #view-detail-shift td {
-    padding: 9px 12px;
-    border-bottom: 1px solid #f5f5fb;
-    color: #333;
+    padding: 13px 18px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #0f172a;
+    font-weight: 600;
+    font-size: 13.5px;
+    vertical-align: middle;
+    text-align: left;
+}
+
+#view-detail-shift td strong {
+    font-weight: 800;
+    color: #0d3b8c;
 }
 
 #view-detail-shift tr:last-child td {
@@ -3189,86 +3214,160 @@ tr.row-berjalan {
 }
 
 #view-detail-shift tr:hover td {
-    background: #f8f9ff;
+    background: #f8fafc;
+}
+
+/* Kolom Center Alignment */
+#view-detail-shift .ds-col-center {
+    text-align: center !important;
+}
+
+/* Tabel Performance: Part, Jam, CT Standar, FG, Ability, Op.Time rata kiri; HANYA EFF rata tengah */
+#view-detail-shift .ds-table-perf .ds-col-part {
+    text-align: left !important;
+    min-width: 150px;
+}
+#view-detail-shift .ds-table-perf .ds-col-jam {
+    text-align: left !important;
+    min-width: 135px;
+}
+#view-detail-shift .ds-table-perf .ds-col-ct {
+    text-align: left !important;
+    min-width: 110px;
+}
+#view-detail-shift .ds-table-perf .ds-col-fg,
+#view-detail-shift .ds-table-perf .ds-col-ability,
+#view-detail-shift .ds-table-perf .ds-col-optime {
+    text-align: left !important;
+    min-width: 105px;
+}
+#view-detail-shift .ds-table-perf th.ds-col-eff,
+#view-detail-shift .ds-table-perf td.ds-col-eff {
+    text-align: center !important;
+    min-width: 110px;
+}
+
+/* Tabel Stop: Status, Kategori, Alasan, Patlite, Durasi rata kiri; HANYA Waktu Mulai rata tengah */
+#view-detail-shift .ds-table-stop .ds-col-status {
+    text-align: left !important;
+    min-width: 100px;
+}
+#view-detail-shift .ds-table-stop .ds-col-kategori {
+    text-align: left !important;
+    min-width: 110px;
+}
+#view-detail-shift .ds-table-stop .ds-col-alasan {
+    text-align: left !important;
+    min-width: 160px;
+}
+#view-detail-shift .ds-table-stop .ds-col-patlite {
+    text-align: left !important;
+    min-width: 130px;
+}
+#view-detail-shift .ds-table-stop th.ds-col-durasi,
+#view-detail-shift .ds-table-stop td.ds-col-durasi {
+    text-align: left !important;
+    min-width: 220px;
+    padding-right: 40px !important; /* Jarak lega ke kolom Waktu Mulai */
+}
+#view-detail-shift .ds-table-stop th.ds-col-waktu-mulai,
+#view-detail-shift .ds-table-stop td.ds-col-waktu-mulai {
+    text-align: center !important;
+    min-width: 130px;
+    padding-left: 24px !important;
+    color: #1e293b;
+    font-weight: 700;
 }
 
 #view-detail-shift .ds-eff-chip {
     display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 700;
+    padding: 4px 14px;
+    border-radius: 99px;
+    font-size: 12.5px;
+    font-weight: 800;
+    min-width: 60px;
+    text-align: center;
 }
 
 #view-detail-shift .ds-eff-chip.hijau {
-    background: #f0fdf4;
-    color: #16a34a;
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
 }
 
 #view-detail-shift .ds-eff-chip.kuning {
-    background: #fffbeb;
-    color: #d97706;
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
 }
 
 #view-detail-shift .ds-eff-chip.merah {
-    background: #fef2f2;
+    background: #fee2e2;
     color: #dc2626;
+    border: 1px solid #fca5a5;
 }
 
 #view-detail-shift .ds-badge {
     display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 99px;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-align: center;
 }
 
 #view-detail-shift .ds-badge-loss {
-    background: #fef2f2;
+    background: #fee2e2;
     color: #dc2626;
+    border: 1px solid #fca5a5;
 }
 
 #view-detail-shift .ds-badge-p {
-    background: #fffbeb;
-    color: #d97706;
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
 }
 
 #view-detail-shift .ds-badge-selesai {
-    background: #f0fdf4;
-    color: #16a34a;
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #86efac;
 }
 
 #view-detail-shift .ds-durasi-wrap {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+    max-width: 220px;
 }
 
 #view-detail-shift .ds-durasi-bar-bg {
-    flex: 1;
-    background: #f0f1f7;
+    width: 90px;
+    flex-shrink: 0;
+    background: #e2e8f0;
     border-radius: 99px;
-    height: 6px;
-    min-width: 60px;
+    height: 7px;
 }
 
 #view-detail-shift .ds-durasi-bar-fill {
-    height: 6px;
+    height: 7px;
     border-radius: 99px;
     background: #0d3b8c;
 }
 
 #view-detail-shift .ds-durasi-label {
-    font-size: 12px;
-    color: #555;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
     white-space: nowrap;
 }
 
 #view-detail-shift .ds-kosong {
     text-align: center;
-    color: #9a9ab0;
-    padding: 28px;
-    font-size: 13px;
+    color: #64748b;
+    padding: 30px 24px;
+    font-size: 13.5px;
+    font-weight: 600;
 }
 
 @media (max-width: 680px) {
@@ -3278,6 +3377,73 @@ tr.row-berjalan {
 
     #view-detail-shift .ds-summary-card.ds-eff-card {
         grid-column: span 2;
+    }
+}
+
+/* ===== NAVIGASI & TAB SESI SHIFT (DETAIL SHIFT) ===== */
+.btn-kembali-riwayat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #fff;
+    color: #0d3b8c;
+    border: 2px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    transition: all .15s ease;
+}
+
+.btn-kembali-riwayat:hover {
+    background: #eff6ff;
+    border-color: #0d3b8c;
+}
+
+.ds-session-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 18px;
+}
+
+.ds-session-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 16px;
+    background: #fff;
+    border: 2px solid #cbd5e1;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #1e293b;
+    transition: all .15s ease;
+}
+
+.ds-session-btn:hover {
+    border-color: #3b82f6;
+    background: #f8faff;
+}
+
+.ds-session-btn.aktif {
+    border-color: #0d3b8c;
+    background: #eff6ff;
+    box-shadow: 0 2px 8px rgba(13, 59, 140, 0.15);
+}
+
+.ds-session-time {
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
+}
+
+@media (max-width: 600px) {
+    .ds-session-tabs {
+        flex-direction: column;
     }
 }
 
@@ -3982,73 +4148,6 @@ tr.row-berjalan {
 .multi-stop-row-card:active {
     transform: scale(0.99);
 }
-/* ================================================================
-   PAINTING LINE & ESP-CAM FLOATING INSPECTION MONITOR STYLES
-   ================================================================ */
-
-/* Topbar Camera Live Button */
-.btn-topbar-camera {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    background: linear-gradient(135deg, #0369a1 0%, #0284c7 100%);
-    color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 6px 13px;
-    border-radius: 8px;
-    font-size: 12.5px;
-    font-weight: 700;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(3, 105, 161, 0.35);
-    transition: all 0.22s ease;
-    user-select: none;
-}
-
-.btn-topbar-camera:hover {
-    background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.45);
-}
-
-.btn-topbar-camera:active {
-    transform: translateY(0);
-}
-
-.pulse-dot-cam {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #4ade80;
-    box-shadow: 0 0 8px #4ade80;
-    animation: cam-pulse 1.8s infinite ease-in-out;
-}
-
-@keyframes cam-pulse {
-    0%, 100% {
-        transform: scale(1);
-        opacity: 1;
-        box-shadow: 0 0 6px #4ade80;
-    }
-    50% {
-        transform: scale(1.35);
-        opacity: 0.75;
-        box-shadow: 0 0 12px #22c55e;
-    }
-}
-
-/* Badge Hanger & Wadah */
-.badge-hanger {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: #e0f2fe;
-    color: #0369a1;
-    border: 1px solid #bae6fd;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 11.5px;
-    font-weight: 700;
-}
 
 /* ===== FLOATING & DRAGGABLE CAMERA MODAL / WIDGET ===== */
 .camera-float-modal {
@@ -4571,344 +4670,55 @@ tr.row-berjalan {
     padding: 14px 0;
 }
 
-/* ===== SETTINGS TABS & HARDWARE FLOW DIAGRAM ===== */
-.settings-tab-btn {
-    padding: 10px 18px;
-    border-radius: 8px 8px 0 0;
-    font-size: 13.5px;
-    font-weight: 600;
-    color: #64748b;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border-bottom: 2px solid transparent;
-}
-
-.settings-tab-btn:hover {
-    color: #0d3b8c;
-    background: rgba(13, 59, 140, 0.05);
-}
-
-.settings-tab-btn.active {
-    color: #0d3b8c;
-    font-weight: 700;
-    border-bottom: 2px solid #0d3b8c;
-    background: rgba(13, 59, 140, 0.08);
-}
-
-.hw-flow-container {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    overflow-x: auto;
-    padding: 8px 0;
-}
-
-.hw-flow-step {
-    flex: 1;
-    min-width: 130px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    padding: 10px;
-    text-align: center;
-}
-
-.hw-flow-step.highlight {
-    background: rgba(3, 105, 161, 0.35);
-    border-color: rgba(56, 189, 248, 0.5);
-    box-shadow: 0 0 14px rgba(56, 189, 248, 0.2);
-}
-
-.hw-flow-icon {
-    font-size: 20px;
-    margin-bottom: 4px;
-}
-
-.hw-flow-label {
-    font-size: 12px;
-    font-weight: 700;
-    color: #f8fafc;
-    margin-bottom: 3px;
-}
-
-.hw-flow-desc {
-    font-size: 10.5px;
-    color: #94a3b8;
-    line-height: 1.3;
-}
-
-.hw-flow-arrow {
-    color: #38bdf8;
-    font-size: 18px;
-    font-weight: 800;
-    flex-shrink: 0;
-}
 
 
-/* ================================================================
-   PUSH BUTTON OPERATOR HARDWARE (HIJAU = HADIR, MERAH = TIDAK ADA)
-   ================================================================ */
-
-.operator-station-box {
-    margin-top: 10px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 8px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.operator-station-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    font-size: 11px;
-}
-
-.operator-station-title {
-    font-weight: 700;
-    color: #475569;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-}
-
-.operator-status-badge {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 7px;
-    border-radius: 6px;
+/* ===== TOMBOL KAMERA LIVE TOPBAR ===== */
+.btn-topbar-camera {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-}
-
-.operator-status-badge.active-green {
-    background: #dcfce7;
-    color: #15803d;
-    border: 1px solid #bbf7d0;
-}
-
-.operator-status-badge.active-red {
-    background: #fee2e2;
-    color: #b91c1c;
-    border: 1px solid #fecaca;
-}
-
-.operator-btn-pair {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-}
-
-.btn-push-hw {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 7px 10px;
+    gap: 7px;
+    background: linear-gradient(135deg, #0369a1 0%, #0284c7 100%);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 6px 13px;
     border-radius: 8px;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.3px;
+    font-size: 12.5px;
+    font-weight: 700;
     cursor: pointer;
-    border: 2px solid transparent;
+    box-shadow: 0 2px 8px rgba(3, 105, 161, 0.35);
+    transition: all 0.22s ease;
     user-select: none;
-    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+}
+.btn-topbar-camera:hover {
+    background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.45);
+}
+.btn-topbar-camera:active {
+    transform: translateY(0);
+}
+.btn-topbar-camera.active {
+    background: linear-gradient(135deg, #15803d 0%, #16a34a 100%);
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.5);
+    border-color: rgba(74, 222, 128, 0.6);
 }
 
-.btn-push-hw:active {
-    transform: translateY(2px);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-/* Green Button */
-.btn-push-hw.btn-push-green {
-    background: #f0fdf4;
-    color: #166534;
-    border-color: #86efac;
-}
-
-.btn-push-hw.btn-push-green .push-hw-lamp {
-    width: 9px;
-    height: 9px;
+.pulse-dot-cam {
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+    background: #4ade80;
+    box-shadow: 0 0 8px #4ade80;
+    animation: cam-pulse 1.8s infinite ease-in-out;
 }
 
-.btn-push-hw.btn-push-green.active {
-    background: linear-gradient(135deg, #15803d 0%, #22c55e 100%);
-    color: #ffffff;
-    border-color: #16a34a;
-    box-shadow: 0 0 12px rgba(34, 197, 94, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.4);
+@keyframes cam-pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.35);
+        opacity: 0.7;
+    }
 }
-
-.btn-push-hw.btn-push-green.active .push-hw-lamp {
-    background: #ffffff;
-    box-shadow: 0 0 8px #ffffff;
-    animation: cam-pulse 1.6s infinite ease-in-out;
-}
-
-/* Red Button */
-.btn-push-hw.btn-push-red {
-    background: #fef2f2;
-    color: #991b1b;
-    border-color: #fca5a5;
-}
-
-.btn-push-hw.btn-push-red .push-hw-lamp {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: #ef4444;
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
-}
-
-.btn-push-hw.btn-push-red.active {
-    background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%);
-    color: #ffffff;
-    border-color: #dc2626;
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.4);
-}
-
-.btn-push-hw.btn-push-red.active .push-hw-lamp {
-    background: #ffffff;
-    box-shadow: 0 0 8px #ffffff;
-    animation: cam-pulse 1.6s infinite ease-in-out;
-}
-
-/* Quick IP Bar on Camera Popup */
-.camera-ip-quickbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(15, 23, 42, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    padding: 6px 10px;
-    font-size: 12px;
-}
-
-.camera-ip-input {
-    flex: 1;
-    background: #090e1a;
-    border: 1px solid #334155;
-    border-radius: 6px;
-    color: #f8fafc;
-    font-size: 12px;
-    font-family: ui-monospace, monospace;
-    padding: 5px 10px;
-    outline: none;
-}
-.camera-ip-input:focus {
-    border-color: #38bdf8;
-    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
-}
-
-.camera-ip-btn {
-    background: #0284c7;
-    color: #ffffff;
-    border: none;
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 11.5px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: background 0.15s ease;
-}
-.camera-ip-btn:hover {
-    background: #0ea5e9;
-}
-
-/* ===== DUAL CAMERA NAV & DUAL VIEW GRID ===== */
-.camera-channel-nav {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: #090e1a;
-    padding: 4px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.cam-channel-btn {
-    flex: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 6px 10px;
-    border-radius: 6px;
-    font-size: 11.5px;
-    font-weight: 700;
-    cursor: pointer;
-    border: 1px solid transparent;
-    background: transparent;
-    color: #94a3b8;
-    transition: all 0.18s ease;
-}
-
-.cam-channel-btn:hover {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.08);
-}
-
-.cam-channel-btn.active {
-    background: #1e293b;
-    color: #38bdf8;
-    border-color: rgba(56, 189, 248, 0.4);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-}
-
-.cam-channel-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #64748b;
-    transition: background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.cam-channel-dot.online {
-    background: #22c55e;
-    box-shadow: 0 0 6px #22c55e;
-}
-
-.cam-channel-dot.offline {
-    background: #ef4444;
-}
-
-.cam-dual-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
-    width: 100%;
-}
-
-.camera-float-modal.enlarged .cam-dual-grid {
-    grid-template-columns: 1fr 1fr;
-}
-
-.cam-dual-pane {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.cam-dual-pane-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 11px;
-    font-weight: 700;
-    color: #cbd5e1;
-    padding: 2px 4px;
-}
-
-

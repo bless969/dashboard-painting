@@ -48,7 +48,7 @@
     </div>
 
     <!-- ===== CHART: LOSS TIME (per sesi) ===== -->
-    <div class="panel">
+    <div class="panel" style="min-height: 260px;">
         <div class="panel-header-row">
             <div class="panel-title">Loss Time</div>
         </div>
@@ -60,7 +60,7 @@
     </div>
 
     <!-- ===== CHART: PRODUCT TIME (per sesi) ===== -->
-    <div class="panel">
+    <div class="panel" style="min-height: 260px;">
         <div class="panel-header-row">
             <div class="panel-title">Product Time</div>
         </div>

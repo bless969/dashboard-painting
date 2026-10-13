@@ -1,8 +1,30 @@
 <div id="view-detail-shift" style="{{ $view_aktif !== 'detail-shift' ? 'display:none;' : '' }}">
-    <div class="ds-nav-shift">
-        <a href="#" id="ds-link-prev" onclick="return false;">&#8592; Shift</a>
-        <span class="ds-nav-divider">|</span>
-        <a href="#" id="ds-link-next" onclick="return false;">Shift &#8594;</a>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <button type="button" class="btn-kembali-riwayat" onclick="kembaliKeRiwayat(event)">
+            &larr; Kembali
+        </button>
+
+        <div class="ds-nav-shift" style="margin-bottom:0;">
+            <a href="#" id="ds-link-prev" onclick="return false;">&larr; Shift</a>
+            <span class="ds-nav-divider">|</span>
+            <a href="#" id="ds-link-next" onclick="return false;">Shift &rarr;</a>
+        </div>
+    </div>
+
+    <!-- 3 Pilihan Shift -->
+    <div class="ds-session-tabs" id="ds-session-tabs">
+        <button type="button" class="ds-session-btn aktif" id="ds-tab-pagi" onclick="dsPilihShift('Pagi')">
+            <span class="badge-shift badge-shift-pagi">Pagi</span>
+            <span class="ds-session-time">06:55 – 15:50</span>
+        </button>
+        <button type="button" class="ds-session-btn" id="ds-tab-sore" onclick="dsPilihShift('Sore')">
+            <span class="badge-shift badge-shift-sore">Sore</span>
+            <span class="ds-session-time">15:50 – 23:20</span>
+        </button>
+        <button type="button" class="ds-session-btn" id="ds-tab-malam" onclick="dsPilihShift('Malam')">
+            <span class="badge-shift badge-shift-malam">Malam</span>
+            <span class="ds-session-time">23:20 – 06:55</span>
+        </button>
     </div>
 
     <div class="ds-filter-bar">
@@ -10,7 +32,7 @@
             <label>Tanggal</label>
             <input type="date" id="ds-filter-tanggal">
         </div>
-        <div class="ds-filter-field">
+        <div class="ds-filter-field" style="display:none;">
             <label>Shift</label>
             <select id="ds-filter-shift">
                 <option value="Pagi">Pagi (06:55–15:50)</option>
@@ -18,7 +40,7 @@
                 <option value="Malam">Malam (23:20–06:55)</option>
             </select>
         </div>
-        <button class="ds-btn-tampilkan" id="ds-btn-tampilkan" onclick="muatUlangDetailShift()">Tampilkan</button>
+        <button type="button" class="ds-btn-tampilkan" id="ds-btn-tampilkan" onclick="muatUlangDetailShift()">Tampilkan</button>
         <span class="ds-filter-loading" id="ds-filter-loading" style="display:none;">Memuat...</span>
     </div>
 

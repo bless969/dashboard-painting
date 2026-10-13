@@ -17,16 +17,22 @@ Route::get('/ai-vision', [DashboardController::class, 'aiVision'])->name('ai-vis
 
 // API endpoint untuk saling berbagi IP dengan master-painting
 use Illuminate\Http\Request;
-Route::get('/api/set-cam-ip', function (Request $request) {
+Route::match(['get', 'post', 'options'], '/api/set-cam-ip', function (Request $request) {
     if ($request->has('ip')) {
         file_put_contents(storage_path('app/cam_ip.txt'), $request->ip);
     }
-    return response()->json(['status' => 'ok'])->header('Access-Control-Allow-Origin', '*');
+    return response()->json(['status' => 'ok'])
+        ->header('Access-Control-Allow-Origin', '*')
+        ->header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        ->header('Access-Control-Allow-Headers', '*');
 });
 
-Route::get('/api/get-cam-ip', function () {
+Route::match(['get', 'options'], '/api/get-cam-ip', function () {
     $ip = @file_get_contents(storage_path('app/cam_ip.txt'));
-    return response()->json(['ip' => trim($ip)])->header('Access-Control-Allow-Origin', '*');
+    return response()->json(['ip' => trim($ip ?: '')])
+        ->header('Access-Control-Allow-Origin', '*')
+        ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        ->header('Access-Control-Allow-Headers', '*');
 });
 
 // Kompatibilitas untuk request dengan /index.php?line=...&view=...

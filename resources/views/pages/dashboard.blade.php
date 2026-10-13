@@ -2,8 +2,8 @@
     <!-- ===== TOP CONTROL BAR (Grid 2 Kolom: Status Mesin & Choose Part) ===== -->
     <div class="dashboard-top-grid">
         <!-- Kolom Kiri: Status Mesin (Tower Light) -->
-        <div class="panel tower-light-panel">
-            <div class="tower-light-visual">
+        <div class="panel tower-light-panel" id="tower-light-panel-card">
+            <div class="tower-light-visual" id="tower-light-visual">
                 <div class="tower-lamp lamp-merah" id="lamp-merah"></div>
                 <div class="tower-lamp lamp-kuning" id="lamp-kuning"></div>
                 <div class="tower-lamp lamp-hijau" id="lamp-hijau"></div>
@@ -12,33 +12,10 @@
                 <div class="tower-light-label">Status Mesin Painting</div>
                 <div class="tower-light-status" id="teks-status-mesin">Memuat...</div>
                 <div class="tower-light-updated" id="teks-update-status">-</div>
-
-                <!-- Tombol Fisik Operator: Hijau (Memproduksi) vs Merah (Tidak Ada Operator) -->
-                <div class="operator-station-box">
-                    <div class="operator-station-header">
-                        <span class="operator-station-title">Status Tombol Operator:</span>
-                        <span class="operator-status-badge active-green" id="dash-operator-badge">🟢 Memproduksi</span>
-                    </div>
-                    <div class="operator-btn-pair">
-                        <button type="button" class="btn-push-hw btn-push-green active" id="dash-btn-op-green" onclick="setOperatorStatus('hadir')" title="Tekan Tombol Hijau: Operator Hadir & Aktif Memproduksi">
-                            <span class="push-hw-lamp"></span>
-                            <span class="push-hw-label">HIJAU (HADIR)</span>
-                        </button>
-                        <button type="button" class="btn-push-hw btn-push-red" id="dash-btn-op-red" onclick="setOperatorStatus('tidak_ada')" title="Tekan Tombol Merah: Tidak Ada Operator / Istirahat">
-                            <span class="push-hw-lamp"></span>
-                            <span class="push-hw-label">MERAH (KOSONG)</span>
-                        </button>
-                    </div>
-                </div>
-
                 <div class="tower-light-warning" id="stop-alasan-warning" style="display:none;" onclick="bukaModalAlasanStop()">
                     <span class="pulse-dot-warning"></span>
                     <span id="stop-alasan-warning-teks">Belum sempat isi alasan stop? Klik untuk isi alasan stop</span>
                 </div>
-                <!-- Tombol maintenance jika mesin dalam mode maintenance -->
-                <button type="button" class="btn-toggle-maintenance" id="btn-toggle-maintenance" style="display:none;" onclick="toggleMaintenanceManual()">
-                    ✅ Selesai Maintenance
-                </button>
             </div>
         </div>
 
@@ -46,14 +23,14 @@
         @include('partials.choose-part')
     </div>
 
-    <!-- ===== KARTU METRIK PRODUKSI: 3 ATAS (PCS WADAH) & 3 BAWAH (HANGER KONVEYOR) ===== -->
+    <!-- ===== KARTU METRIK PRODUKSI: 3 ATAS (PCS) & 3 BAWAH (HANGER / WADAH) ===== -->
     <div class="metrics-split-container">
-        <!-- BARIS 1 (ATAS): METRIK PRODUKSI UNIT (PCS WADAH LAMPU) -->
+        <!-- BARIS 1 (ATAS): METRIK PRODUKSI UNIT (PCS) -->
         <div class="metric-section-group">
             <div class="metric-group-header">
                 <div class="metric-group-badge badge-pcs">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>
-                    <span>METRIK PRODUKSI WADAH LAMPU (PCS)</span>
+                    <span>METRIK PRODUKSI (PCS)</span>
                 </div>
                 <div class="metric-mode-pill-group">
                     <button type="button" class="metric-mode-btn active" id="btn-mode-shift" onclick="setDashboardModeProduksi('shift')">⏱️ Shift Aktif</button>
@@ -68,7 +45,7 @@
                         <div class="metric-tanggal-label" id="metric-tanggal-label">Hari Ini</div>
                     </div>
                     <div class="value skeleton" id="input-value">0</div>
-                    <div class="label">Input Wadah Lampu <span class="metric-unit-tag">PCS</span></div>
+                    <div class="label">Input Produksi <span class="metric-unit-tag">PCS</span></div>
                 </div>
 
                 <!-- PCS: Output Produksi -->
@@ -78,7 +55,7 @@
                         <div class="metric-tanggal-label">Hari Ini</div>
                     </div>
                     <div class="value skeleton" id="output-value">0</div>
-                    <div class="label">Output Wadah Lampu <span class="metric-unit-tag">PCS</span></div>
+                    <div class="label">Output Produksi <span class="metric-unit-tag">PCS</span></div>
                 </div>
 
                 <!-- PCS: Yield -->
@@ -88,28 +65,28 @@
                         <div class="metric-tanggal-label">Hari Ini</div>
                     </div>
                     <div class="value skeleton" id="yield-value">0</div>
-                    <div class="label">Yield Painting <span class="metric-unit-tag">%</span></div>
+                    <div class="label">Yield Produksi <span class="metric-unit-tag">%</span></div>
                 </div>
             </div>
         </div>
 
-        <!-- BARIS 2 (BAWAH): METRIK KONVEYOR & HANGER (INSPEKSI ESP-CAM) -->
+        <!-- BARIS 2 (BAWAH): METRIK PRODUKSI MATERIAL / HANGER -->
         <div class="metric-section-group">
             <div class="metric-group-header">
-                <div class="metric-group-badge badge-hanger" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd;">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v4M12 6a4 4 0 0 0-4 4v1H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2v-1a4 4 0 0 0-4-4z"/><circle cx="12" cy="15" r="2"/></svg>
-                    <span>SISTEM KONVEYOR &amp; INSPEKSI ESP-CAM (HANGER)</span>
+                <div class="metric-group-badge badge-sheet">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    <span>METRIK HANGER / WADAH</span>
                 </div>
             </div>
             <div class="metric-grid-3">
                 <!-- Hanger: Total Hanger Lewat -->
                 <div class="metric-card sheet-input">
                     <div class="metric-card-header">
-                        <div class="icon">HNG IN</div>
+                        <div class="icon">HNG TOT</div>
                         <div class="metric-tanggal-label">Hari Ini</div>
                     </div>
                     <div class="value skeleton" id="sheet-input-value">0</div>
-                    <div class="label">Total Hanger Lewat <span class="metric-unit-tag sheet">HANGER</span></div>
+                    <div class="label">Total Hanger <span class="metric-unit-tag sheet">HANGER</span></div>
                 </div>
 
                 <!-- Hanger: Hanger Terisi Wadah -->

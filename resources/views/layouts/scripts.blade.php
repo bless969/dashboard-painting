@@ -1,10 +1,7 @@
 <script>
-        // ===== DYNAMIC BASE URL (Mendukung Subfolder Laragon /dashboard-pcb maupun Localhost) =====
+        // ===== DYNAMIC BASE URL (Mendukung Subfolder Laragon /dashboard-painting maupun Localhost) =====
         const APP_BASE_PATH = (function() {
             const p = window.location.pathname;
-            if (p.startsWith('/dashboard-painting')) {
-                return '/dashboard-painting';
-            }
             if (p.startsWith('/dashboard-pcb')) {
                 return '/dashboard-pcb';
             }
@@ -170,8 +167,8 @@
             interruptTimer: null,
             formResumeTimer: null,
 
-            // Rotasi antara Dashboard dan KWh Meter
-            views: ['dashboard', 'kwh-control'],
+            // Rotasi antara Dashboard, Chart, dan KWh Meter
+            views: ['dashboard', 'chart', 'kwh-control'],
             currentViewIndex: 0,
             secondsRemaining: 20,
             countdownInterval: null,
@@ -204,6 +201,10 @@
             const modalPerf = document.getElementById('modal-detail-performance');
             if (modalPerf && modalPerf.style.display && modalPerf.style.display !== 'none') return true;
 
+            // 4b. Modal Export Excel sedang terbuka
+            const modalExport = document.getElementById('modal-export-excel');
+            if (modalExport && modalExport.style.display && modalExport.style.display !== 'none') return true;
+
             // 5. Input, Select, atau Textarea sedang aktif / fokus pada Choose Part atau form modal
             if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
                 if (
@@ -213,7 +214,8 @@
                     document.activeElement.closest('#modal-alasan-stop') ||
                     document.activeElement.closest('#modal-manage-part') ||
                     document.activeElement.closest('#modal-pilih-c') ||
-                    document.activeElement.closest('#modal-detail-performance')
+                    document.activeElement.closest('#modal-detail-performance') ||
+                    document.activeElement.closest('#modal-export-excel')
                 ) {
                     return true;
                 }
@@ -311,19 +313,21 @@
             const nextViewName = kioskState.views[kioskState.currentViewIndex];
 
             // Update URL browser tanpa push history baru (replaceState agar tombol back tetap bersih)
-            const targetUrl = `${APP_BASE_PATH}/${nextViewName}?line=PCB`;
-            history.replaceState({ line: 'PCB', view: nextViewName }, '', targetUrl);
+            const targetUrl = `${APP_BASE_PATH}/${nextViewName}?line=Painting`;
+            history.replaceState({ line: 'Painting', view: nextViewName }, '', targetUrl);
 
             // Render view baru via SPA engine
-            renderView('PCB', nextViewName);
+            renderView('Painting', nextViewName);
 
             // Kembalikan posisi scroll layar ke paling atas
             applyKioskScrollPosition(0);
             kioskState.virtualScrollY = 0;
 
-            // Jika pindah ke kwh-control, pastikan chart meresize agar pas dengan layar
+            // Jika pindah ke kwh-control atau chart, pastikan chart meresize agar pas dengan layar
             if (nextViewName === 'kwh-control') {
                 setTimeout(resizeAllKwhCharts, 150);
+            } else if (nextViewName === 'chart') {
+                setTimeout(resizeAllProductionCharts, 150);
             }
 
             // Reset countdown detik untuk view baru
@@ -354,6 +358,19 @@
             });
         }
 
+        function resizeAllProductionCharts() {
+            const charts = [
+                chartProduksi,
+                typeof stateLossTime !== 'undefined' ? stateLossTime.chart : null,
+                typeof stateProductTime !== 'undefined' ? stateProductTime.chart : null
+            ];
+            charts.forEach(c => {
+                if (c && typeof c.resize === 'function') {
+                    try { c.resize(); } catch (e) {}
+                }
+            });
+        }
+
         function startKioskMode() {
             stopKioskMode();
             if (!isFullscreenAktif()) return;
@@ -362,13 +379,14 @@
             kioskState.userPaused = false;
             kioskState.isInterrupted = false;
 
-            // Tentukan view awal: jika saat ini sedang di kwh-control, mulai dari kwh-control. Selain itu, mulai dari dashboard.
-            if (currentView === 'kwh-control') {
-                kioskState.currentViewIndex = 1;
+            // Tentukan view awal: jika saat ini sedang berada di salah satu view rotasi, mulai dari view tersebut
+            const idxSekarang = kioskState.views.indexOf(currentView);
+            if (idxSekarang !== -1) {
+                kioskState.currentViewIndex = idxSekarang;
             } else {
                 kioskState.currentViewIndex = 0;
                 if (currentView !== 'dashboard') {
-                    renderView('PCB', 'dashboard');
+                    renderView('Painting', 'dashboard');
                 }
             }
 
@@ -605,7 +623,9 @@
                     e.target.closest('.panel-choose-part') ||
                     e.target.closest('#modal-alasan-stop') ||
                     e.target.closest('#modal-manage-part') ||
-                    e.target.closest('#modal-pilih-c')
+                    e.target.closest('#modal-pilih-c') ||
+                    e.target.closest('#modal-pilih-shift') ||
+                    e.target.closest('#modal-export-excel')
                 ))
             )) {
                 const isAlasan = e.target.closest('#modal-alasan-stop');
@@ -759,15 +779,17 @@
             document.getElementById("greeting-clock").innerText = `${sapaan} · ${tanggal} · ${waktu}`;
 
             // Jika dashboard berjalan 24 jam dan berganti hari (lewat tengah malam), sinkronkan currentTanggal otomatis
-            if (!_urlParams.get('tanggal')) {
-                const hariIniLokal = tanggalLokalYYYYMMDD(sekarang);
-                if (currentTanggal !== hariIniLokal) {
-                    currentTanggal = hariIniLokal;
-                    const inputPerfTanggal = document.getElementById('perf-tanggal');
-                    if (inputPerfTanggal && !sesiProduksiAktif) {
-                        inputPerfTanggal.value = hariIniLokal;
-                    }
-                    if (currentView === 'dashboard') {
+            // HANYA jika sedang di view dashboard dan tidak ada parameter tanggal eksplisit
+            if (currentView === 'dashboard') {
+                const currentSearch = new URLSearchParams(window.location.search);
+                if (!currentSearch.get('tanggal')) {
+                    const hariIniLokal = tanggalLokalYYYYMMDD(sekarang);
+                    if (currentTanggal !== hariIniLokal) {
+                        currentTanggal = hariIniLokal;
+                        const inputPerfTanggal = document.getElementById('perf-tanggal');
+                        if (inputPerfTanggal && !sesiProduksiAktif) {
+                            inputPerfTanggal.value = hariIniLokal;
+                        }
                         updateData();
                     }
                 }
@@ -955,21 +977,9 @@
                 // Semua lampu tetap padam
             }
 
-            // Sinkronkan tampilan tombol Maintenance dengan status asli dari server
-            const btnMaint = document.getElementById("btn-toggle-maintenance");
-            if (btnMaint) {
-                btnMaint.style.display = "inline-block";
-                if (status === 'maintenance') {
-                    btnMaint.innerText = "✅ Selesai Maintenance";
-                    btnMaint.classList.add("aktif");
-                } else {
-                    btnMaint.innerText = "🔧 Mode Maintenance";
-                    btnMaint.classList.remove("aktif");
-                }
-            }
             statusMesinAsliTerakhir = status;
             waktuMatiStopAktif = hasil.waktu_mati || hasil.updated_at;
-            warnaPatliteStopAktif = hasil.warna_patlite || (status === 'standby' ? 'Kuning' : (status === 'standby_kedip' ? 'Kuning Kedip' : (status === 'mati' ? 'Mati / OFF' : (status === 'maintenance' ? 'Merah (Maintenance)' : 'Merah'))));
+            warnaPatliteStopAktif = hasil.warna_patlite || (status === 'standby' ? 'Kuning' : (status === 'standby_kedip' ? 'Kuning Kedip' : (status === 'mati' ? 'Mati / OFF' : 'Merah')));
             infoStopSelesaiTerakhir = hasil.info_stop_selesai || null;
             timelineStopList = hasil.timeline_stop || [];
             jumlahStopBisaDiisi = (typeof hasil.jumlah_bisa_diisi !== 'undefined') ? hasil.jumlah_bisa_diisi : timelineStopList.filter(item => !item.is_ongoing && item.bisa_diisi).length;
@@ -989,14 +999,14 @@
             const isMesinBerhenti = (status === 'stop' || status === 'standby' || status === 'standby_kedip' || status === 'mati');
             const isSedangProduksi = (status === 'running' || status === 'running_kedip');
             // Peringatan: mesin sedang berhenti (Stop / Standby / Standby Kedip / Mati) dan alasannya belum diisi.
-            // Khusus line PCB: line lain belum menggunakan sistem notifikasi ini dan punya settingan tersendiri.
+            // Khusus line Painting: notifikasi alasan stop otomatis.
             const warningAlasanEl = document.getElementById("stop-alasan-warning");
-            if (hasil.perlu_alasan_stop && currentLine === 'PCB') {
+            if (hasil.perlu_alasan_stop && currentLine === 'Painting') {
                 const jumlahBelum = hasil.jumlah_belum_diisi || 1;
                 let teksPeringatan = "";
                 let teksJudul = "";
 
-                if (isSedangProduksi || status === 'maintenance') {
+                if (isSedangProduksi) {
                     const infoRingkas = hasil.info_stop_selesai ? ` [${hasil.info_stop_selesai.rentang} (${hasil.info_stop_selesai.durasi})]` : '';
                     teksPeringatan = `Ada ${jumlahBelum} riwayat stop${infoRingkas} — klik untuk isi susulan`;
                     teksJudul = `Alasan Stop (Susulan - sisa ${jumlahBelum})`;
@@ -1037,7 +1047,7 @@
                 if (warningAlasanEl) warningAlasanEl.style.display = "none";
                 alasanStopSudahDitampilkanUntuk = null;
                 const modalAlasan = document.getElementById('modal-alasan-stop');
-                if (modalAlasan && modalAlasan.style.display !== 'none' && !sedangProsesMaintenance) {
+                if (modalAlasan && modalAlasan.style.display !== 'none') {
                     tutupModalAlasanStop();
                 }
             }
@@ -1084,37 +1094,6 @@
             }
         }
 
-        // ===== TOMBOL MANUAL: MODE MAINTENANCE =====
-        // Satu-satunya status yang masih perlu dipicu manual (tidak ada sensornya).
-        // Status lain (running/stop) sekarang murni otomatis dari arduino_bridge.py.
-        let sedangProsesMaintenance = false;
-        async function toggleMaintenanceManual() {
-            if (statusMesinAsliTerakhir === 'maintenance') {
-                // Selesaikan mode maintenance dan kembalikan status mesin ke running
-                if (sedangProsesMaintenance) return;
-                sedangProsesMaintenance = true;
-                const btnMaint = document.getElementById("btn-toggle-maintenance");
-                if (btnMaint) btnMaint.disabled = true;
-
-                try {
-                    await fetch('api/update_status.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `api_key=${encodeURIComponent(API_KEY_INTERNAL)}&line=${encodeURIComponent(currentLine)}&status_mesin=running&manual_selesai=1`
-                    });
-                    await updateStatusMesin();
-                } catch (e) {
-                    alert("Gagal mengubah status mesin. Coba lagi.");
-                } finally {
-                    if (btnMaint) btnMaint.disabled = false;
-                    sedangProsesMaintenance = false;
-                }
-            } else {
-                // Mesin sedang tidak maintenance: langsung buka modal agar operator memilih kategori & mengisi note
-                bukaModalAlasanStop();
-                pilihKategoriAlasan('Maintenance');
-            }
-        }
 
         // Format jam saat ini jadi "HH:MM", sesuai jam real-time perangkat
         function jamSekarangHHMM() {
@@ -2544,7 +2523,186 @@
         // State tanggal filter histori aktif
         let tanggalFilterHistoriAktif = null;
 
-        // ===== TABEL RIWAYAT =====
+        // ===== MODAL PILIH SESI SHIFT =====
+        function bukaModalPilihShift(tgl) {
+            const modal = document.getElementById('modal-pilih-shift');
+            const labelTgl = document.getElementById('mps-label-tanggal');
+            const container = document.getElementById('mps-kartu-container');
+            if (!modal) return;
+
+            if (labelTgl) labelTgl.innerText = formatTanggalIndo(tgl);
+
+            const shifts = [
+                { nama: 'Pagi', jam: '06:55 – 15:50', badgeClass: 'badge-shift-pagi' },
+                { nama: 'Sore', jam: '15:50 – 23:20', badgeClass: 'badge-shift-sore' },
+                { nama: 'Malam', jam: '23:20 – 06:55', badgeClass: 'badge-shift-malam' }
+            ];
+
+            if (container) {
+                container.innerHTML = shifts.map(s => {
+                    const entry = window.historiDataPerTanggal ? window.historiDataPerTanggal.get(tgl) : null;
+                    const sd = entry && entry.shifts ? entry.shifts[s.nama] : null;
+                    const adaData = sd && (sd.input > 0 || sd.output > 0);
+                    const info = adaData ? `Input: ${sd.input} · Output: ${sd.output} · EFF: ${sd.eff_persen}%` : 'Belum ada data';
+
+                    return `
+                        <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border:1px solid ${adaData ? '#dbe4f3' : '#e8e8ee'}; border-radius:10px; background:${adaData ? '#fafbff' : '#fafafa'}; cursor:pointer; transition:background .15s;" onclick="bukaDetailShiftDariModal('${tgl}', '${s.nama}')">
+                            <span class="badge-shift ${s.badgeClass}">${s.nama}</span>
+                            <div style="flex:1;">
+                                <div style="font-size:12.5px; font-weight:600; color:#1e293b;">${s.jam}</div>
+                                <div style="font-size:11.5px; color:${adaData ? '#64748b' : '#9a9ab0'};">${info}</div>
+                            </div>
+                            <span style="color:#0d3b8c; font-size:13px; font-weight:600;">&rarr;</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        function tutupModalPilihShift() {
+            const modal = document.getElementById('modal-pilih-shift');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function tutupModalJikaDiLuarPilihShift(e) {
+            if (e.target.id === 'modal-pilih-shift') {
+                tutupModalPilihShift();
+            }
+        }
+
+        function bukaDetailShiftDariModal(tgl, shift) {
+            tutupModalPilihShift();
+            navigateTo(currentLine, 'detail-shift', tgl, { tanggal: tgl, shift: shift });
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' || e.code === 'Escape') {
+                const modalShift = document.getElementById('modal-pilih-shift');
+                if (modalShift && modalShift.style.display !== 'none') {
+                    tutupModalPilihShift();
+                }
+                const modalExport = document.getElementById('modal-export-excel');
+                if (modalExport && modalExport.style.display !== 'none') {
+                    tutupModalExportExcel();
+                }
+            }
+        });
+
+        // ===== MODAL EXPORT EXCEL =====
+        function bukaModalExportExcel() {
+            const modal = document.getElementById('modal-export-excel');
+            if (!modal) return;
+
+            // Inisialisasi dropdown tahun (misal 5 tahun terakhir sampai tahun ini)
+            const selTahun = document.getElementById('export-input-tahun');
+            if (selTahun && selTahun.children.length === 0) {
+                const now = new Date();
+                const curYear = now.getFullYear();
+                for (let y = curYear; y >= curYear - 4; y--) {
+                    const opt = document.createElement('option');
+                    opt.value = y;
+                    opt.textContent = y;
+                    selTahun.appendChild(opt);
+                }
+            }
+
+            // Inisialisasi input bulan jika belum ada nilai
+            const inBulan = document.getElementById('export-input-bulan');
+            if (inBulan && !inBulan.value) {
+                const now = new Date();
+                const pad = n => String(n).padStart(2, '0');
+                inBulan.value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+            }
+
+            // Inisialisasi input minggu/rentang jika belum ada nilai
+            const inDari = document.getElementById('export-input-dari');
+            const inSampai = document.getElementById('export-input-sampai');
+            if (inDari && inSampai && (!inDari.value || !inSampai.value)) {
+                const now = new Date();
+                const semingguLalu = new Date();
+                semingguLalu.setDate(now.getDate() - 6);
+                inSampai.value = tanggalLokalYYYYMMDD(now);
+                inDari.value = tanggalLokalYYYYMMDD(semingguLalu);
+            }
+
+            // Default ke pilihan tahun
+            const radioTahun = document.querySelector('input[name="export_periode"][value="tahun"]');
+            if (radioTahun) {
+                radioTahun.checked = true;
+                ubahPilihanPeriodeExport('tahun');
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        function tutupModalExportExcel() {
+            const modal = document.getElementById('modal-export-excel');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function tutupModalJikaDiLuarExportExcel(e) {
+            if (e.target && e.target.id === 'modal-export-excel') {
+                tutupModalExportExcel();
+            }
+        }
+
+        function ubahPilihanPeriodeExport(periode) {
+            const fTahun = document.getElementById('export-field-tahun');
+            const fBulan = document.getElementById('export-field-bulan');
+            const fMinggu = document.getElementById('export-field-minggu');
+
+            if (fTahun) fTahun.style.display = (periode === 'tahun') ? 'block' : 'none';
+            if (fBulan) fBulan.style.display = (periode === 'bulan') ? 'block' : 'none';
+            if (fMinggu) fMinggu.style.display = (periode === 'minggu') ? 'flex' : 'none';
+
+            // Update styling radio item
+            document.querySelectorAll('#form-export-excel label').forEach(lbl => {
+                const rad = lbl.querySelector('input[type="radio"]');
+                if (rad) {
+                    lbl.style.background = rad.checked ? '#f8fafc' : '#ffffff';
+                    lbl.style.borderColor = rad.checked ? '#dbe4f3' : '#e2e8f0';
+                }
+            });
+        }
+
+        function eksekusiDownloadExcel(e) {
+            if (e) e.preventDefault();
+            const checkedRadio = document.querySelector('input[name="export_periode"]:checked');
+            const periode = checkedRadio ? checkedRadio.value : 'tahun';
+
+            let query = `line=${encodeURIComponent(currentLine)}&periode=${encodeURIComponent(periode)}`;
+
+            if (periode === 'tahun') {
+                const tahun = document.getElementById('export-input-tahun')?.value || new Date().getFullYear();
+                query += `&tahun=${encodeURIComponent(tahun)}`;
+            } else if (periode === 'bulan') {
+                const bulan = document.getElementById('export-input-bulan')?.value;
+                if (!bulan) {
+                    alert('Silakan tentukan bulan yang ingin diunduh.');
+                    return;
+                }
+                query += `&bulan=${encodeURIComponent(bulan)}`;
+            } else if (periode === 'minggu') {
+                const dari = document.getElementById('export-input-dari')?.value;
+                const sampai = document.getElementById('export-input-sampai')?.value;
+                if (!dari || !sampai) {
+                    alert('Silakan tentukan tanggal awal dan akhir.');
+                    return;
+                }
+                if (dari > sampai) {
+                    alert('Tanggal awal tidak boleh lebih besar dari tanggal akhir.');
+                    return;
+                }
+                query += `&dari=${encodeURIComponent(dari)}&sampai=${encodeURIComponent(sampai)}`;
+            }
+
+            tutupModalExportExcel();
+            window.location.href = `${APP_BASE_PATH}/export/export_excel.php?${query}`;
+        }
+
+        // ===== TABEL RIWAYAT PRODUKSI =====
         async function updateHistoriTable(filterTanggal = undefined) {
             if (filterTanggal !== undefined) {
                 tanggalFilterHistoriAktif = filterTanggal;
@@ -2568,8 +2726,8 @@
                 const elYield = document.getElementById("rw-yield");
                 const tbody = document.getElementById("isi-tabel-histori");
 
-                if (elInput) elInput.innerText = totalInput;
-                if (elOutput) elOutput.innerText = totalOutput;
+                if (elInput) elInput.innerText = totalInput.toLocaleString('id-ID');
+                if (elOutput) elOutput.innerText = totalOutput.toLocaleString('id-ID');
                 if (elYield) elYield.innerText = yieldKeseluruhan + "%";
                 if (!tbody) return;
 
@@ -2588,20 +2746,73 @@
                     const pesan = tanggalFilterHistoriAktif
                         ? `Belum ada catatan data riwayat produksi untuk tanggal ${formatTanggalIndo(tanggalFilterHistoriAktif)}.`
                         : `Belum ada catatan data riwayat produksi.`;
-                    tr.innerHTML = `<td colspan="6" style="text-align:center; color:#9a9ab0; padding:20px;">${pesan}</td>`;
+                    tr.innerHTML = `<td colspan="7" style="text-align:center; color:#9a9ab0; padding:20px;">${pesan}</td>`;
                     fragment.appendChild(tr);
                 } else {
+                    // Grouping data per tanggal agar tanggal tidak berulang dan shift tidak ditaruh satu-satu
+                    const mapPerTanggal = new Map();
                     data.forEach(baris => {
+                        const tgl = baris.tanggal;
+                        if (!mapPerTanggal.has(tgl)) {
+                            mapPerTanggal.set(tgl, {
+                                tanggal: tgl,
+                                totalInput: 0,
+                                totalOutput: 0,
+                                effList: [],
+                                shifts: {
+                                    'Pagi': null,
+                                    'Sore': null,
+                                    'Malam': null
+                                }
+                            });
+                        }
+                        const entry = mapPerTanggal.get(tgl);
+                        const bInput = Number(baris.input) || 0;
+                        const bOutput = Number(baris.output) || 0;
+                        const bEff = Number(baris.eff_persen) || 0;
+
+                        entry.totalInput += bInput;
+                        entry.totalOutput += bOutput;
+                        if (bEff > 0) {
+                            entry.effList.push(bEff);
+                        }
+                        if (baris.shift) {
+                            entry.shifts[baris.shift] = {
+                                shift: baris.shift,
+                                jam_mulai: baris.jam_mulai || '',
+                                jam_selesai: baris.jam_selesai || '',
+                                input: bInput,
+                                output: bOutput,
+                                eff_persen: bEff
+                            };
+                        }
+                    });
+
+                    window.historiDataPerTanggal = mapPerTanggal;
+
+                    mapPerTanggal.forEach((entry, tgl) => {
                         const tr = document.createElement("tr");
-                        const urlDownload = `${APP_BASE_PATH}/export/export_riwayat_performance.php?line=${encodeURIComponent(currentLine)}&tanggal=${baris.tanggal}&shift=${encodeURIComponent(baris.shift)}`;
+                        const urlDownload = `${APP_BASE_PATH}/export/export_riwayat_performance.php?line=${encodeURIComponent(currentLine)}&tanggal=${tgl}`;
+
+                        let effRata = 0;
+                        if (entry.effList.length > 0) {
+                            effRata = (entry.effList.reduce((acc, val) => acc + val, 0) / entry.effList.length).toFixed(1);
+                        }
 
                         tr.innerHTML = `
-                            <td class="td-toggle"><a class="btn-toggle-detail" href="index.php?line=${encodeURIComponent(currentLine)}&view=detail&tanggal=${baris.tanggal}" data-nav data-line="${currentLine}" data-view="detail" data-tanggal="${baris.tanggal}" title="Lihat detail per jam">&#9656;</a></td>
-                            <td class="td-tanggal-klik" onclick="cariSesiProduksiTanggal('${baris.tanggal}');" title="Klik untuk menampilkan sesi produksi tanggal ini">${formatTanggalIndo(baris.tanggal)}</td>
-                            <td><span class="badge-shift badge-shift-${(baris.shift || '').toLowerCase()}">${baris.shift}</span></td>
-                            <td><a href="index.php?line=${encodeURIComponent(currentLine)}&view=detail-shift" class="btn-detail-shift" data-nav data-line="${currentLine}" data-view="detail-shift" data-tanggal="${baris.tanggal}" data-shift="${baris.shift}">Lihat Detail</a></td>
-                            <td><strong>${baris.eff_persen}%</strong></td>
-                            <td><a href="${urlDownload}" class="btn-download-row" title="Download Excel Hasil Produksi (${baris.shift})">&#8681;</a></td>
+                            <td class="td-toggle"><a class="btn-toggle-detail" href="index.php?line=${encodeURIComponent(currentLine)}&view=detail&tanggal=${tgl}" data-nav data-line="${currentLine}" data-view="detail" data-tanggal="${tgl}" title="Lihat detail per jam">&#9656;</a></td>
+                            <td class="td-tanggal-klik" onclick="cariSesiProduksiTanggal('${tgl}');" title="Klik untuk menampilkan sesi produksi tanggal ini">
+                                <strong>${formatTanggalIndo(tgl)}</strong>
+                            </td>
+                            <td>${entry.totalInput.toLocaleString('id-ID')} pcs</td>
+                            <td>${entry.totalOutput.toLocaleString('id-ID')} pcs</td>
+                            <td><strong style="color:${effRata > 0 ? '#0d3b8c' : '#9a9ab0'};">${effRata}%</strong></td>
+                            <td>
+                                <button type="button" class="btn-detail-shift" onclick="bukaModalPilihShift('${tgl}')" title="Klik untuk memilih dari 3 sesi shift (Pagi, Sore, Malam)">
+                                    Lihat Detail
+                                </button>
+                            </td>
+                            <td><a href="${urlDownload}" class="btn-download-row" title="Download Excel Seluruh Sesi Tanggal ${formatTanggalIndo(tgl)}">&#8681;</a></td>
                         `;
                         fragment.appendChild(tr);
                     });
@@ -2778,33 +2989,53 @@
             const elOutput = document.getElementById("dt-isi-output");
             if (!elInput || !elOutput) return;
 
-            const response = await fetch(`api/detail_harian.php?line=${encodeURIComponent(line)}&tanggal=${tanggal}`, { cache: "no-store" });
-            const hasil = await response.json();
+            let tglPilihan = tanggal;
+            if (!tglPilihan || tglPilihan === 'undefined' || tglPilihan === 'null') {
+                tglPilihan = currentTanggal || new URLSearchParams(window.location.search).get('tanggal') || tanggalLokalYYYYMMDD();
+            }
+            currentTanggal = tglPilihan;
 
-            const daftarInput = [];
-            const daftarOutput = [];
-            (hasil.data || []).forEach(ev => {
-                const item = { jam: ev.jam, jumlah: ev.jumlah ?? "" };
-                if (ev.tipe === "input") daftarInput.push(item);
-                else daftarOutput.push(item);
-            });
+            const tglLabelEl = document.getElementById("dt-tgl-label");
+            if (tglLabelEl) tglLabelEl.innerText = formatTanggalIndo(tglPilihan);
 
-            const elTotalIn = document.getElementById("dt-total-input");
-            const elTotalOut = document.getElementById("dt-total-output");
-            const elTotalYield = document.getElementById("dt-yield");
-            if (elTotalIn) elTotalIn.innerText = hasil.total_input;
-            if (elTotalOut) elTotalOut.innerText = hasil.total_output;
-            if (elTotalYield) elTotalYield.innerText = hasil.yield + "%";
+            const titleEl = document.getElementById('page-title');
+            if (titleEl && currentView === 'detail') {
+                titleEl.innerText = `Detail Harian — Line Painting (${formatTanggalIndo(tglPilihan)})`;
+            }
 
-            // Simpan posisi scroll dulu, sebelum tabel diganti - biar gak lompat ke atas tiap auto-refresh
-            const posisiScroll = window.scrollY;
+            try {
+                const response = await fetch(`api/detail_harian.php?line=${encodeURIComponent(line || currentLine)}&tanggal=${encodeURIComponent(tglPilihan)}`, { cache: "no-store" });
+                const hasil = await response.json();
 
-            elInput.innerHTML = renderTabelJam(daftarInput);
-            elOutput.innerHTML = renderTabelJam(daftarOutput);
+                const daftarInput = [];
+                const daftarOutput = [];
+                (hasil.data || []).forEach(ev => {
+                    const item = { jam: ev.jam, jumlah: ev.jumlah ?? "" };
+                    if (ev.tipe === "input") daftarInput.push(item);
+                    else daftarOutput.push(item);
+                });
 
-            requestAnimationFrame(() => {
-                window.scrollTo(0, posisiScroll);
-            });
+                const elTotalIn = document.getElementById("dt-total-input");
+                const elTotalOut = document.getElementById("dt-total-output");
+                const elTotalYield = document.getElementById("dt-yield");
+                if (elTotalIn) elTotalIn.innerText = hasil.total_input;
+                if (elTotalOut) elTotalOut.innerText = hasil.total_output;
+                if (elTotalYield) {
+                    elTotalYield.innerText = (hasil.total_input > 0) ? `${hasil.yield}%` : "-";
+                }
+
+                // Simpan posisi scroll dulu, sebelum tabel diganti - biar gak lompat ke atas tiap auto-refresh
+                const posisiScroll = window.scrollY;
+
+                elInput.innerHTML = renderTabelJam(daftarInput);
+                elOutput.innerHTML = renderTabelJam(daftarOutput);
+
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, posisiScroll);
+                });
+            } catch (err) {
+                console.error("Gagal memuat detail harian:", err);
+            }
         }
 
         function escapeHtml(teks) {
@@ -2827,6 +3058,31 @@
             return tanggalLokalYYYYMMDD(d);
         }
 
+        function dsUpdateTabsShift(shiftAktif) {
+            ['Pagi', 'Sore', 'Malam'].forEach(s => {
+                const tab = document.getElementById(`ds-tab-${s.toLowerCase()}`);
+                if (tab) {
+                    tab.classList.toggle('aktif', s === shiftAktif);
+                }
+            });
+        }
+
+        function dsPilihShift(shift) {
+            const elFilterShift = document.getElementById('ds-filter-shift');
+            const elFilterTgl = document.getElementById('ds-filter-tanggal');
+            const tgl = elFilterTgl && elFilterTgl.value ? elFilterTgl.value : (currentTanggal || tanggalLokalYYYYMMDD());
+            if (elFilterShift) elFilterShift.value = shift;
+            detailShiftParams = { tanggal: tgl, shift: shift };
+            dsUpdateNavShift(shift, tgl);
+            dsUpdateTabsShift(shift);
+            dsFetchDanRender(currentLine, tgl, shift);
+        }
+
+        function kembaliKeRiwayat(event) {
+            if (event) event.preventDefault();
+            navigateTo(currentLine, 'riwayat');
+        }
+
         // Dipanggil oleh renderView() saat pertama masuk ke view ini (dari tombol "Lihat Detail"
         // atau dari Back/Forward browser). tanggal & shift datang dari detailShiftParams.
         function loadDetailShift(line, tanggal, shift) {
@@ -2838,6 +3094,7 @@
             elFilterTgl.value = tanggal;
             elFilterShift.value = shift;
             dsUpdateNavShift(shift, tanggal);
+            dsUpdateTabsShift(shift);
             dsFetchDanRender(line, tanggal, shift);
         }
 
@@ -2848,27 +3105,37 @@
             if (!tanggal) return;
             detailShiftParams = { tanggal, shift };
             dsUpdateNavShift(shift, tanggal);
+            dsUpdateTabsShift(shift);
             dsFetchDanRender(currentLine, tanggal, shift);
         }
 
-        async function dsFetchDanRender(line, tanggal, shift) {
+        async function dsFetchDanRender(line, tanggal, shift, isBackground = false) {
             const btn     = document.getElementById('ds-btn-tampilkan');
             const loading = document.getElementById('ds-filter-loading');
-            btn.disabled  = true;
-            loading.style.display = '';
+            if (!isBackground) {
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerText = 'Memuat...';
+                }
+            }
 
             try {
                 const url = `api/detail_shift_json.php?line=${encodeURIComponent(line)}&tanggal=${encodeURIComponent(tanggal)}&shift=${encodeURIComponent(shift)}`;
                 const res  = await fetch(url, { cache: 'no-store' });
                 const data = await res.json();
-                if (data.status !== 'success') throw new Error();
+                if (data.status !== 'success') throw new Error('Status not success');
                 renderHasilDetailShift(data);
             } catch (e) {
-                document.getElementById('ds-konten-performance').innerHTML = '<div class="ds-kosong">Gagal memuat data. Coba lagi.</div>';
-                document.getElementById('ds-konten-stop').innerHTML = '';
+                if (!isBackground) {
+                    document.getElementById('ds-konten-performance').innerHTML = '<div class="ds-kosong">Gagal memuat data. Coba lagi.</div>';
+                    document.getElementById('ds-konten-stop').innerHTML = '';
+                }
             } finally {
-                btn.disabled = false;
-                loading.style.display = 'none';
+                if (!isBackground && btn) {
+                    btn.disabled = false;
+                    btn.innerText = 'Tampilkan';
+                }
+                if (loading) loading.style.display = 'none';
             }
         }
 
@@ -2891,16 +3158,17 @@
             linkNext.innerHTML = `Shift ${next} &#8594;`;
             linkPrev.onclick = () => { navigateTo(currentLine, 'detail-shift', tglPrev, { tanggal: tglPrev, shift: prev }); return false; };
             linkNext.onclick = () => { navigateTo(currentLine, 'detail-shift', tglNext, { tanggal: tglNext, shift: next }); return false; };
+            dsUpdateTabsShift(shiftAktif);
         }
 
         function renderHasilDetailShift(data) {
             document.getElementById('ds-judul-shift-performance').innerText = `Shift ${data.shift}`;
             document.getElementById('ds-judul-shift-stop').innerText        = `Shift ${data.shift}`;
 
-            document.getElementById('ds-val-input').innerText  = data.total_input;
-            document.getElementById('ds-val-output').innerText = data.total_output;
-            document.getElementById('ds-val-ng').innerText     = data.ng;
-            document.getElementById('ds-val-yield').innerText  = `${data.yield}%`;
+            document.getElementById('ds-val-input').innerText  = data.total_input ?? 0;
+            document.getElementById('ds-val-output').innerText = data.total_output ?? 0;
+            document.getElementById('ds-val-ng').innerText     = data.ng ?? 0;
+            document.getElementById('ds-val-yield').innerText  = `${data.yield ?? 0}%`;
 
             // EFF card
             const effCard = document.getElementById('ds-eff-card');
@@ -2925,24 +3193,31 @@
                     const l = s.l_persen;
                     const cls = l >= 80 ? 'hijau' : l >= 60 ? 'kuning' : 'merah';
                     return `<tr>
-                        <td><strong>${escapeHtml(s.part)}</strong></td>
-                        <td>${s.jam_mulai} – ${s.jam_selesai}</td>
-                        <td>${s.c} mnt</td>
-                        <td>${s.h_persen}%</td>
-                        <td>${s.j_persen}%</td>
-                        <td>${s.k_persen}%</td>
-                        <td><span class="ds-eff-chip ${cls}">${l}%</span></td>
+                        <td class="ds-col-part"><strong>${escapeHtml(s.part)}</strong></td>
+                        <td class="ds-col-jam">${s.jam_mulai} – ${s.jam_selesai}</td>
+                        <td class="ds-col-ct">${s.c} mnt</td>
+                        <td class="ds-col-fg">${s.h_persen}%</td>
+                        <td class="ds-col-ability">${s.j_persen}%</td>
+                        <td class="ds-col-optime">${s.k_persen}%</td>
+                        <td class="ds-col-eff ds-col-center"><span class="ds-eff-chip ${cls}">${l}%</span></td>
                     </tr>`;
                 }).join('');
-                kontenPerf.innerHTML = `<table><thead><tr>
-                    <th>Part</th><th>Jam</th><th>CT Standar</th><th>Finish Good</th><th>Ability</th><th>Op. Time</th><th>EFF</th>
+                kontenPerf.innerHTML = `<table class="ds-table ds-table-perf"><thead><tr>
+                    <th class="ds-col-part">Part</th>
+                    <th class="ds-col-jam">Jam</th>
+                    <th class="ds-col-ct">CT Standar</th>
+                    <th class="ds-col-fg">Finish Good</th>
+                    <th class="ds-col-ability">Ability</th>
+                    <th class="ds-col-optime">Op. Time</th>
+                    <th class="ds-col-eff ds-col-center">EFF</th>
                 </tr></thead><tbody>${baris}</tbody></table>`;
             }
 
             // Tabel stop
             const kontenStop = document.getElementById('ds-konten-stop');
-            const totalMnt   = (data.daftar_stop || []).reduce((a, s) => a + (s.durasi_menit || 0), 0);
-            const durShift   = data.durasi_shift_menit || 0;
+            const rawTotalMnt = (data.daftar_stop || []).reduce((a, s) => a + (Number(s.durasi_menit) || 0), 0);
+            const totalMnt   = Math.round(rawTotalMnt * 10) / 10;
+            const durShift   = Number(data.durasi_shift_menit) || 0;
             const pctStop    = durShift > 0 ? ((totalMnt / durShift) * 100).toFixed(1) : 0;
             document.getElementById('ds-meta-total-stop').innerText
                 = `${totalMnt} mnt stop dari ${durShift} mnt shift (${pctStop}%)`;
@@ -2954,28 +3229,35 @@
                 let baris = data.daftar_stop.map(s => {
                     const kat  = (s.kategori || '').toLowerCase();
                     const cls  = kat === 'loss' ? 'ds-badge-loss' : kat === 'p' ? 'ds-badge-p' : 'ds-badge-selesai';
-                    const pct  = durShift > 0 ? Math.min(100, Math.round(s.durasi_menit / durShift * 100)) : 0;
+                    const durasiVal = s.durasi_menit !== undefined && s.durasi_menit !== null ? Math.round(Number(s.durasi_menit) * 10) / 10 : 0;
+                    const pct  = durShift > 0 ? Math.min(100, Math.round(durasiVal / durShift * 100)) : 0;
                     const jam  = s.waktu_mulai ? new Date(s.waktu_mulai.replace(' ','T')).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}) : '-';
                     const badgePatlite = renderBadgePatlite(s.warna_patlite || s.status);
+                    const durasiTeks = durasiVal > 0 ? durasiVal + ' mnt' : (s.durasi_menit ? s.durasi_menit + ' mnt' : '-');
                     return `<tr>
-                        <td>${escapeHtml(labelStatus[s.status] || 'Stop')}</td>
-                        <td><span class="ds-badge ${cls}">${escapeHtml(s.kategori||'-')}</span></td>
-                        <td>${escapeHtml(s.alasan||'-')}</td>
-                        <td>${badgePatlite}</td>
-                        <td><div class="ds-durasi-wrap">
+                        <td class="ds-col-status"><strong>${escapeHtml(labelStatus[s.status] || 'Stop')}</strong></td>
+                        <td class="ds-col-kategori"><span class="ds-badge ${cls}">${escapeHtml(s.kategori||'-')}</span></td>
+                        <td class="ds-col-alasan">${escapeHtml(s.alasan||'-')}</td>
+                        <td class="ds-col-patlite">${badgePatlite}</td>
+                        <td class="ds-col-durasi"><div class="ds-durasi-wrap">
                             <div class="ds-durasi-bar-bg"><div class="ds-durasi-bar-fill" style="width:${pct}%"></div></div>
-                            <span class="ds-durasi-label">${s.durasi_menit ? s.durasi_menit+' mnt' : '-'}</span>
+                            <span class="ds-durasi-label">${durasiTeks}</span>
                         </div></td>
-                        <td>${jam}</td>
+                        <td class="ds-col-waktu-mulai ds-col-center">${jam}</td>
                     </tr>`;
                 }).join('');
-                kontenStop.innerHTML = `<table><thead><tr>
-                    <th>Status</th><th>Kategori</th><th>Alasan</th><th>Warna Patlite</th><th>Durasi</th><th>Waktu Mulai</th>
+                kontenStop.innerHTML = `<table class="ds-table ds-table-stop"><thead><tr>
+                    <th class="ds-col-status">Status</th>
+                    <th class="ds-col-kategori">Kategori</th>
+                    <th class="ds-col-alasan">Alasan</th>
+                    <th class="ds-col-patlite">Warna Patlite</th>
+                    <th class="ds-col-durasi">Durasi</th>
+                    <th class="ds-col-waktu-mulai ds-col-center">Waktu Mulai</th>
                 </tr></thead><tbody>${baris}</tbody></table>`;
             }
         }
 
-        // ===== MODAL: ALASAN MESIN BERHENTI (P / LOSS) =====
+        // ===== MODAL: ALASAN MESIN BERHENTI (P / LOSS / SELESAI / MAINTENANCE) =====
         const ALASAN_STOP_KATEGORI = {
             'P': ['Break/Meeting', 'Inventory', 'Maintenance', 'Trial Run', 'Not Planning'],
             'Loss': [
@@ -3030,6 +3312,24 @@
             const cbAll = document.getElementById('cb-pilih-semua-stop');
             if (cbAll) {
                 cbAll.checked = (allCbs.length > 0 && allCbs.length === checkedCbs.length);
+            }
+
+            const valWaktu = document.getElementById('maint-waktu-mati-val');
+            const labelWaktu = document.getElementById('maint-waktu-mati-label');
+            if (valWaktu && labelWaktu) {
+                if (checkedCbs.length > 0) {
+                    const listW = Array.from(checkedCbs).map(cb => cb.getAttribute('data-waktu')).filter(Boolean);
+                    if (listW.length === 1) {
+                        valWaktu.value = listW[0];
+                        labelWaktu.innerText = listW[0];
+                    } else if (listW.length > 1) {
+                        valWaktu.value = listW[0];
+                        labelWaktu.innerText = `${listW.length} kejadian dipilih (mulai: ${listW[0]})`;
+                    }
+                } else {
+                    valWaktu.value = waktuMatiStopAktif || '';
+                    labelWaktu.innerText = waktuMatiStopAktif || 'Saat mesin berhenti (sekarang)';
+                }
             }
 
             const tombolSimpan = document.querySelector('#alasan-detail-wrapper .btn-simpan-keterangan');
@@ -3277,12 +3577,14 @@
             }
 
             document.getElementById('maintenance-detail-wrapper').style.display = 'none';
+
             const select = document.getElementById('alasan-detail-select');
             if (kategori === 'Selesai') {
                 select.innerHTML = '<option value="Selesai Produksi" selected>Selesai Produksi</option>';
             } else {
+                const daftar = ALASAN_STOP_KATEGORI[kategori] || ALASAN_STOP_KATEGORI['Loss'];
                 select.innerHTML = '<option value="">-- Pilih Alasan --</option>' +
-                    ALASAN_STOP_KATEGORI[kategori].map(a => `<option value="${a}">${a}</option>`).join('');
+                    daftar.map(a => `<option value="${a}">${a}</option>`).join('');
             }
 
             document.getElementById('alasan-detail-wrapper').style.display = 'block';
@@ -3305,7 +3607,8 @@
 
             const formData = new FormData();
             formData.append('line', currentLine);
-            formData.append('kategori', kategoriAlasanTerpilih);
+            const kategoriKirim = (kategoriAlasanTerpilih === 'Maintenance') ? 'Loss' : kategoriAlasanTerpilih;
+            formData.append('kategori', kategoriKirim);
             formData.append('alasan', alasan);
             const warnaKirim = document.getElementById('alasan-stop-warna-patlite-val')?.value || warnaPatliteStopAktif || 'Merah';
             formData.append('warna_patlite', warnaKirim);
@@ -3378,6 +3681,12 @@
             formData.append('kategori_masalah', katMasalah);
             formData.append('note', note);
             if (waktuMati) formData.append('waktu_mati', waktuMati);
+
+            const checkedCbs = Array.from(document.querySelectorAll('.cb-stop-item:checked'));
+            const waktuList = checkedCbs.map(cb => cb.getAttribute('data-waktu')).filter(Boolean);
+            if (waktuList.length > 0) {
+                formData.append('waktu_list', JSON.stringify(waktuList));
+            }
 
             try {
                 const res = await fetch('api/maintenance/kirim', {
@@ -3837,13 +4146,16 @@
         function renderView(line, view, tanggal) {
             currentLine = line;
             currentView = view;
-            if (tanggal) {
+            if (tanggal && tanggal !== 'undefined' && tanggal !== 'null') {
                 currentTanggal = tanggal;
+            } else if (view === 'detail') {
+                const urlTgl = new URLSearchParams(window.location.search).get('tanggal');
+                if (urlTgl) currentTanggal = urlTgl;
             } else if (view === 'dashboard') {
-                currentTanggal = _urlParams.get('tanggal') || tanggalLokalYYYYMMDD();
+                currentTanggal = new URLSearchParams(window.location.search).get('tanggal') || tanggalLokalYYYYMMDD();
             }
 
-            document.body.dataset.line = 'PCB';
+            document.body.dataset.line = 'Painting';
 
             // Update sidebar navigation active state
             document.querySelectorAll('.sidebar .nav-item[data-view]').forEach(item => {
@@ -3858,15 +4170,15 @@
             });
 
             // Update judul halaman
-            let judul = 'Dashboard — Line PCB';
-            if (view === 'riwayat') judul = 'Riwayat — Line PCB';
-            if (view === 'chart') judul = 'Chart — Line PCB';
-            if (view === 'detail') judul = `Detail Harian — Line PCB (${formatTanggalIndo(currentTanggal)})`;
-            if (view === 'detail-shift') judul = 'Detail Shift — Line PCB';
-            if (view === 'machine-control') judul = 'Machine Control — Line PCB';
-            if (view === 'pengaturan') judul = 'Pengaturan — Line PCB';
-            if (view === 'kwh-control') judul = 'KWh Meter — Line 3 (PCB)';
-            if (view === 'ai-vision') judul = 'AI Vision & Kamera — Line PCB';
+            let judul = 'Dashboard — Line Painting';
+            if (view === 'riwayat') judul = 'Riwayat — Line Painting';
+            if (view === 'chart') judul = 'Chart — Line Painting';
+            if (view === 'detail') judul = `Detail Harian — Line Painting (${formatTanggalIndo(currentTanggal)})`;
+            if (view === 'detail-shift') judul = 'Detail Shift — Line Painting';
+            if (view === 'machine-control') judul = 'Machine Control — Line Painting';
+            if (view === 'pengaturan') judul = 'Pengaturan — Line Painting';
+            if (view === 'kwh-control') judul = 'KWh Meter — Line Painting';
+            if (view === 'ai-vision') judul = 'AI Vision & Kamera — Line Painting';
             const titleEl = document.getElementById('page-title');
             if (titleEl) titleEl.innerText = judul;
 
@@ -3874,13 +4186,13 @@
             const subTitleEl = document.getElementById('logo-subtitle');
             if (subTitleEl) {
                 subTitleEl.innerText =
-                    (view === 'machine-control') ? 'Machine Control — PCB' :
-                    (view === 'pengaturan') ? 'Pengaturan — PCB' :
+                    (view === 'machine-control') ? 'Machine Control — Painting' :
+                    (view === 'pengaturan') ? 'Pengaturan — Painting' :
+                    (view === 'ai-vision') ? 'AI Vision & Kamera — Painting' :
                     (view === 'kwh-control') ? 'KWh Meter — Line 3' :
-                    (view === 'ai-vision') ? 'AI Vision & Kamera — PCB' :
-                    (view === 'chart') ? 'Chart — PCB' :
-                    (['riwayat', 'detail', 'detail-shift'].includes(view)) ? 'Riwayat — PCB' :
-                    'Dashboard PCB';
+                    (view === 'chart') ? 'Chart — Painting' :
+                    (['riwayat', 'detail', 'detail-shift'].includes(view)) ? 'Riwayat — Painting' :
+                    'Dashboard Painting';
             }
 
             // Tampilkan/sembunyikan view yang sesuai (hanya jika elemen ada)
@@ -3895,6 +4207,8 @@
             const vai = document.getElementById('view-ai-vision'); if (vai) vai.style.display = (view === 'ai-vision') ? '' : 'none';
             const statusBadgeEl = document.getElementById('status-badge');
             if (statusBadgeEl) statusBadgeEl.style.display = (view === 'dashboard') ? '' : 'none';
+            const simBtn = document.getElementById('btn-simulasi-stop');
+            if (simBtn) simBtn.style.display = (view === 'kwh-control' || view === 'pengaturan') ? 'none' : 'inline-flex';
 
             // Update tombol aksi di topbar
             const actionEl = document.getElementById('action-buttons');
@@ -3911,21 +4225,23 @@
                         <a href="${APP_BASE_PATH}/riwayat?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="riwayat">&larr; Kembali ke Riwayat</a>
                     `;
                 } else if (view === 'machine-control') {
-                    actionEl.innerHTML = '';
-                } else if (view === 'chart') {
-                    actionEl.innerHTML = '';
-                } else if (view === 'kwh-control') {
-                    actionEl.innerHTML = '';
-                } else if (view === 'pengaturan') {
-                    actionEl.innerHTML = '';
-                } else if (view === 'ai-vision') {
                     actionEl.innerHTML = `
                         <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
                     `;
+                } else if (view === 'chart') {
+                    actionEl.innerHTML = `
+                        <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
+                    `;
+                } else if (view === 'kwh-control') {
+                    actionEl.innerHTML = `
+                        <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
+                    `;
+                } else if (view === 'pengaturan') {
+                    actionEl.innerHTML = '';
                 } else {
                     actionEl.innerHTML = `
                         <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
-                        <a href="${APP_BASE_PATH}/export/export_excel.php?line=${encodeURIComponent(line)}" class="btn-nav-action btn-green">&#8681; Download Histori (Excel)</a>
+                        <button type="button" class="btn-nav-action btn-green" onclick="bukaModalExportExcel()">&#8681; Download Histori (Excel)</button>
                     `;
                 }
             }
@@ -5205,11 +5521,15 @@
                 } else if (currentView === 'chart') {
                     await updateChartAktif();
                 } else if (currentView === 'riwayat') {
-                    if (riwayatTabAktif === 'produksi') await updateHistoriTable();
+                    if (riwayatTabAktif === 'produksi') await updateHistoriTable(tanggalFilterHistoriAktif);
                     else if (riwayatTabAktif === 'mc') await loadRiwayatPerformance();
-                    else if (riwayatTabAktif === 'shift') await loadRiwayatShift();
                 } else if (currentView === 'detail') {
-                    await loadDetailHarian(currentLine, currentTanggal);
+                    const detailTgl = currentTanggal || new URLSearchParams(window.location.search).get('tanggal') || tanggalLokalYYYYMMDD();
+                    await loadDetailHarian(currentLine, detailTgl);
+                } else if (currentView === 'detail-shift') {
+                    const dsTgl = detailShiftParams?.tanggal || currentTanggal || new URLSearchParams(window.location.search).get('tanggal') || tanggalLokalYYYYMMDD();
+                    const dsShift = detailShiftParams?.shift || new URLSearchParams(window.location.search).get('shift') || 'Pagi';
+                    await dsFetchDanRender(currentLine, dsTgl, dsShift, true);
                 } else if (currentView === 'kwh-control') {
                     await loadKwhControlData();
                 } else if (currentView === 'machine-control') {
@@ -6328,516 +6648,8 @@
         if (currentView === 'kwh-control') {
             loadKwhControlData();
         }
-
-        // =========================================================================
-        // SISTEM KONEKSI DUAL KAMERA (INPUT & OUTPUT) ESP32-CAM LINE PAINTING
-        // =========================================================================
-
-        let paintingCamInputConfig = {
-            ip: localStorage.getItem('painting_cam_input_ip') || '192.168.1.88',
-            url: localStorage.getItem('painting_cam_input_url') || 'http://192.168.1.88/stream',
-            captureUrl: localStorage.getItem('painting_cam_input_capture_url') || 'http://192.168.1.88/capture'
-        };
-
-        let paintingCamOutputConfig = {
-            ip: localStorage.getItem('painting_cam_output_ip') || '192.168.1.89',
-            url: localStorage.getItem('painting_cam_output_url') || 'http://192.168.1.89/stream',
-            captureUrl: localStorage.getItem('painting_cam_output_capture_url') || 'http://192.168.1.89/capture'
-        };
-
-        let activeCameraChannel = localStorage.getItem('painting_cam_channel') || 'input'; // 'input', 'output', 'dual'
-        let activeSettingsPreviewTab = 'input'; // 'input', 'output', 'dual'
-
-        let cameraStatus = {
-            input: 'online',
-            output: 'online'
-        };
-
-        // Status Tombol Fisik Operator: 'hadir' (Hijau = Memproduksi) vs 'tidak_ada' (Merah = Tidak Ada Operator)
-        let operatorStatus = localStorage.getItem('painting_operator_status') || 'hadir';
-
-        function setOperatorStatus(status) {
-            operatorStatus = status;
-            try {
-                localStorage.setItem('painting_operator_status', status);
-            } catch (e) {}
-
-            sinkronkanTampilanOperator();
-        }
-
-        function sinkronkanTampilanOperator() {
-            const isHadir = (operatorStatus === 'hadir');
-
-            // 1. Dashboard Top Station Buttons & Badge
-            const btnDashGreen = document.getElementById('dash-btn-op-green');
-            const btnDashRed = document.getElementById('dash-btn-op-red');
-            const badgeDash = document.getElementById('dash-operator-badge');
-
-            if (btnDashGreen) btnDashGreen.classList.toggle('active', isHadir);
-            if (btnDashRed) btnDashRed.classList.toggle('active', !isHadir);
-
-            if (badgeDash) {
-                if (isHadir) {
-                    badgeDash.className = 'operator-status-badge active-green';
-                    badgeDash.innerHTML = '🟢 Memproduksi';
-                } else {
-                    badgeDash.className = 'operator-status-badge active-red';
-                    badgeDash.innerHTML = '🔴 Tidak Ada Operator';
-                }
-            }
-
-            // 2. Settings Badge
-            const cfgBadge = document.getElementById('cfg-operator-status-badge');
-            if (cfgBadge) {
-                if (isHadir) {
-                    cfgBadge.className = 'operator-status-badge active-green';
-                    cfgBadge.innerHTML = '🟢 Operator Memproduksi';
-                } else {
-                    cfgBadge.className = 'operator-status-badge active-red';
-                    cfgBadge.innerHTML = '🔴 Tidak Ada Operator';
-                }
-            }
-        }
-
-        // Ganti channel kamera di pop-up monitor ('input', 'output', 'dual')
-        function switchCameraChannel(channel) {
-            activeCameraChannel = channel;
-            try {
-                localStorage.setItem('painting_cam_channel', channel);
-            } catch (e) {}
-
-            // Update tombol tab channel di popup
-            const btnInput = document.getElementById('btn-cam-channel-input');
-            const btnOutput = document.getElementById('btn-cam-channel-output');
-            const btnDual = document.getElementById('btn-cam-channel-dual');
-
-            if (btnInput) btnInput.classList.toggle('active', channel === 'input');
-            if (btnOutput) btnOutput.classList.toggle('active', channel === 'output');
-            if (btnDual) btnDual.classList.toggle('active', channel === 'dual');
-
-            // Tampilkan viewport yang sesuai
-            const vpInput = document.getElementById('viewport-channel-input');
-            const vpOutput = document.getElementById('viewport-channel-output');
-            const vpDual = document.getElementById('viewport-channel-dual');
-
-            if (vpInput) vpInput.style.display = (channel === 'input') ? 'block' : 'none';
-            if (vpOutput) vpOutput.style.display = (channel === 'output') ? 'block' : 'none';
-            if (vpDual) vpDual.style.display = (channel === 'dual') ? 'block' : 'none';
-
-            // Tampilkan quickbar yang sesuai
-            const qbInput = document.getElementById('quickbar-input');
-            const qbOutput = document.getElementById('quickbar-output');
-            const qbDual = document.getElementById('quickbar-dual');
-
-            if (qbInput) qbInput.style.display = (channel === 'input') ? 'flex' : 'none';
-            if (qbOutput) qbOutput.style.display = (channel === 'output') ? 'flex' : 'none';
-            if (qbDual) qbDual.style.display = (channel === 'dual') ? 'flex' : 'none';
-
-            // Update status pill header
-            updateHeaderStatusPill();
-
-            // Jika memilih dual view, pastikan ukuran widget proporsional
-            const widget = document.getElementById('camera-float-widget');
-            if (channel === 'dual' && widget && !widget.classList.contains('enlarged')) {
-                toggleMembesarKamera(true);
-            }
-
-            // Pastikan stream terhubung
-            terapkanUrlKeSemuaStream();
-        }
-
-        // Ganti tab preview di halaman pengaturan ('input', 'output', 'dual')
-        function switchSettingsPreviewTab(tab) {
-            activeSettingsPreviewTab = tab;
-
-            const btnInput = document.getElementById('btn-cfg-tab-input');
-            const btnOutput = document.getElementById('btn-cfg-tab-output');
-            const btnDual = document.getElementById('btn-cfg-tab-dual');
-
-            if (btnInput) btnInput.classList.toggle('active', tab === 'input');
-            if (btnOutput) btnOutput.classList.toggle('active', tab === 'output');
-            if (btnDual) btnDual.classList.toggle('active', tab === 'dual');
-
-            const conInput = document.getElementById('cfg-preview-container-input');
-            const conOutput = document.getElementById('cfg-preview-container-output');
-            const conDual = document.getElementById('cfg-preview-container-dual');
-
-            if (conInput) conInput.style.display = (tab === 'input') ? 'flex' : 'none';
-            if (conOutput) conOutput.style.display = (tab === 'output') ? 'flex' : 'none';
-            if (conDual) conDual.style.display = (tab === 'dual') ? 'flex' : 'none';
-
-            terapkanUrlKeSemuaStream();
-        }
-
-        function updateHeaderStatusPill() {
-            const pill = document.getElementById('cam-stream-status-pill');
-            const dot = document.getElementById('cam-status-dot');
-            if (!pill) return;
-
-            if (activeCameraChannel === 'input') {
-                const isOnline = (cameraStatus.input === 'online');
-                pill.textContent = isOnline ? 'INPUT: ONLINE' : 'INPUT: OFFLINE';
-                pill.style.color = isOnline ? '#4ade80' : '#f87171';
-                pill.style.background = isOnline ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
-                pill.style.borderColor = isOnline ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)';
-                if (dot) dot.style.background = isOnline ? '#22c55e' : '#ef4444';
-            } else if (activeCameraChannel === 'output') {
-                const isOnline = (cameraStatus.output === 'online');
-                pill.textContent = isOnline ? 'OUTPUT: ONLINE' : 'OUTPUT: OFFLINE';
-                pill.style.color = isOnline ? '#4ade80' : '#f87171';
-                pill.style.background = isOnline ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)';
-                pill.style.borderColor = isOnline ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)';
-                if (dot) dot.style.background = isOnline ? '#22c55e' : '#ef4444';
-            } else {
-                pill.textContent = 'DUAL VIEW (IN & OUT)';
-                pill.style.color = '#38bdf8';
-                pill.style.background = 'rgba(56,189,248,0.15)';
-                pill.style.borderColor = 'rgba(56,189,248,0.3)';
-                if (dot) dot.style.background = '#38bdf8';
-            }
-        }
-
-        // Terapkan URL stream ke seluruh elemen gambar kamera (Popup & Settings)
-        function terapkanUrlKeSemuaStream() {
-            const inUrl = paintingCamInputConfig.url || ('http://' + paintingCamInputConfig.ip + '/stream');
-            const outUrl = paintingCamOutputConfig.url || ('http://' + paintingCamOutputConfig.ip + '/stream');
-
-            // 1. Popup Images
-            const imgInput = document.getElementById('cameraStreamImgInput');
-            const imgOutput = document.getElementById('cameraStreamImgOutput');
-            const imgDualInput = document.getElementById('cameraStreamImgDualInput');
-            const imgDualOutput = document.getElementById('cameraStreamImgDualOutput');
-
-            if (imgInput && imgInput.src !== inUrl) imgInput.src = inUrl;
-            if (imgOutput && imgOutput.src !== outUrl) imgOutput.src = outUrl;
-            if (imgDualInput && imgDualInput.src !== inUrl) imgDualInput.src = inUrl;
-            if (imgDualOutput && imgDualOutput.src !== outUrl) imgDualOutput.src = outUrl;
-
-            // 2. Settings Preview Images
-            const prevInput = document.getElementById('settingsCameraPreviewInput');
-            const prevOutput = document.getElementById('settingsCameraPreviewOutput');
-            const prevDualInput = document.getElementById('settingsCameraPreviewDualInput');
-            const prevDualOutput = document.getElementById('settingsCameraPreviewDualOutput');
-
-            if (prevInput && prevInput.src !== inUrl) prevInput.src = inUrl;
-            if (prevOutput && prevOutput.src !== outUrl) prevOutput.src = outUrl;
-            if (prevDualInput && prevDualInput.src !== inUrl) prevDualInput.src = inUrl;
-            if (prevDualOutput && prevDualOutput.src !== outUrl) prevDualOutput.src = outUrl;
-        }
-
-        // Muat konfigurasi kedua kamera dari localStorage & sinkronkan input
-        function muatPengaturanKamera() {
-            try {
-                const savedIn = localStorage.getItem('painting_cam_input_config');
-                if (savedIn) paintingCamInputConfig = Object.assign(paintingCamInputConfig, JSON.parse(savedIn));
-
-                const savedOut = localStorage.getItem('painting_cam_output_config');
-                if (savedOut) paintingCamOutputConfig = Object.assign(paintingCamOutputConfig, JSON.parse(savedOut));
-            } catch (e) {}
-
-            // Normalisasi URL
-            if (!paintingCamInputConfig.url && paintingCamInputConfig.ip) {
-                paintingCamInputConfig.url = 'http://' + paintingCamInputConfig.ip + '/stream';
-            }
-            if (!paintingCamInputConfig.captureUrl && paintingCamInputConfig.ip) {
-                paintingCamInputConfig.captureUrl = 'http://' + paintingCamInputConfig.ip + '/capture';
-            }
-
-            if (!paintingCamOutputConfig.url && paintingCamOutputConfig.ip) {
-                paintingCamOutputConfig.url = 'http://' + paintingCamOutputConfig.ip + '/stream';
-            }
-            if (!paintingCamOutputConfig.captureUrl && paintingCamOutputConfig.ip) {
-                paintingCamOutputConfig.captureUrl = 'http://' + paintingCamOutputConfig.ip + '/capture';
-            }
-
-            // Sinkronkan ke input di formulir Pengaturan
-            const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-            setVal('cfg-cam-input-ip', paintingCamInputConfig.ip);
-            setVal('cfg-cam-input-url', paintingCamInputConfig.url);
-            setVal('cfg-cam-input-capture-url', paintingCamInputConfig.captureUrl);
-
-            setVal('cfg-cam-output-ip', paintingCamOutputConfig.ip);
-            setVal('cfg-cam-output-url', paintingCamOutputConfig.url);
-            setVal('cfg-cam-output-capture-url', paintingCamOutputConfig.captureUrl);
-
-            // Sinkronkan ke popup kamera
-            setVal('cam-quick-ip-input', paintingCamInputConfig.ip);
-            setVal('quick-reconnect-ip-input', paintingCamInputConfig.ip);
-
-            setVal('cam-quick-ip-output', paintingCamOutputConfig.ip);
-            setVal('quick-reconnect-ip-output', paintingCamOutputConfig.ip);
-
-            const errUrlIn = document.getElementById('err-stream-url-input');
-            if (errUrlIn) errUrlIn.textContent = paintingCamInputConfig.url;
-
-            const errUrlOut = document.getElementById('err-stream-url-output');
-            if (errUrlOut) errUrlOut.textContent = paintingCamOutputConfig.url;
-
-            const lblDualIn = document.getElementById('dual-label-ip-input');
-            if (lblDualIn) lblDualIn.textContent = paintingCamInputConfig.ip;
-
-            const lblDualOut = document.getElementById('dual-label-ip-output');
-            if (lblDualOut) lblDualOut.textContent = paintingCamOutputConfig.ip;
-
-            const endpIn = document.getElementById('cfg-preview-endpoint-input');
-            if (endpIn) endpIn.textContent = paintingCamInputConfig.url;
-
-            // Aktifkan channel yang tersimpan
-            switchCameraChannel(activeCameraChannel);
-        }
-
-        // Saat input IP diubah di pengaturan, otomatis update URL stream & capture
-        function onInputCamIpChange(channel, newIp) {
-            const cleanIp = newIp.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-            if (channel === 'input') {
-                const urlInput = document.getElementById('cfg-cam-input-url');
-                const capInput = document.getElementById('cfg-cam-input-capture-url');
-                const endpLabel = document.getElementById('cfg-preview-endpoint-input');
-                if (urlInput) urlInput.value = 'http://' + cleanIp + '/stream';
-                if (capInput) capInput.value = 'http://' + cleanIp + '/capture';
-                if (endpLabel) endpLabel.textContent = 'http://' + cleanIp + '/stream';
-            } else {
-                const urlOutput = document.getElementById('cfg-cam-output-url');
-                const capOutput = document.getElementById('cfg-cam-output-capture-url');
-                if (urlOutput) urlOutput.value = 'http://' + cleanIp + '/stream';
-                if (capOutput) capOutput.value = 'http://' + cleanIp + '/capture';
-            }
-        }
-
-        // Sambungkan IP secara cepat dari input manapun (channel: 'input' atau 'output')
-        function sambungkanIpCepat(channel, inputId) {
-            const input = document.getElementById(inputId);
-            if (!input || !input.value.trim()) return;
-
-            let ip = input.value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-            const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-
-            if (channel === 'input') {
-                paintingCamInputConfig.ip = ip;
-                paintingCamInputConfig.url = 'http://' + ip + '/stream';
-                paintingCamInputConfig.captureUrl = 'http://' + ip + '/capture';
-
-                try {
-                    localStorage.setItem('painting_cam_input_ip', ip);
-                    localStorage.setItem('painting_cam_input_url', paintingCamInputConfig.url);
-                    localStorage.setItem('painting_cam_input_capture_url', paintingCamInputConfig.captureUrl);
-                    localStorage.setItem('painting_cam_input_config', JSON.stringify(paintingCamInputConfig));
-                } catch (e) {}
-
-                setVal('cfg-cam-input-ip', ip);
-                setVal('cfg-cam-input-url', paintingCamInputConfig.url);
-                setVal('cfg-cam-input-capture-url', paintingCamInputConfig.captureUrl);
-                setVal('cam-quick-ip-input', ip);
-                setVal('quick-reconnect-ip-input', ip);
-
-                const errUrlIn = document.getElementById('err-stream-url-input');
-                if (errUrlIn) errUrlIn.textContent = paintingCamInputConfig.url;
-
-                const lblDualIn = document.getElementById('dual-label-ip-input');
-                if (lblDualIn) lblDualIn.textContent = ip;
-
-                refreshStreamKamera('input');
-            } else {
-                paintingCamOutputConfig.ip = ip;
-                paintingCamOutputConfig.url = 'http://' + ip + '/stream';
-                paintingCamOutputConfig.captureUrl = 'http://' + ip + '/capture';
-
-                try {
-                    localStorage.setItem('painting_cam_output_ip', ip);
-                    localStorage.setItem('painting_cam_output_url', paintingCamOutputConfig.url);
-                    localStorage.setItem('painting_cam_output_capture_url', paintingCamOutputConfig.captureUrl);
-                    localStorage.setItem('painting_cam_output_config', JSON.stringify(paintingCamOutputConfig));
-                } catch (e) {}
-
-                setVal('cfg-cam-output-ip', ip);
-                setVal('cfg-cam-output-url', paintingCamOutputConfig.url);
-                setVal('cfg-cam-output-capture-url', paintingCamOutputConfig.captureUrl);
-                setVal('cam-quick-ip-output', ip);
-                setVal('quick-reconnect-ip-output', ip);
-
-                const errUrlOut = document.getElementById('err-stream-url-output');
-                if (errUrlOut) errUrlOut.textContent = paintingCamOutputConfig.url;
-
-                const lblDualOut = document.getElementById('dual-label-ip-output');
-                if (lblDualOut) lblDualOut.textContent = ip;
-
-                refreshStreamKamera('output');
-            }
-        }
-
-        // Muat ulang stream kamera (channel: 'input', 'output', atau 'both')
-        function refreshStreamKamera(channel) {
-            const t = Date.now();
-
-            if (channel === 'input' || channel === 'both') {
-                const baseUrl = paintingCamInputConfig.url || ('http://' + paintingCamInputConfig.ip + '/stream');
-                const freshUrl = baseUrl.includes('?') ? (baseUrl + '&_t=' + t) : (baseUrl + '?_t=' + t);
-
-                const imgIn = document.getElementById('cameraStreamImgInput');
-                if (imgIn) imgIn.src = freshUrl;
-                const imgDualIn = document.getElementById('cameraStreamImgDualInput');
-                if (imgDualIn) imgDualIn.src = freshUrl;
-                const prevIn = document.getElementById('settingsCameraPreviewInput');
-                if (prevIn) prevIn.src = freshUrl;
-                const prevDualIn = document.getElementById('settingsCameraPreviewDualInput');
-                if (prevDualIn) prevDualIn.src = freshUrl;
-
-                const overlayIn = document.getElementById('cameraOfflineOverlayInput');
-                if (overlayIn) overlayIn.style.display = 'none';
-                const prevErrIn = document.getElementById('settingsPreviewErrorInput');
-                if (prevErrIn) prevErrIn.style.display = 'none';
-            }
-
-            if (channel === 'output' || channel === 'both') {
-                const baseUrl = paintingCamOutputConfig.url || ('http://' + paintingCamOutputConfig.ip + '/stream');
-                const freshUrl = baseUrl.includes('?') ? (baseUrl + '&_t=' + t) : (baseUrl + '?_t=' + t);
-
-                const imgOut = document.getElementById('cameraStreamImgOutput');
-                if (imgOut) imgOut.src = freshUrl;
-                const imgDualOut = document.getElementById('cameraStreamImgDualOutput');
-                if (imgDualOut) imgDualOut.src = freshUrl;
-                const prevOut = document.getElementById('settingsCameraPreviewOutput');
-                if (prevOut) prevOut.src = freshUrl;
-                const prevDualOut = document.getElementById('settingsCameraPreviewDualOutput');
-                if (prevDualOut) prevDualOut.src = freshUrl;
-
-                const overlayOut = document.getElementById('cameraOfflineOverlayOutput');
-                if (overlayOut) overlayOut.style.display = 'none';
-                const prevErrOut = document.getElementById('settingsPreviewErrorOutput');
-                if (prevErrOut) prevErrOut.style.display = 'none';
-            }
-        }
-
-        // Buka tab snapshot foto JPEG dari ESP32-CAM (/capture)
-        function bukaCaptureTab(channel) {
-            const cfg = (channel === 'output') ? paintingCamOutputConfig : paintingCamInputConfig;
-            const capUrl = cfg.captureUrl || ('http://' + cfg.ip + '/capture');
-            const t = Date.now();
-            const freshCapUrl = capUrl.includes('?') ? (capUrl + '&_t=' + t) : (capUrl + '?_t=' + t);
-            window.open(freshCapUrl, '_blank');
-        }
-
-        // Handler saat stream kamera di popup berhasil terhubung
-        function onCameraStreamSuccess(channel) {
-            cameraStatus[channel] = 'online';
-
-            const overlay = document.getElementById(channel === 'input' ? 'cameraOfflineOverlayInput' : 'cameraOfflineOverlayOutput');
-            if (overlay) overlay.style.display = 'none';
-
-            const dot = document.getElementById(channel === 'input' ? 'dot-channel-input' : 'dot-channel-output');
-            if (dot) {
-                dot.className = 'cam-channel-dot online';
-            }
-            const dotDual = document.getElementById(channel === 'input' ? 'dot-dual-input' : 'dot-dual-output');
-            if (dotDual) {
-                dotDual.className = 'cam-channel-dot online';
-            }
-
-            updateHeaderStatusPill();
-        }
-
-        // Handler saat stream kamera di popup gagal terhubung / error
-        function onCameraStreamError(channel) {
-            cameraStatus[channel] = 'offline';
-
-            const overlay = document.getElementById(channel === 'input' ? 'cameraOfflineOverlayInput' : 'cameraOfflineOverlayOutput');
-            if (overlay) overlay.style.display = 'flex';
-
-            const dot = document.getElementById(channel === 'input' ? 'dot-channel-input' : 'dot-channel-output');
-            if (dot) {
-                dot.className = 'cam-channel-dot offline';
-            }
-            const dotDual = document.getElementById(channel === 'input' ? 'dot-dual-input' : 'dot-dual-output');
-            if (dotDual) {
-                dotDual.className = 'cam-channel-dot offline';
-            }
-
-            updateHeaderStatusPill();
-        }
-
-        // Handler saat stream kamera di preview pengaturan berhasil
-        function onSettingsPreviewSuccess(channel) {
-            const errBox = document.getElementById(channel === 'input' ? 'settingsPreviewErrorInput' : 'settingsPreviewErrorOutput');
-            if (errBox) errBox.style.display = 'none';
-
-            const pill = document.getElementById(channel === 'input' ? 'cfg-cam-input-status-pill' : 'cfg-cam-output-status-pill');
-            if (pill) {
-                pill.textContent = 'ONLINE';
-                pill.style.color = '#16a34a';
-                pill.style.background = '#dcfce7';
-                pill.style.borderColor = '#bbf7d0';
-            }
-        }
-
-        // Handler saat stream kamera di preview pengaturan error
-        function onSettingsPreviewError(channel) {
-            const errBox = document.getElementById(channel === 'input' ? 'settingsPreviewErrorInput' : 'settingsPreviewErrorOutput');
-            if (errBox) errBox.style.display = 'flex';
-
-            const pill = document.getElementById(channel === 'input' ? 'cfg-cam-input-status-pill' : 'cfg-cam-output-status-pill');
-            if (pill) {
-                pill.textContent = 'BELUM TERHUBUNG';
-                pill.style.color = '#dc2626';
-                pill.style.background = '#fee2e2';
-                pill.style.borderColor = '#fca5a5';
-            }
-        }
-
-        // Simpan seluruh konfigurasi kamera (Input & Output) dari tab pengaturan
-        function simpanPengaturanKameraLengkap() {
-            const getVal = (id, def) => { const el = document.getElementById(id); return el ? el.value.trim() : def; };
-
-            paintingCamInputConfig.ip = getVal('cfg-cam-input-ip', '192.168.1.88');
-            paintingCamInputConfig.url = getVal('cfg-cam-input-url', 'http://' + paintingCamInputConfig.ip + '/stream');
-            paintingCamInputConfig.captureUrl = getVal('cfg-cam-input-capture-url', 'http://' + paintingCamInputConfig.ip + '/capture');
-
-            paintingCamOutputConfig.ip = getVal('cfg-cam-output-ip', '192.168.1.89');
-            paintingCamOutputConfig.url = getVal('cfg-cam-output-url', 'http://' + paintingCamOutputConfig.ip + '/stream');
-            paintingCamOutputConfig.captureUrl = getVal('cfg-cam-output-capture-url', 'http://' + paintingCamOutputConfig.ip + '/capture');
-
-            try {
-                localStorage.setItem('painting_cam_input_ip', paintingCamInputConfig.ip);
-                localStorage.setItem('painting_cam_input_url', paintingCamInputConfig.url);
-                localStorage.setItem('painting_cam_input_capture_url', paintingCamInputConfig.captureUrl);
-                localStorage.setItem('painting_cam_input_config', JSON.stringify(paintingCamInputConfig));
-
-                localStorage.setItem('painting_cam_output_ip', paintingCamOutputConfig.ip);
-                localStorage.setItem('painting_cam_output_url', paintingCamOutputConfig.url);
-                localStorage.setItem('painting_cam_output_capture_url', paintingCamOutputConfig.captureUrl);
-                localStorage.setItem('painting_cam_output_config', JSON.stringify(paintingCamOutputConfig));
-            } catch (e) {}
-
-            muatPengaturanKamera();
-            refreshStreamKamera('both');
-
-            const msgEl = document.getElementById('cfg-cam-status-msg');
-            if (msgEl) {
-                msgEl.style.display = 'block';
-                msgEl.style.background = '#dcfce7';
-                msgEl.style.color = '#15803d';
-                msgEl.style.border = '1px solid #bbf7d0';
-                msgEl.textContent = '✅ Konfigurasi Kamera Input & Output ESP32-CAM berhasil disimpan dan diterapkan!';
-                setTimeout(() => { msgEl.style.display = 'none'; }, 4000);
-            }
-        }
-
-        // Tab switcher di halaman pengaturan
-        function switchSettingsTab(tabName) {
-            document.querySelectorAll('.settings-tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.settings-tab-panel').forEach(panel => panel.style.display = 'none');
-
-            const activeBtn = document.getElementById('tab-btn-' + tabName);
-            const activePanel = document.getElementById('tab-panel-' + tabName);
-            if (activeBtn) activeBtn.classList.add('active');
-            if (activePanel) activePanel.style.display = 'block';
-        }
-
-        function bukaSettingKameraDariPopup() {
-            navigateTo(currentLine, 'pengaturan');
-            switchSettingsTab('camera');
-        }
-
-        // ===== FLOATING POP-UP CONTROLLER: BUKA, TUTUP, MEMBESAR, MINIMIZE, DRAGGABLE =====
+    
+        // ===== FLOATING & DRAGGABLE CAMERA POPUP HELPERS =====
         function bukaCameraPopup() {
             const widget = document.getElementById('camera-float-widget');
             if (!widget) return;
@@ -6846,7 +6658,21 @@
             if (btnCam) btnCam.classList.add('active');
             localStorage.setItem('painting_cam_open', '1');
 
-            terapkanUrlKeSemuaStream();
+            // Muat stream ESP32-CAM secara otomatis
+            const imgInput = document.getElementById('cameraStreamImgInput');
+            if (imgInput && (!imgInput.src || imgInput.src.endsWith('/'))) {
+                fetch('/api/get-cam-ip').then(r => r.json()).then(data => {
+                    const ip = (data && data.ip) ? data.ip.trim() : (localStorage.getItem('ip_cam') || '192.168.1.9');
+                    imgInput.src = 'http://' + ip + ':81/stream';
+                    const ipInput = document.getElementById('cam-quick-ip-input');
+                    if (ipInput) ipInput.value = ip;
+                    const errLabel = document.getElementById('err-stream-url-input');
+                    if (errLabel) errLabel.textContent = 'http://' + ip + ':81/stream';
+                }).catch(() => {
+                    const ip = localStorage.getItem('ip_cam') || '192.168.1.9';
+                    imgInput.src = 'http://' + ip + ':81/stream';
+                });
+            }
         }
 
         function tutupCameraPopup() {
@@ -6868,15 +6694,56 @@
             }
         }
 
+        function onCameraStreamSuccess(ch) {
+            const overlay = document.getElementById('cameraOfflineOverlayInput');
+            if (overlay) overlay.style.display = 'none';
+            const dot = document.getElementById('cam-status-dot');
+            if (dot) { dot.className = 'camera-status-dot pulse-online'; dot.style.background = '#22c55e'; }
+            const pill = document.getElementById('cam-stream-status-pill');
+            if (pill) { pill.textContent = 'ONLINE (STREAMING)'; pill.style.color = '#4ade80'; }
+        }
+
+        function onCameraStreamError(ch) {
+            const overlay = document.getElementById('cameraOfflineOverlayInput');
+            if (overlay) overlay.style.display = 'flex';
+            const dot = document.getElementById('cam-status-dot');
+            if (dot) { dot.className = 'camera-status-dot'; dot.style.background = '#ef4444'; }
+            const pill = document.getElementById('cam-stream-status-pill');
+            if (pill) { pill.textContent = 'OFFLINE'; pill.style.color = '#ef4444'; }
+        }
+
+        function sambungkanIpCepat(ch, inputId) {
+            const input = document.getElementById(inputId);
+            if (!input || !input.value.trim()) return alert('Masukkan IP Kamera!');
+            const ip = input.value.trim();
+            const imgInput = document.getElementById('cameraStreamImgInput');
+            if (imgInput) {
+                imgInput.src = 'http://' + ip + ':81/stream?t=' + Date.now();
+                const errLabel = document.getElementById('err-stream-url-input');
+                if (errLabel) errLabel.textContent = 'http://' + ip + ':81/stream';
+            }
+        }
+
+        function refreshStreamKamera(ch) {
+            const imgInput = document.getElementById('cameraStreamImgInput');
+            if (imgInput && imgInput.src) {
+                const base = imgInput.src.split('?')[0];
+                imgInput.src = base + '?t=' + Date.now();
+            }
+        }
+
+        function bukaCaptureTab(ch) {
+            const ipInput = document.getElementById('cam-quick-ip-input');
+            const ip = ipInput ? ipInput.value.trim() : '192.168.1.9';
+            window.open('http://' + ip + '/capture?t=' + Date.now(), '_blank');
+        }
+
         function toggleMembesarKamera(forceEnlarge = null) {
             const widget = document.getElementById('camera-float-widget');
             if (!widget) return;
-
             const iconExpand = document.getElementById('cam-icon-expand');
             const iconCompress = document.getElementById('cam-icon-compress');
-
             const willEnlarge = (forceEnlarge !== null) ? forceEnlarge : !widget.classList.contains('enlarged');
-
             if (willEnlarge) {
                 widget.classList.add('enlarged');
                 if (iconExpand) iconExpand.style.display = 'none';
@@ -6894,105 +6761,40 @@
             widget.classList.toggle('minimized');
         }
 
-        // Inisialisasi Draggable Header Widget
+        function bukaSettingKameraDariPopup() {
+            navigateTo(currentLine, 'ai-vision');
+        }
+
         function initDraggableCameraPopup() {
             const widget = document.getElementById('camera-float-widget');
             const handle = document.getElementById('cameraDragHandle');
             if (!widget || !handle) return;
-
-            // Restore posisi tersimpan jika ada
-            try {
-                const savedPos = localStorage.getItem('painting_cam_pos');
-                if (savedPos) {
-                    const pos = JSON.parse(savedPos);
-                    if (pos.left !== undefined && pos.top !== undefined) {
-                        widget.style.left = pos.left + 'px';
-                        widget.style.top = pos.top + 'px';
-                        widget.style.right = 'auto';
-                        widget.style.bottom = 'auto';
-                    }
-                }
-            } catch (e) {}
-
-            let isDragging = false;
-            let startX, startY, initLeft, initTop;
-
-            function onStart(e) {
-                if (e.target.closest('button') || e.target.closest('input')) return;
-
+            let isDragging = false, startX = 0, startY = 0, initLeft = 0, initTop = 0;
+            handle.addEventListener('mousedown', (e) => {
+                if (e.target.closest('button')) return;
                 isDragging = true;
-                widget.classList.add('is-dragging');
-
-                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-
-                startX = clientX;
-                startY = clientY;
-
                 const rect = widget.getBoundingClientRect();
                 initLeft = rect.left;
                 initTop = rect.top;
-
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onEnd);
-                document.addEventListener('touchmove', onMove, { passive: false });
-                document.addEventListener('touchend', onEnd);
-            }
-
-            function onMove(e) {
+                startX = e.clientX;
+                startY = e.clientY;
+                document.body.style.userSelect = 'none';
+            });
+            window.addEventListener('mousemove', (e) => {
                 if (!isDragging) return;
-                if (e.cancelable) e.preventDefault();
-
-                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
-
-                const deltaX = clientX - startX;
-                const deltaY = clientY - startY;
-
-                let newLeft = initLeft + deltaX;
-                let newTop = initTop + deltaY;
-
-                const maxLeft = Math.max(10, window.innerWidth - widget.offsetWidth - 12);
-                const maxTop = Math.max(50, window.innerHeight - widget.offsetHeight - 12);
-
-                newLeft = Math.max(12, Math.min(newLeft, maxLeft));
-                newTop = Math.max(56, Math.min(newTop, maxTop));
-
-                widget.style.left = newLeft + 'px';
-                widget.style.top = newTop + 'px';
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
                 widget.style.right = 'auto';
                 widget.style.bottom = 'auto';
-            }
-
-            function onEnd() {
-                if (!isDragging) return;
-                isDragging = false;
-                widget.classList.remove('is-dragging');
-
-                document.removeEventListener('mousemove', onMove);
-                document.removeEventListener('mouseup', onEnd);
-                document.removeEventListener('touchmove', onMove);
-                document.removeEventListener('touchend', onEnd);
-
-                const rect = widget.getBoundingClientRect();
-                try {
-                    localStorage.setItem('painting_cam_pos', JSON.stringify({ left: Math.round(rect.left), top: Math.round(rect.top) }));
-                } catch (e) {}
-            }
-
-            handle.addEventListener('mousedown', onStart);
-            handle.addEventListener('touchstart', onStart, { passive: true });
+                widget.style.left = Math.max(10, Math.min(window.innerWidth - widget.offsetWidth - 10, initLeft + dx)) + 'px';
+                widget.style.top = Math.max(10, Math.min(window.innerHeight - 60, initTop + dy)) + 'px';
+            });
+            window.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    document.body.style.userSelect = '';
+                }
+            });
         }
-
-        // Jalankan Inisialisasi Kamera saat DOM Siap
-        document.addEventListener('DOMContentLoaded', () => {
-            initDraggableCameraPopup();
-            muatPengaturanKamera();
-            sinkronkanTampilanOperator();
-
-            const openPref = localStorage.getItem('painting_cam_open');
-            if (openPref !== '0') {
-                bukaCameraPopup();
-            }
-        });
+        document.addEventListener('DOMContentLoaded', initDraggableCameraPopup);
     </script>

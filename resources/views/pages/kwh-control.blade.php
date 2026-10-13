@@ -110,15 +110,15 @@
         </div>
     </div>
 
-    <!-- ===== ROW 2: PCB PRODUCTION CONSUMPTION TOTAL (DAILY & MONTHLY) ===== -->
+    <!-- ===== ROW 2: PAINTING PRODUCTION CONSUMPTION TOTAL (DAILY & MONTHLY) ===== -->
     <div class="kwh-section-title-group">
-        <h4 class="kwh-section-heading">PCB Production Consumption Total — Line 3</h4>
+        <h4 class="kwh-section-heading">Painting Production Consumption Total</h4>
     </div>
     <div class="kwh-charts-grid">
-        <!-- Daily PCB Production Consumption Total -->
+        <!-- Daily Painting Production Consumption Total -->
         <div class="kwh-card kwh-card-chart">
             <div class="kwh-card-header">
-                <h3 class="kwh-card-title">Daily PCB Production Consumption Total</h3>
+                <h3 class="kwh-card-title">Daily Painting Production Consumption Total</h3>
                 <div class="kwh-date-badge" id="kwh-badge-daily-consumption">{{ date('d/m/Y') }}</div>
             </div>
             <div class="kwh-card-legend-center">
@@ -130,10 +130,10 @@
             </div>
         </div>
 
-        <!-- Monthly PCB Production Consumption Total -->
+        <!-- Monthly Painting Production Consumption Total -->
         <div class="kwh-card kwh-card-chart">
             <div class="kwh-card-header">
-                <h3 class="kwh-card-title">Monthly PCB Production Consumption Total</h3>
+                <h3 class="kwh-card-title">Monthly Painting Production Consumption Total</h3>
                 <div class="kwh-date-badge" id="kwh-badge-monthly-consumption">{{ date('d/m/Y') }}</div>
             </div>
             <div class="kwh-card-legend-center">
@@ -146,15 +146,15 @@
         </div>
     </div>
 
-    <!-- ===== ROW 3: PCB PRODUCTION ENERGY COST TOTAL (DAILY & MONTHLY) ===== -->
+    <!-- ===== ROW 3: PAINTING PRODUCTION ENERGY COST TOTAL (DAILY & MONTHLY) ===== -->
     <div class="kwh-section-title-group">
-        <h4 class="kwh-section-heading">PCB Production Energy Cost Total — Line 3</h4>
+        <h4 class="kwh-section-heading">Painting Production Energy Cost Total</h4>
     </div>
     <div class="kwh-charts-grid">
-        <!-- Daily PCB Production Energy Cost Total -->
+        <!-- Daily Painting Production Energy Cost Total -->
         <div class="kwh-card kwh-card-chart">
             <div class="kwh-card-header">
-                <h3 class="kwh-card-title">Daily PCB Production Energy Cost Total</h3>
+                <h3 class="kwh-card-title">Daily Painting Production Energy Cost Total</h3>
                 <div class="kwh-date-badge" id="kwh-badge-daily-cost">{{ date('d/m/Y') }}</div>
             </div>
             <div class="kwh-card-legend-center">
@@ -169,10 +169,10 @@
             </div>
         </div>
 
-        <!-- Monthly PCB Production Energy Cost Total -->
+        <!-- Monthly Painting Production Energy Cost Total -->
         <div class="kwh-card kwh-card-chart">
             <div class="kwh-card-header">
-                <h3 class="kwh-card-title">Monthly PCB Production Energy Cost Total</h3>
+                <h3 class="kwh-card-title">Monthly Painting Production Energy Cost Total</h3>
                 <div class="kwh-date-badge" id="kwh-badge-monthly-cost">{{ date('d/m/Y') }}</div>
             </div>
             <div class="kwh-card-legend-center">

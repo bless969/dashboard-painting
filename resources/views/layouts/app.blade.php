@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Preload font lokal offline (Super cepat, 0ms latency, tanpa butuh internet di PC Server) -->
-    <link rel="preload" href="{{ asset('assets/fonts/Inter-Variable.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="stylesheet" href="{{ asset('style.css') }}?v={{ @filemtime(public_path('style.css')) ?: time() }}">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    <link rel="alternate icon" type="image/x-icon" href="{{ asset('favicon.ico') }}">
+
+    <!-- CSS Global Dashboard -->
+    <link rel="stylesheet" href="{{ asset('style.css') }}?v={{ time() }}">
+
+    <!-- Chart.js -->
     <script src="{{ asset('assets/js/chart.umd.js') }}"></script>
     <script>
         // Fallback jika asset lokal bermasalah
@@ -15,6 +19,7 @@
         }
     </script>
     <title>@yield('title', 'Dashboard Produksi — Line Painting')</title>
+
 </head>
 <body class="line-painting" data-line="Painting">
 
@@ -34,7 +39,7 @@
                 <span id="logo-subtitle">
                     @if($view_aktif === 'machine-control') Machine Control — Painting
                     @elseif($view_aktif === 'pengaturan') Pengaturan — Painting
-                    @elseif($view_aktif === 'kwh-control') KWh Meter — Painting
+                    @elseif($view_aktif === 'kwh-control') KWh Meter — Line Painting
                     @elseif($view_aktif === 'ai-vision') AI Vision & Kamera — Painting
                     @elseif($view_aktif === 'chart') Chart — Painting
                     @elseif(in_array($view_aktif, ['riwayat', 'detail', 'detail-shift'])) Riwayat — Painting
@@ -44,7 +49,7 @@
             </div>
         </div>
 
-        <div class="nav-section-title">Menu Utama</div>
+        <div class="nav-section-title">Menu Painting</div>
         <a class="nav-item {{ ($view_aktif === 'dashboard') ? 'active' : '' }}"
            data-view="dashboard"
            href="{{ route('dashboard', ['line' => 'Painting']) }}"
@@ -94,7 +99,7 @@
            href="{{ route('pengaturan', ['line' => 'Painting']) }}"
            onclick="return navigateSidebarPengaturan(event)">
             <span class="icon-nav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
-            <span class="nav-line-label">Pengaturan &amp; Kamera</span>
+            <span class="nav-line-label">Pengaturan</span>
         </a>
         <div class="sidebar-footer">
             <div class="sidebar-status">
@@ -131,21 +136,8 @@
                 </div>
             </div>
 
-            <!-- SISI KANAN: Tombol Kamera Live, Logo Gobel Solid & Tombol Fullscreen, serta Tombol Aksi di Kiri Logo -->
+            <!-- SISI KANAN: Logo Gobel Solid & Tombol Fullscreen, serta Tombol Aksi di Bawahnya -->
             <div class="topbar-actions-column">
-                <!-- Tombol aksi (Kembali ke Dashboard / Download Excel) ditaruh di KIRI logo agar sejajar -->
-                <div id="action-buttons" class="topbar-actions-bottom">
-                    @if(in_array($view_aktif, ['detail', 'detail-shift']))
-                        <a href="{{ route('riwayat', ['line' => 'Painting']) }}" class="btn-nav-action btn-light" data-nav data-line="Painting" data-view="riwayat">&larr; Kembali ke Riwayat</a>
-                        @if($view_aktif === 'detail')
-                            <a href="{{ url('export/export_excel.php?line=Painting&tanggal=' . ($tanggal ?? date('Y-m-d'))) }}" class="btn-nav-action btn-green">&#8681; Download Excel</a>
-                        @endif
-                    @elseif($view_aktif === 'riwayat')
-                        <a href="{{ route('dashboard', ['line' => 'Painting']) }}" class="btn-nav-action btn-light" data-nav data-line="Painting" data-view="dashboard">&larr; Kembali ke Dashboard</a>
-                        <a href="{{ url('export/export_excel.php?line=Painting') }}" class="btn-nav-action btn-green">&#8681; Download Histori (Excel)</a>
-                    @endif
-                </div>
-
                 <div class="topbar-actions-top">
                     <!-- Tombol Cepat Buka/Tutup Monitor Kamera ESP-CAM Live -->
                     <button type="button" class="btn-topbar-camera" id="btnTopbarCamera" onclick="toggleCameraPopup()" title="Buka / Sembunyikan Monitor Kamera ESP-CAM Live (Dapat Digeser & Diperbesar)">
@@ -169,6 +161,21 @@
                         <span id="fs-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></span>
                     </button>
                 </div>
+
+                <!-- Tombol aksi (Kembali ke Dashboard / Download Excel) ditaruh di bawah Logo agar rapi -->
+                <div id="action-buttons" class="topbar-actions-bottom">
+                    @if(in_array($view_aktif, ['detail', 'detail-shift']))
+                        <a href="{{ route('riwayat', ['line' => 'Painting']) }}" class="btn-nav-action btn-light" data-nav data-line="Painting" data-view="riwayat">&larr; Kembali ke Riwayat</a>
+                        @if($view_aktif === 'detail')
+                            <a href="{{ url('export/export_excel.php?line=Painting&tanggal=' . ($tanggal ?? date('Y-m-d'))) }}" class="btn-nav-action btn-green">&#8681; Download Excel</a>
+                        @endif
+                    @elseif(in_array($view_aktif, ['machine-control', 'chart', 'kwh-control', 'ai-vision']))
+                        <a href="{{ route('dashboard', ['line' => 'Painting']) }}" class="btn-nav-action btn-light" data-nav data-line="Painting" data-view="dashboard">&larr; Kembali ke Dashboard</a>
+                    @elseif($view_aktif === 'riwayat')
+                        <a href="{{ route('dashboard', ['line' => 'Painting']) }}" class="btn-nav-action btn-light" data-nav data-line="Painting" data-view="dashboard">&larr; Kembali ke Dashboard</a>
+                        <button type="button" class="btn-nav-action btn-green" onclick="bukaModalExportExcel()">&#8681; Download Histori (Excel)</button>
+                    @endif
+                </div>
             </div>
         </div>
 
@@ -186,6 +193,8 @@
     @include('modals.detail-performance')
     @include('modals.detail-ct')
     @include('modals.manage-part')
+    @include('modals.pilih-shift')
+    @include('modals.export-excel')
 
     <!-- ===== JAVASCRIPT GLOBAL & CORE SCRIPTS ===== -->
     @include('layouts.scripts')

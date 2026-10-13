@@ -24,23 +24,30 @@
         </div>
 
         <div style="display:flex; gap:20px; flex-wrap:wrap;">
-            <!-- Kolom Pilihan Training (Menggantikan Layar Hitam) -->
-            <div style="flex:1; min-width:300px; background:#f8fafc; border:1.5px solid #dbe4f3; border-radius:10px; padding:20px; display:flex; flex-direction:column;">
-                <label style="display:block; font-size:15px; font-weight:600; color:#0d3b8c; margin-bottom:12px;">Pilih Jenis Training:</label>
-                <select id="training-type" class="filter-select" style="width:100%; padding:14px; font-size:15px; border-radius:8px; border:1px solid #cbd5e1; outline:none; background-color:#fff; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                    <option value="input">Training Input</option>
-                    <option value="output">Training Output</option>
-                </select>
-                
-                <div style="margin-top:15px; font-size:13px; color:#64748b; line-height:1.5;">
-                    Silakan pilih mode training yang sesuai dengan model Teachable Machine Anda. 
-                    Mode ini menentukan jenis perhitungan atau validasi barang produksi yang sedang berjalan.
+            <!-- Kolom Layar Video Stream & Pilihan Training -->
+            <div style="flex:1.2; min-width:320px; display:flex; flex-direction:column; gap:16px;">
+                <!-- Layar Video Stream ESP32-CAM -->
+                <div style="background:#0b1120; border:2px solid #1e293b; border-radius:12px; overflow:hidden; position:relative; min-height:360px; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 20px rgba(0,0,0,0.18);">
+                    <div id="ai-video-placeholder" style="color:#94a3b8; font-size:13.5px; text-align:center; padding:24px; display:flex; flex-direction:column; align-items:center; gap:10px;">
+                        <span style="font-size:36px;">📷</span>
+                        <span style="font-weight:600; color:#e2e8f0;">Layar Kamera Live ESP32-CAM</span>
+                        <span style="font-size:12px; color:#64748b; max-width:300px; line-height:1.4;">
+                            Stream belum aktif. Klik tombol <strong style="color:#38bdf8;">'Buka Stream'</strong> di panel samping untuk memulai tayangan.
+                        </span>
+                    </div>
+                    <img id="ai-mjpeg-stream" crossorigin="anonymous" style="display:none; width:100%; height:auto; object-fit:contain; max-height:480px; border-radius:10px;" alt="ESP32-CAM Stream">
                 </div>
 
-                <!-- Elemen tersembunyi agar fungsi JS tetap berjalan -->
-                <div style="display:none;">
-                    <span id="ai-video-placeholder"></span>
-                    <img id="ai-mjpeg-stream" crossorigin="anonymous" alt="ESP32-CAM Stream">
+                <!-- Card Pilihan Training -->
+                <div style="background:#f8fafc; border:1.5px solid #dbe4f3; border-radius:10px; padding:16px; display:flex; flex-direction:column; gap:8px;">
+                    <label style="display:block; font-size:14px; font-weight:700; color:#0d3b8c;">Pilih Jenis Training AI:</label>
+                    <select id="training-type" class="filter-select" style="width:100%; padding:10px 14px; font-size:14px; border-radius:8px; border:1px solid #cbd5e1; outline:none; background-color:#fff;">
+                        <option value="input">Training Input (Wadah Masuk)</option>
+                        <option value="output">Training Output (Wadah Selesai)</option>
+                    </select>
+                    <div style="font-size:12px; color:#64748b; line-height:1.4; margin-top:4px;">
+                        Mode ini menentukan klasifikasi perhitungan barang masuk atau keluar yang diidentifikasi oleh model Teachable Machine.
+                    </div>
                 </div>
             </div>
             
@@ -106,6 +113,17 @@
     if (savedTmUrl) document.getElementById('tm-url-input').value = savedTmUrl;
     if (savedStreamUrl) document.getElementById('stream-url-input').value = savedStreamUrl;
 
+    // Auto-fetch active IP dari master-painting jika belum ada
+    fetch('/api/get-cam-ip').then(r => r.json()).then(data => {
+        if (data && data.ip) {
+            const targetUrl = 'http://' + data.ip.trim() + ':81/stream';
+            const input = document.getElementById('stream-url-input');
+            if (input && (!input.value || input.value.includes('192.168.1.100') || input.value.includes('192.168.1.88'))) {
+                input.value = targetUrl;
+            }
+        }
+    }).catch(() => {});
+
     // --- FITUR SINKRONISASI DARI MASTER-PAINTING ---
     let lastAutoConnectedUrl = null;
     
@@ -113,8 +131,15 @@
         try {
             const res = await fetch('/api/get-cam-ip');
             const data = await res.json();
-            if (data.ip) {
-                const targetUrl = 'http://' + data.ip + ':81/stream';
+            let camIp = (data && data.ip) ? data.ip.trim() : '';
+
+            // Fallback cerdas jika belum pernah diset dari master-painting
+            if (!camIp) {
+                camIp = localStorage.getItem('painting_cam_input_ip') || '192.168.1.88';
+            }
+
+            if (camIp) {
+                const targetUrl = 'http://' + camIp + ':81/stream';
                 const currentInput = document.getElementById('stream-url-input').value.trim();
                 const camStatus = document.getElementById('ai-cam-status').innerText;
                 
@@ -129,9 +154,9 @@
                     btnStartStream.click();
                 }
 
-                alert('Berhasil menyinkronkan konfigurasi dengan master-painting! URL Stream telah diperbarui.');
+                alert('Berhasil menyinkronkan konfigurasi kamera! URL Stream: ' + targetUrl);
             } else {
-                alert('Gagal mendapatkan IP dari master-painting. Pastikan master-painting aktif.');
+                alert('Gagal mendapatkan IP dari master-painting. Pastikan tombol Start Sistem di master-painting sudah diklik.');
             }
         } catch (e) {
             alert('Gagal terhubung ke server saat menyinkronkan konfigurasi.');

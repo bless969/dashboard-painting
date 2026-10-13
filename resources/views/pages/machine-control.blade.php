@@ -133,10 +133,10 @@
 
     <div class="panel">
         <div class="panel-header-row">
-            <div class="panel-title">Ringkasan Alasan Stop Hari Ini</div>
+            <div class="panel-title" id="alasan-ringkasan-title">Ringkasan Alasan Stop (Shift Aktif)</div>
             <span class="filter-select" style="cursor:default;" id="alasan-ringkasan-line-label">-</span>
         </div>
-        <div class="settings-row-desc" style="margin-bottom:16px;">Total waktu berhenti pada line ini hari ini, dikelompokkan berdasarkan kategori dan alasan.</div>
+        <div class="settings-row-desc" id="alasan-ringkasan-desc" style="margin-bottom:16px;">Total waktu berhenti pada shift ini, dikelompokkan berdasarkan kategori dan alasan.</div>
 
         <table class="tabel-alasan-stop" id="tabel-ringkasan-alasan-stop">
             <thead>

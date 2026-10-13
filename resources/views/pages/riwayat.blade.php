@@ -1,21 +1,13 @@
 <div id="view-riwayat" style="{{ $view_aktif !== 'riwayat' ? 'display:none;' : '' }}">
-    <!-- Opsi Bar: pilih mau lihat Riwayat Produksi, Riwayat Machine Control, atau Riwayat per Shift -->
-    <div class="riwayat-opsi-bar" id="riwayat-opsi-bar">
+    <!-- Opsi Bar: Pilihan Antara Riwayat Produksi vs Riwayat Tabel Hasil Produksi -->
+    <div class="riwayat-opsi-bar">
         <button type="button" class="riwayat-opsi-btn aktif" id="opsi-produksi" onclick="pilihTabRiwayat('produksi')">
-            <svg viewBox="0 0 24 24" width="15" height="15"><path d="M4 19h16M6 15v4M10 11v8M14 7v12M18 3v16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+            <svg viewBox="0 0 24 24" width="15" height="15"><path d="M3 3v18h18" stroke="currentColor" stroke-width="2" fill="none"/><path d="M7 14l4-4 4 2 5-6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
             Riwayat Produksi
         </button>
         <button type="button" class="riwayat-opsi-btn" id="opsi-mc" onclick="pilihTabRiwayat('mc')">
             <svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 8v4l3 2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
             Riwayat Tabel Hasil Produksi
-        </button>
-        <button type="button" class="riwayat-opsi-btn" id="opsi-shift" onclick="pilihTabRiwayat('shift')">
-            <svg viewBox="0 0 24 24" width="15" height="15"><rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M3 10h18M8 2v4M16 2v4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
-            Riwayat per Shift
-        </button>
-        <button type="button" class="riwayat-opsi-btn" id="opsi-stop" onclick="pilihTabRiwayat('stop')">
-            <svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 7v5M12 16v.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            Riwayat Alasan Stop & Patlite
         </button>
     </div>
 
@@ -89,17 +81,18 @@
 
         <div class="panel">
             <div class="panel-header-row" style="margin-bottom:12px;">
-                <div class="panel-title">Histori Data Shift</div>
-                <div style="font-size:12px; color:#9a9ab0;">Klik baris tanggal untuk melihat detail sesi produksi</div>
+                <div class="panel-title">Histori Data Produksi</div>
+                <div style="font-size:12px; color:#9a9ab0;">Klik tombol <strong>Lihat Detail</strong> untuk memilih 3 sesi shift (Pagi, Sore, Malam)</div>
             </div>
             <table id="tabel-histori">
                 <thead>
                     <tr>
                         <th style="width:30px;"></th>
                         <th>Tanggal</th>
-                        <th>Shift</th>
-                        <th>Detail</th>
-                        <th>EFF</th>
+                        <th>Total Input</th>
+                        <th>Total Output</th>
+                        <th>EFF Rata-rata</th>
+                        <th>Detail Sesi Shift</th>
                         <th>Aksi</th>
                     </tr>
                 </thead>
@@ -143,85 +136,6 @@
                 Belum ada riwayat kalkulasi untuk tanggal ini.
             </div>
             <div id="daftar-riwayat-ph" class="riwayat-ph-list"></div>
-        </div>
-    </div>
-
-    <!-- ===== TAB: RIWAYAT PER SHIFT ===== -->
-    <div id="riwayat-tab-shift" style="display:none;">
-        <div class="panel" id="panel-riwayat-shift">
-            <div class="panel-header-row">
-                <div class="panel-title">Riwayat per Shift — <span id="rs-tgl-label" style="color:#0d3b8c;">Hari Ini</span></div>
-                <div class="panel-controls">
-                    <div class="date-picker-wrapper">
-                        <button type="button" class="filter-select" id="btn-tanggal-rs" onclick="bukaPickerRiwayatShift()">
-                            <svg viewBox="0 0 24 24" width="14" height="14" style="stroke:currentColor;fill:none;stroke-width:2;vertical-align:-2px;margin-right:6px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                            <span id="teks-tanggal-rs">Hari Ini</span>
-                        </button>
-                        <input type="date" id="filter-tanggal-rs" onchange="loadRiwayatShift()" style="position:absolute; opacity:0; pointer-events:none; width:1px; height:1px;">
-                    </div>
-                </div>
-            </div>
-            <div class="settings-row-desc" style="margin-bottom:14px;">
-                Total Product/OK/NG per shift (Pagi/Sore/Malam) untuk tanggal terpilih. Kalau part diganti beberapa kali dalam satu shift, angkanya digabung jadi satu baris.
-            </div>
-            <div id="daftar-riwayat-shift" class="riwayat-shift-list"></div>
-        </div>
-    </div>
-
-    <!-- ===== TAB: RIWAYAT ALASAN STOP & PATLITE ===== -->
-    <div id="riwayat-tab-stop" style="display:none;">
-        <div class="panel" id="panel-riwayat-stop">
-            <div class="panel-header-row">
-                <div class="panel-title">Riwayat Alasan Stop & Warna Patlite — <span id="rstop-tgl-label" style="color:#0d3b8c;">Hari Ini</span></div>
-                <div class="panel-controls">
-                    <div class="date-picker-wrapper" style="display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                        <button type="button" class="riwayat-quick-btn" onclick="setTanggalRStop('hari_ini')" style="padding:6px 12px; font-size:12px;">Hari Ini</button>
-                        <button type="button" class="riwayat-quick-btn" onclick="setTanggalRStop('kemarin')" style="padding:6px 12px; font-size:12px;">Kemarin</button>
-                        <button type="button" class="riwayat-quick-btn reset" onclick="setTanggalRStop('semua')" style="padding:6px 12px; font-size:12px;">Semua Data</button>
-                        <button type="button" class="filter-select" id="btn-tanggal-rstop" onclick="bukaPickerRiwayatStop()">
-                            <svg viewBox="0 0 24 24" width="14" height="14" style="stroke:currentColor;fill:none;stroke-width:2;vertical-align:-2px;margin-right:6px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                            <span id="teks-tanggal-rstop">Hari Ini</span>
-                        </button>
-                        <input type="date" id="filter-tanggal-rstop" onchange="loadRiwayatStop()" style="position:absolute; opacity:0; pointer-events:none; width:1px; height:1px;">
-                    </div>
-                </div>
-            </div>
-            <div class="settings-row-desc" style="margin-bottom:14px;">
-                Histori kronologis seluruh mesin berhenti beserta kategori, alasan stop, durasi, dan <strong>warna lampu Patlite</strong> saat kejadian dicatat.
-            </div>
-
-            <div class="riwayat-summary" style="margin-bottom:16px;">
-                <div class="summary-chip">
-                    <span class="chip-label">Total Kejadian Stop</span>
-                    <span class="chip-value" id="rstop-total-kejadian">0</span>
-                </div>
-                <div class="summary-chip">
-                    <span class="chip-label">Total Durasi Stop</span>
-                    <span class="chip-value" id="rstop-total-durasi">0 mnt</span>
-                </div>
-                <div class="summary-chip highlight">
-                    <span class="chip-label">Stop Kategori Loss</span>
-                    <span class="chip-value" id="rstop-total-loss">0 mnt</span>
-                </div>
-            </div>
-
-            <div style="overflow-x:auto;">
-                <table class="tabel-alasan-stop" id="tabel-riwayat-stop-lengkap" style="width:100%;">
-                    <thead>
-                        <tr>
-                            <th style="width:40px;">No</th>
-                            <th>Waktu & Tanggal</th>
-                            <th>Kategori</th>
-                            <th>Alasan Stop</th>
-                            <th>Warna Patlite</th>
-                            <th>Durasi</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbody-riwayat-stop-lengkap">
-                        <tr><td colspan="6" class="ct-detail-empty">Memuat data riwayat stop...</td></tr>
-                    </tbody>
-                </table>
-            </div>
         </div>
     </div>
 </div>
