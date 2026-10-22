@@ -920,6 +920,204 @@
             } catch (err) {
                 console.warn('updateData error:', err);
             }
+            if (typeof updateTargetBulanan === 'function') {
+                updateTargetBulanan();
+            }
+        }
+
+        // ===== LOGIKA TARGET BULANAN (PCS) & PENCAPAIAN (%) =====
+        let cacheOutputBulanIni = 0;
+        let lastFetchBulanTime = 0;
+
+        function getBulanAktifYYYYMM() {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            return `${yyyy}-${mm}`;
+        }
+
+        function formatNamaBulanIndo(bulanFormat) {
+            const namaBulan = [
+                'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+            ];
+            const [thn, bln] = (bulanFormat || getBulanAktifYYYYMM()).split('-');
+            const idx = parseInt(bln, 10) - 1;
+            return `${namaBulan[idx] || 'Bulan Ini'} ${thn}`;
+        }
+
+        async function updateTargetBulanan() {
+            const bulanFormat = getBulanAktifYYYYMM();
+            const badgeNamaBulan = document.getElementById('badge-nama-bulan-target');
+            if (badgeNamaBulan) {
+                badgeNamaBulan.innerText = formatNamaBulanIndo(bulanFormat);
+            }
+
+            // 1. Ambil Nilai Target dari LocalStorage / API
+            let targetPcs = parseInt(localStorage.getItem('target_pcs_' + bulanFormat), 10);
+            if (!targetPcs || isNaN(targetPcs)) {
+                try {
+                    const resTgt = await fetch(`/api/get-target-bulanan?month=${bulanFormat}`);
+                    const dataTgt = await resTgt.json();
+                    if (dataTgt && dataTgt.target_pcs) {
+                        targetPcs = parseInt(dataTgt.target_pcs, 10);
+                    }
+                } catch (e) {}
+            }
+            if (!targetPcs || isNaN(targetPcs)) targetPcs = 50000; // Default 50.000 PCS
+
+            // Isi nilai ke input box jika belum terisi atau berbeda
+            const inputTgt = document.getElementById('input-target-pcs-bulan');
+            if (inputTgt && (!inputTgt.value || parseInt(inputTgt.value, 10) !== targetPcs)) {
+                inputTgt.value = targetPcs;
+            }
+            const inputPengaturan = document.getElementById('pengaturan-target-pcs');
+            if (inputPengaturan && (!inputPengaturan.value || parseInt(inputPengaturan.value, 10) !== targetPcs)) {
+                inputPengaturan.value = targetPcs;
+            }
+
+            const labelTgtDisplay = document.getElementById('label-target-pcs-display');
+            if (labelTgtDisplay) {
+                labelTgtDisplay.innerText = targetPcs.toLocaleString('id-ID');
+            }
+
+            // 2. Ambil Total Output Bulan Ini
+            const now = Date.now();
+            let totalOutputBulan = cacheOutputBulanIni;
+
+            if (now - lastFetchBulanTime > 15000 || totalOutputBulan === 0) {
+                lastFetchBulanTime = now;
+                try {
+                    const resG = await fetch(`api/grafik_harian.php?line=${encodeURIComponent(currentLine)}&mode=bulanan&bulan=${bulanFormat}`, { cache: "no-store" });
+                    const hasilG = await resG.json();
+                    if (hasilG && typeof hasilG.total_output !== 'undefined') {
+                        totalOutputBulan = parseFloat(hasilG.total_output) || 0;
+                        cacheOutputBulanIni = totalOutputBulan;
+                    }
+                } catch (e) {
+                    try {
+                        const resH = await fetch('/api/get-hanger-stats');
+                        const dataH = await resH.json();
+                        if (dataH && dataH.stats && dataH.stats.total_output_pcs) {
+                            totalOutputBulan = Math.max(totalOutputBulan, dataH.stats.total_output_pcs);
+                        }
+                    } catch (err) {}
+                }
+            }
+
+            const labelOutputBulan = document.getElementById('label-output-aktual-bulan');
+            if (labelOutputBulan) {
+                labelOutputBulan.innerText = Math.round(totalOutputBulan).toLocaleString('id-ID');
+            }
+
+            // 3. Hitung Persentase Pencapaian
+            const persentase = targetPcs > 0 ? ((totalOutputBulan / targetPcs) * 100) : 0;
+            const labelPct = document.getElementById('label-persentase-target');
+            if (labelPct) {
+                labelPct.innerText = persentase.toFixed(1) + '%';
+            }
+
+            // 4. Update Progress Bar
+            const progressBar = document.getElementById('progress-bar-target-bulan');
+            if (progressBar) {
+                const barWidth = Math.min(100, Math.max(0, persentase));
+                progressBar.style.width = barWidth + '%';
+                if (persentase >= 100) {
+                    progressBar.style.background = 'linear-gradient(90deg, #16a34a, #22c55e)';
+                } else if (persentase >= 75) {
+                    progressBar.style.background = 'linear-gradient(90deg, #0d3b8c, #3b82f6)';
+                } else {
+                    progressBar.style.background = 'linear-gradient(90deg, #f59e0b, #eab308)';
+                }
+            }
+
+            // 5. Update Status Badge & Sisa Target
+            const badgeStatus = document.getElementById('badge-status-pencapaian');
+            const labelSisa = document.getElementById('label-sisa-target-text');
+
+            if (persentase >= 100) {
+                if (badgeStatus) {
+                    badgeStatus.innerText = '✓ Target Tercapai';
+                    badgeStatus.style.background = '#dcfce7';
+                    badgeStatus.style.color = '#15803d';
+                    badgeStatus.style.borderColor = '#bbf7d0';
+                }
+                if (labelSisa) {
+                    const surplus = Math.round(totalOutputBulan - targetPcs);
+                    labelSisa.innerText = `✓ Terlampaui (+${surplus.toLocaleString('id-ID')} PCS)`;
+                    labelSisa.style.color = '#16a34a';
+                }
+            } else if (persentase >= 75) {
+                if (badgeStatus) {
+                    badgeStatus.innerText = '⚡ On Track';
+                    badgeStatus.style.background = '#dbeafe';
+                    badgeStatus.style.color = '#1d4ed8';
+                    badgeStatus.style.borderColor = '#bfdbfe';
+                }
+                if (labelSisa) {
+                    const sisa = Math.round(targetPcs - totalOutputBulan);
+                    labelSisa.innerText = `Sisa: ${sisa.toLocaleString('id-ID')} PCS`;
+                    labelSisa.style.color = '#1d4ed8';
+                }
+            } else {
+                if (badgeStatus) {
+                    badgeStatus.innerText = '⏱ Dalam Proses';
+                    badgeStatus.style.background = '#fef9c3';
+                    badgeStatus.style.color = '#854d0e';
+                    badgeStatus.style.borderColor = '#fef08a';
+                }
+                if (labelSisa) {
+                    const sisa = Math.round(targetPcs - totalOutputBulan);
+                    labelSisa.innerText = `Sisa: ${sisa.toLocaleString('id-ID')} PCS`;
+                    labelSisa.style.color = '#d97706';
+                }
+            }
+        }
+
+        async function simpanTargetBulanan() {
+            const inputTgt = document.getElementById('input-target-pcs-bulan');
+            const val = parseInt(inputTgt ? inputTgt.value : 0, 10);
+            if (!val || val <= 0) {
+                alert('Masukkan angka target yang valid (minimal 1 PCS)!');
+                return;
+            }
+
+            const bulanFormat = getBulanAktifYYYYMM();
+            localStorage.setItem('target_pcs_' + bulanFormat, val);
+
+            try {
+                await fetch('/api/set-target-bulanan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ month: bulanFormat, target_pcs: val })
+                });
+            } catch (e) {}
+
+            alert(`Target bulan ${formatNamaBulanIndo(bulanFormat)} sebesar ${val.toLocaleString('id-ID')} PCS berhasil disimpan!`);
+            updateTargetBulanan();
+        }
+
+        async function simpanTargetDariPengaturan() {
+            const inputPengaturan = document.getElementById('pengaturan-target-pcs');
+            const val = parseInt(inputPengaturan ? inputPengaturan.value : 0, 10);
+            if (!val || val <= 0) {
+                alert('Masukkan angka target yang valid (minimal 1 PCS)!');
+                return;
+            }
+
+            const bulanFormat = getBulanAktifYYYYMM();
+            localStorage.setItem('target_pcs_' + bulanFormat, val);
+
+            try {
+                await fetch('/api/set-target-bulanan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ month: bulanFormat, target_pcs: val })
+                });
+            } catch (e) {}
+
+            alert(`Target bulanan sebesar ${val.toLocaleString('id-ID')} PCS berhasil disimpan!`);
+            updateTargetBulanan();
         }
 
         // ===== TOWER LIGHT STATUS MESIN (SELARAS DENGAN ESP32) =====
@@ -6796,5 +6994,10 @@
                 }
             });
         }
-        document.addEventListener('DOMContentLoaded', initDraggableCameraPopup);
+        document.addEventListener('DOMContentLoaded', () => {
+            initDraggableCameraPopup();
+            if (typeof updateTargetBulanan === 'function') {
+                updateTargetBulanan();
+            }
+        });
     </script>
