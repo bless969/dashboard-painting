@@ -2,6 +2,8 @@
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 
 // ===========================
 // Select camera model in board_config.h
@@ -13,17 +15,30 @@
 // ===========================
 const char *ssid = "SSID";
 const char *password = "12345678";
-const char *server_ip = "192.168.1.50"; // IP PC / Server Dashboard Laragon
+const char *server_ip = "10.80.114.201:8000"; // IP PC / Server Dashboard Laragon (Port 8000)
 
 void startCameraServer();
 void setupLedFlash();
 
 void setup() {
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // Matikan Brownout Detector agar tidak reboot saat tegangan drop
+
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
+  Serial.println("==========================================");
+  Serial.println("         ESP32-CAM DIAGNOSTIC BOOT        ");
+  Serial.println("==========================================");
+  Serial.printf("[SYSTEM] Free Internal Heap : %d KB\n", ESP.getFreeHeap() / 1024);
+  Serial.printf("[SYSTEM] PSRAM Terdeteksi   : %s\n", psramFound() ? "YA (PSRAM AKTIF)" : "TIDAK");
+  if (psramFound()) {
+    Serial.printf("[SYSTEM] Total PSRAM         : %d KB\n", ESP.getPsramSize() / 1024);
+    Serial.printf("[SYSTEM] Free PSRAM          : %d KB\n", ESP.getFreePsram() / 1024);
+  }
+  Serial.println("==========================================");
 
   camera_config_t config;
+  memset(&config, 0, sizeof(config)); // Bersihkan memori struct agar tidak ada nilai sampah
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
   config.pin_d0 = Y2_GPIO_NUM;
@@ -42,29 +57,13 @@ void setup() {
   config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
-  config.frame_size = FRAMESIZE_UXGA;
-  config.pixel_format = PIXFORMAT_JPEG;  // for streaming
-  config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-  config.fb_location = CAMERA_FB_IN_PSRAM;
+  config.xclk_freq_hz = 20000000; // 20 MHz (Standar OV2640 agar video live mulus 20-25 FPS)
+  config.pixel_format = PIXFORMAT_JPEG;
+  config.grab_mode = CAMERA_GRAB_LATEST; // Selalu ambil frame terbaru agar tidak freeze
+  config.frame_size = FRAMESIZE_VGA;
   config.jpeg_quality = 12;
-  config.fb_count = 1;
-
-  if (config.pixel_format == PIXFORMAT_JPEG) {
-    if (psramFound()) {
-      config.jpeg_quality = 10;
-      config.fb_count = 2;
-      config.grab_mode = CAMERA_GRAB_LATEST;
-    } else {
-      config.frame_size = FRAMESIZE_SVGA;
-      config.fb_location = CAMERA_FB_IN_DRAM;
-    }
-  } else {
-    config.frame_size = FRAMESIZE_240X240;
-#if CONFIG_IDF_TARGET_ESP32S3
-    config.fb_count = 2;
-#endif
-  }
+  config.fb_count = 2; // 2 Buffer di PSRAM untuk kelancaran streaming
+  config.fb_location = CAMERA_FB_IN_PSRAM;
 
 #if defined(CAMERA_MODEL_ESP_EYE)
   pinMode(13, INPUT_PULLUP);
@@ -73,19 +72,20 @@ void setup() {
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
-    Serial.printf("Camera init failed with error 0x%x", err);
+    Serial.printf("[FATAL] Camera init gagal! Error kode: 0x%x\n", err);
+    Serial.println("Tips: Cek pita fleksibel kamera (kendor/miring) atau ganti Board ke 'AI Thinker ESP32-CAM'.");
     return;
   }
 
   sensor_t *s = esp_camera_sensor_get();
-  if (s->id.PID == OV3660_PID) {
-    s->set_vflip(s, 1);        
-    s->set_brightness(s, 1);   
-    s->set_saturation(s, -2);  
-  }
-  
-  if (config.pixel_format == PIXFORMAT_JPEG) {
-    s->set_framesize(s, FRAMESIZE_QVGA);
+  if (s) {
+    s->set_exposure_ctrl(s, 1); // Wajib ON agar auto-exposure jalan dan sensor tidak hang/freeze
+    s->set_whitebal(s, 1);      // Aktifkan AWB
+    if (s->id.PID == OV3660_PID) {
+      s->set_vflip(s, 1);        
+      s->set_brightness(s, 1);   
+      s->set_saturation(s, -2);  
+    }
   }
 
 #if defined(CAMERA_MODEL_M5STACK_WIDE) || defined(CAMERA_MODEL_M5STACK_ESP32CAM)

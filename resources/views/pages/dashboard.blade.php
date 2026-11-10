@@ -1,12 +1,11 @@
 <div id="view-dashboard" style="{{ $view_aktif !== 'dashboard' ? 'display:none;' : '' }}">
     <!-- ===== TOP CONTROL BAR (Grid 2 Kolom: Status Mesin & Choose Part) ===== -->
     <div class="dashboard-top-grid">
-        <!-- Kolom Kiri: Status Mesin (Tower Light) -->
+        <!-- Kolom Kiri: Status Mesin (Tower Light - 2 Warna Standar: MERAH & HIJAU) -->
         <div class="panel tower-light-panel" id="tower-light-panel-card">
             <div class="tower-light-visual" id="tower-light-visual">
-                <div class="tower-lamp lamp-merah" id="lamp-merah"></div>
-                <div class="tower-lamp lamp-kuning" id="lamp-kuning"></div>
-                <div class="tower-lamp lamp-hijau" id="lamp-hijau"></div>
+                <div class="tower-lamp lamp-merah" id="lamp-merah" title="Status Stop / Standby"></div>
+                <div class="tower-lamp lamp-hijau" id="lamp-hijau" title="Status Running / Produksi Aktif"></div>
             </div>
             <div class="tower-light-info">
                 <div class="tower-light-label">Status Mesin Painting</div>

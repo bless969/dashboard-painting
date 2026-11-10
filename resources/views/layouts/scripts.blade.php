@@ -1127,52 +1127,27 @@
                 const hasil = await response.json();
                 const status = hasil.status_mesin;
 
-            // Matiin semua lampu & lepas class kedap-kedip dulu, baru nyalain yang sesuai
+            // Standard 2 Warna Industri: MERAH (Stop/Standby) & HIJAU (Running/Aktif)
             const lampMerah = document.getElementById("lamp-merah");
-            const lampKuning = document.getElementById("lamp-kuning");
             const lampHijau = document.getElementById("lamp-hijau");
             if (lampMerah) lampMerah.classList.remove("aktif");
-            if (lampKuning) lampKuning.classList.remove("aktif", "lamp-berkedip");
             if (lampHijau) lampHijau.classList.remove("aktif", "lamp-berkedip");
 
-            const petaTeks = {
-                stop: "STOP (BERHENTI)",
-                running: "RUNNING (PRODUKSI)",
-                running_kedip: "PRODUKSI (KUNING KEDIP)",
-                maintenance: "MAINTENANCE",
-                standby: "STANDBY (BERHENTI)",
-                standby_kedip: "STANDBY KEDIP (BERHENTI)",
-                mati: "MATI / PATLITE OFF"
-            };
-
+            const isRunning = (status === 'running' || status === 'running_kedip' || hasil.is_produksi == 1);
             const teksStatusEl = document.getElementById("teks-status-mesin");
-            if (teksStatusEl) teksStatusEl.innerText = petaTeks[status] || "STOP";
 
-            // Visualisasi Patlite fisik 6 kondisi:
-            // 1. Kondisi 1: Mesin produksi normal (Hijau Nyala)
-            if (status === 'running') {
+            if (isRunning) {
                 if (lampHijau) lampHijau.classList.add("aktif");
-            }
-            // 2. Kondisi 2: Mesin produksi tapi tetap jalan (Hijau Nyala + Kuning Kedip)
-            else if (status === 'running_kedip') {
-                if (lampHijau) lampHijau.classList.add("aktif");
-                if (lampKuning) lampKuning.classList.add("aktif", "lamp-berkedip");
-            }
-            // 3. Kondisi 3: Mesin berhenti (Kuning Nyala solid)
-            else if (status === 'standby') {
-                if (lampKuning) lampKuning.classList.add("aktif");
-            }
-            // 4. Kondisi 4: Mesin berhenti (Kuning Kedip)
-            else if (status === 'standby_kedip') {
-                if (lampKuning) lampKuning.classList.add("aktif", "lamp-berkedip");
-            }
-            // 5. Kondisi 5: Mesin berhenti (Merah Nyala solid) / Maintenance
-            else if (status === 'stop' || status === 'maintenance') {
+                if (teksStatusEl) {
+                    teksStatusEl.innerText = "RUNNING (PRODUKSI AKTIF)";
+                    teksStatusEl.style.color = "#16a34a";
+                }
+            } else {
                 if (lampMerah) lampMerah.classList.add("aktif");
-            }
-            // 6. Kondisi 6: Mati (Semua lampu tower padam)
-            else if (status === 'mati') {
-                // Semua lampu tetap padam
+                if (teksStatusEl) {
+                    teksStatusEl.innerText = "STOP / STANDBY (OFF)";
+                    teksStatusEl.style.color = "#dc2626";
+                }
             }
 
             statusMesinAsliTerakhir = status;
@@ -6994,6 +6969,115 @@
                 }
             });
         }
+        // =========================================================================
+        // INTEGRASI MACHINE CONTROL MASTER PART SUT & UNDUH EXCEL ASLI
+        // =========================================================================
+
+        async function gantiPartDariMC(partId) {
+            if (!partId) return;
+            const select = document.getElementById('mc-select-part');
+            if (!select) return;
+            const opt = select.querySelector(`option[value="${partId}"]`);
+            if (!opt) return;
+
+            const sut = parseFloat(opt.getAttribute('data-sut')) || 1.0;
+            const code = opt.getAttribute('data-code') || '';
+            const targetHanger = opt.getAttribute('data-target') || 4;
+            const ctSec = Math.round(sut * 60);
+            const capacity = sut > 0 ? (60.0 / sut).toFixed(1) : 0;
+
+            // Update Live Badges
+            const bSut = document.getElementById('mc-badge-sut');
+            if (bSut) bSut.innerHTML = `${sut} <span style="font-size:12px; font-weight:500;">menit/pcs</span>`;
+            const bCt = document.getElementById('mc-badge-ct-sec');
+            if (bCt) bCt.innerHTML = `${ctSec} <span style="font-size:12px; font-weight:500;">detik</span>`;
+            const bTgt = document.getElementById('mc-badge-target-hanger');
+            if (bTgt) bTgt.innerHTML = `${targetHanger} <span style="font-size:12px; font-weight:500;">pcs</span>`;
+            const bCap = document.getElementById('mc-badge-capacity');
+            if (bCap) bCap.innerHTML = `${capacity} <span style="font-size:12px; font-weight:500;">pcs/h</span>`;
+
+            const lblAktif = document.getElementById('mc-part-aktif-label');
+            if (lblAktif) lblAktif.innerText = `[${code}] ${opt.text.split('—')[1] || code}`;
+
+            // Update nilai (C) di kalkulasi Machine Control
+            const valC = document.getElementById('perf-val-C');
+            if (valC) valC.innerText = sut;
+            const inptCt = document.getElementById('perf-ct-pilihan');
+            if (inptCt) inptCt.value = sut;
+            const lblPart = document.getElementById('perf-part-label');
+            if (lblPart) lblPart.innerText = code;
+
+            // Kirim sinyal ke server untuk ganti part aktif
+            try {
+                await fetch('/api/change-part', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ part_id: partId })
+                });
+                if (typeof perbaruiHasilPerformanceLive === 'function') {
+                    perbaruiHasilPerformanceLive();
+                }
+            } catch (e) {
+                console.warn('Gagal change part:', e);
+            }
+        }
+
+        function bukaModalMasterSut() {
+            const m = document.getElementById('modal-master-sut');
+            if (m) m.style.display = 'flex';
+        }
+
+        function tutupModalMasterSut() {
+            const m = document.getElementById('modal-master-sut');
+            if (m) m.style.display = 'none';
+        }
+
+        function filterTabelMasterSut(q) {
+            const query = (q || '').toLowerCase().trim();
+            const rows = document.querySelectorAll('.baris-sut-part');
+            rows.forEach(r => {
+                const search = r.getAttribute('data-search') || '';
+                r.style.display = (!query || search.includes(query)) ? '' : 'none';
+            });
+        }
+
+        function pilihPartDariModalSut(partId) {
+            const select = document.getElementById('mc-select-part');
+            if (select) {
+                select.value = partId;
+                gantiPartDariMC(partId);
+            }
+            tutupModalMasterSut();
+        }
+
+        async function simpanProduksiKeRiwayatMC() {
+            const btn = document.getElementById('btn-simpan-produksi');
+            const prevText = btn ? btn.innerText : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = 'Menyimpan ke Riwayat...';
+            }
+
+            try {
+                await simpanProduksiFinal();
+                if (typeof loadRiwayatPerformance === 'function') {
+                    await loadRiwayatPerformance();
+                }
+                if (typeof updateHistoriTable === 'function') {
+                    await updateHistoriTable();
+                }
+                alert('✅ Hasil kontrol produksi berhasil disimpan ke tab Riwayat!\n\nAnda dapat melihat detail riwayatnya atau mengunduh laporan Excel resmi pabrik kapan saja.');
+            } catch (err) {
+                console.error('Error simpan produksi MC:', err);
+                alert('Gagal menyimpan produksi: ' + err.message);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = prevText || '💾 Simpan Produksi ke Riwayat';
+                }
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             initDraggableCameraPopup();
             if (typeof updateTargetBulanan === 'function') {

@@ -21,11 +21,31 @@ class DashboardController extends Controller
         // DAFTAR PART & CT dari config (UI standalone tanpa perlu database backend)
         $daftar_part_ct = config('daftar_part', []);
 
+        // Part Hasil Training Vision AI (Roboflow Object Detection)
+        $parts_file = storage_path('app/parts_catalog.json');
+        $parts_catalog_ai = file_exists($parts_file) ? (@json_decode(file_get_contents($parts_file), true) ?: []) : [];
+
+        $active_file = storage_path('app/active_part.json');
+        $active_id = file_exists($active_file) ? trim(@file_get_contents($active_file)) : '';
+        $active_part_ai = null;
+        foreach ($parts_catalog_ai as $p) {
+            if ($p['id'] === $active_id) {
+                $active_part_ai = $p;
+                break;
+            }
+        }
+        if (!$active_part_ai && !empty($parts_catalog_ai)) {
+            $active_part_ai = $parts_catalog_ai[0];
+            file_put_contents($active_file, $active_part_ai['id']);
+        }
+
         return [
             'line_aktif' => $line_aktif,
             'view_aktif' => $viewNama,
             'tanggal_aktif' => $tanggal_aktif,
             'daftar_part_ct' => $daftar_part_ct,
+            'parts_catalog_ai' => $parts_catalog_ai,
+            'active_part_ai' => $active_part_ai,
         ];
     }
 
