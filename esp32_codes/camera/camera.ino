@@ -15,7 +15,7 @@
 // ===========================
 const char *ssid = "SSID";
 const char *password = "12345678";
-const char *server_ip = "10.80.114.201:8000"; // IP PC / Server Dashboard Laragon (Port 8000)
+const char *server_ip = "10.171.46.201:8000"; // IP PC / Server Dashboard Laragon (Port 8000)
 
 void startCameraServer();
 void setupLedFlash();

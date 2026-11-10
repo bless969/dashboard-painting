@@ -2409,11 +2409,15 @@
                         videoContainer.style.borderColor = '#1e293b';
                     }, 200);
 
-                    // 1. Jalankan deteksi konfirmasi otomatis Roboflow
-                    await runObjectDetection(true);
+                    // 1. Jalankan deteksi konfirmasi otomatis Roboflow (jika model siap)
+                    try {
+                        await runObjectDetection(true);
+                    } catch (errDet) {
+                        console.warn('runObjectDetection warning:', errDet);
+                    }
 
-                    // 2. Jika mode sampling aktif & auto-capture aktif: ambil 1 sampel training!
-                    if (isSamplingActive && chkAutoSampleOnHanger && chkAutoSampleOnHanger.checked) {
+                    // 2. AUTO-CAPTURE: Jepret foto & simpan sampel otomatis jika checkbox aktif!
+                    if (chkAutoSampleOnHanger && chkAutoSampleOnHanger.checked) {
                         await captureRoboflowSample('Sensor 2 Auto');
                     }
 

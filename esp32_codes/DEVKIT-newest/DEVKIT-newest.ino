@@ -13,10 +13,16 @@ String master_painting_url   = String("http://") + server_ip + "/master-painting
 
 WebServer server(80);
 
-const int PIN_BTN_ON   = 12; // Push Button NO (Normally Open)   -> Normal=HIGH (pullup), Ditekan=LOW
-const int PIN_BTN_OFF  = 13; // Push Button NC (Normally Closed) -> Normal=LOW (ke GND), Ditekan=HIGH
-const int PIN_SENS_IN  = 14;
-const int PIN_SENS_OUT = 27;
+const int PIN_BTN_ON   = 13; // Push Button HIJAU: NO (Normally Open)   -> Normal=HIGH (pullup), Ditekan=LOW (START Mesin)
+const int PIN_BTN_OFF  = 12; // Push Button MERAH: NC (Normally Closed) -> Normal=LOW (ke GND), Ditekan=HIGH (STOP Mesin)
+const int PIN_SENS_IN  = 14; // Sensor Inlet (Input Hanger)
+const int PIN_SENS_OUT = 27; // Sensor Outlet (Kamera Shutter)
+
+// ================================================================
+// KONFIGURASI TIPE LOGIKA SENSOR FISIK (PIN 14 & PIN 27)
+// ================================================================
+// ACTIVE-LOW / NPN: Standby = HIGH (3.3V Pullup), Deteksi = LOW (0V GND)
+// Murni pembacaan langsung tanpa filter & tanpa delay!
 
 const int PIN_FLASH    = 26; // Lampu Flash / Penerangan Output (Area Kamera)
 
@@ -37,15 +43,13 @@ bool isProduksi = false;
 int hangerInCount  = 0;
 int hangerOutCount = 0;
 
-bool lastBtnOnState   = HIGH; // NO default = HIGH (floating, ditarik pullup)
-bool lastBtnOffState  = LOW;  // NC default = LOW (tersambung ke GND)
-bool lastSensInState  = HIGH;
-bool lastSensOutState = HIGH;
+bool lastBtnOnState   = HIGH; // NO (Pin 13 Hijau) default = HIGH (floating, ditarik pullup)
+bool lastBtnOffState  = LOW;  // NC (Pin 12 Merah) default = LOW (tersambung ke GND)
+bool lastSensInState  = HIGH; // Standby (Pullup) = HIGH (3.3V)
+bool lastSensOutState = HIGH; // Standby (Pullup) = HIGH (3.3V)
 
-// Debounce waktu sensor agar tidak double trigger (1.2 detik per hanger)
-unsigned long lastTriggerInTime  = 0;
-unsigned long lastTriggerOutTime = 0;
-const unsigned long DEBOUNCE_TIME = 1200;
+// Timer non-blocking untuk mematikan lampu flash (tanpa delay)
+unsigned long flashOffTime = 0;
 
 unsigned long lastPostTime = 0;
 const unsigned long POST_INTERVAL = 2000; // Kirim status ke server tiap 2 detik
@@ -170,13 +174,13 @@ void setup() {
   // RS-485 to TTL UART ke ESP32-CAM / Sensor Bus
   Serial2.begin(115200, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
 
-  // Pin Tombol & Sensor (dengan internal pullup)
+  // Pin Tombol Push Button & Sensor (Internal Pullup Murni)
   pinMode(PIN_BTN_ON, INPUT_PULLUP);
   pinMode(PIN_BTN_OFF, INPUT_PULLUP);
   pinMode(PIN_SENS_IN, INPUT_PULLUP);
   pinMode(PIN_SENS_OUT, INPUT_PULLUP);
 
-  // Tunggu sejenak agar tegangan pin stabil, lalu baca kondisi resting/idle pin
+  // Tunggu sejenak agar tegangan pin stabil saat bootup
   delay(100);
   lastBtnOnState   = digitalRead(PIN_BTN_ON);
   lastBtnOffState  = digitalRead(PIN_BTN_OFF);
@@ -247,19 +251,27 @@ void setup() {
 
   Serial.println("------------------------------------------");
   Serial.printf("[PIN INITIAL STATE]\n");
-  Serial.printf(" - Pin 12 (PB ON  - NO): %s\n", lastBtnOnState == LOW ? "LOW (Tertutup)" : "HIGH (Terbuka/Standby)");
-  Serial.printf(" - Pin 13 (PB OFF - NC): %s\n", lastBtnOffState == LOW ? "LOW (Tertutup/Standby)" : "HIGH (Terbuka)");
-  Serial.printf(" - Status Mesin Awal   : %s\n", isProduksi ? "AKTIF (ON)" : "STANDBY (OFF)");
+  Serial.printf(" - Pin 13 (PB HIJAU ON  - NO) : %s\n", lastBtnOnState == LOW ? "LOW (Tertutup)" : "HIGH (Standby)");
+  Serial.printf(" - Pin 12 (PB MERAH OFF - NC) : %s\n", lastBtnOffState == LOW ? "LOW (Standby)" : "HIGH (Terbuka)");
+  Serial.printf(" - Pin %d (Sensor INLET)      : %s (Raw: %d)\n", PIN_SENS_IN, lastSensInState == LOW ? "LOW (Terdeteksi)" : "HIGH (Standby)", lastSensInState);
+  Serial.printf(" - Pin %d (Sensor OUTLET)     : %s (Raw: %d)\n", PIN_SENS_OUT, lastSensOutState == LOW ? "LOW (Terdeteksi)" : "HIGH (Standby)", lastSensOutState);
+  Serial.printf(" - Status Mesin Awal          : %s\n", isProduksi ? "AKTIF (ON)" : "STANDBY (OFF)");
   Serial.println("------------------------------------------");
-  Serial.println(">> ESP32 SIAP! Tekan PB ON (Pin 12) untuk memulai produksi. <<\n");
+  Serial.println(">> ESP32 SIAP! (Mode Murni Tanpa Filter & Tanpa Delay) <<\n");
 }
 
 // ================================================================
-// LOOP UTAMA
+// LOOP UTAMA (NON-BLOCKING / ZERO DELAY / ZERO FILTER)
 // ================================================================
 void loop() {
   server.handleClient();
   unsigned long now = millis();
+
+  // Matikan lampu flash otomatis tanpa delay (jika mode strobe aktif)
+  if (flashOffTime > 0 && now >= flashOffTime) {
+    ledcWrite(PIN_FLASH, 0);
+    flashOffTime = 0;
+  }
 
   // 1. BACA DATA SERIAL RS-485 (Jika sensor lewat bus serial RS485)
   if (Serial2.available()) {
@@ -268,109 +280,82 @@ void loop() {
     if (dataRs485.length() > 0) {
       Serial.println("[RS485-RX] Diterima: " + dataRs485);
 
-      // Trigger Input lewat RS-485 (Hanya jika produksi ON)
       if (dataRs485.indexOf("IN") >= 0 || dataRs485 == "1") {
-        if (isProduksi && (now - lastTriggerInTime > DEBOUNCE_TIME)) {
-          lastTriggerInTime = now;
+        if (isProduksi) {
           hangerInCount++;
           Serial.println("[AUTO-MARK] Hanger Masuk Terdeteksi via RS-485 -> Kirim Nilai 1!");
           kirimTriggerKeWeb("input", 1);
         }
       }
-      // Trigger Output lewat RS-485 (Hanya jika produksi ON)
       else if (dataRs485.indexOf("OUT") >= 0 || dataRs485 == "2") {
-        if (isProduksi && (now - lastTriggerOutTime > DEBOUNCE_TIME)) {
-          lastTriggerOutTime = now;
+        if (isProduksi) {
           hangerOutCount++;
-          Serial.println("[AUTO-SHUTTER] Hanger Output Terdeteksi via RS-485 -> Trigger Kamera (Kirim Nilai 1)!");
-          // Flash / Trigger Shutter Kamera Output via RS-485
+          Serial.println("[AUTO-SHUTTER] Hanger Output Terdeteksi via RS-485 -> Trigger Kamera!");
           if (flashOutputMode == 2) {
             ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
-            kirimTriggerKeWeb("output", 1);
-            delay(150);
-            ledcWrite(PIN_FLASH, 0);
-          } else {
-            // Mode Solid (Nyala Terus) atau OFF: Langsung kirim trigger tanpa delay
-            kirimTriggerKeWeb("output", 1);
+            flashOffTime = now + 150; // Non-blocking timer
           }
+          kirimTriggerKeWeb("output", 1);
         }
       }
     }
   }
 
-  // 2. KONTROL MESIN ON/OFF (TOMBOL HARDWARE)
-  // --- TOMBOL ON: NO (Pin 12) -> Normal=HIGH, Ditekan=LOW (falling edge) ---
+  // 2. KONTROL MESIN ON/OFF (TOMBOL HARDWARE - MURNI TANPA DELAY)
+  // --- TOMBOL ON: NO (Pin 13 Hijau) -> Normal=HIGH, Ditekan=LOW ---
   bool currentBtnOnState = digitalRead(PIN_BTN_ON);
   if (currentBtnOnState == LOW && lastBtnOnState == HIGH) {
     if (!isProduksi) {
       isProduksi = true; 
       hangerInCount = 0; 
       hangerOutCount = 0;
-      Serial.println("\n>>> MESIN PRODUKSI DI-START (ON - Kirim Nilai 1 ke Web) <<<");
+      Serial.println("\n>>> MESIN PRODUKSI DI-START (PB HIJAU Pin 13) <<<");
       kirimTriggerKeWeb("btn_on", 1);
       sendDataToLaravel();
     } 
-    delay(50);
   } 
   lastBtnOnState = currentBtnOnState;
 
-  // --- TOMBOL OFF: NC (Pin 13) -> Normal=LOW, Ditekan=HIGH (rising edge) ---
+  // --- TOMBOL OFF: NC (Pin 12 Merah) -> Normal=LOW, Ditekan=HIGH ---
   bool currentBtnOffState = digitalRead(PIN_BTN_OFF);
   if (currentBtnOffState == HIGH && lastBtnOffState == LOW) {
     if (isProduksi) { 
       isProduksi = false; 
-      Serial.println("\n>>> MESIN PRODUKSI DI-STOP (OFF - Kirim Nilai 0 ke Web) <<<"); 
+      Serial.println("\n>>> MESIN PRODUKSI DI-STOP (PB MERAH Pin 12) <<<"); 
       kirimTriggerKeWeb("btn_off", 0);
       sendDataToLaravel();
     }
-    delay(50);
   } 
   lastBtnOffState = currentBtnOffState;
 
-  // 3. PEMBACAAN PIN SENSOR FISIK LANGSUNG (PIN 14 & 27)
-  // HANYA AKTIF JIKA MESIN PRODUKSI DALAM STATUS ON (isProduksi == true)
-  if (isProduksi) {
-    // --- PHOTOSENSOR 1 (INLET / INPUT): AUTO-MARKING HANGER ---
-    bool currentSensInState = digitalRead(PIN_SENS_IN);
-    if (currentSensInState == LOW && lastSensInState == HIGH) {
-      if (now - lastTriggerInTime > DEBOUNCE_TIME) {
-        lastTriggerInTime = now;
-        hangerInCount++;
-        Serial.printf("[AUTO-MARK] Hanger #%d Masuk ke Line (Pin 14) -> Kirim Nilai 1 ke Web!\n", hangerInCount);
-        
-        // Kirim sinyal marking langsung ke Web Dashboard (Nilai 1)
-        kirimTriggerKeWeb("input", 1);
-      }
+  // 3. PEMBACAAN PIN SENSOR FISIK (MURNI INSTAN TANPA FILTER & TANPA DELAY)
+  // --- PHOTOSENSOR 1 (INLET): AUTO-MARKING HANGER ---
+  bool currentSensInState = digitalRead(PIN_SENS_IN);
+  if (currentSensInState == LOW && lastSensInState == HIGH) {
+    // Falling Edge: Begitu tersentuh objek (LOW), detik itu juga langsung kirim!
+    if (isProduksi) {
+      hangerInCount++;
+      Serial.printf("[AUTO-MARK] Hanger #%d Masuk ke Line (Pin %d) -> Kirim Nilai 1 ke Web!\n", hangerInCount, PIN_SENS_IN);
+      kirimTriggerKeWeb("input", 1);
+    } else {
+      Serial.printf("[TEST SENSOR] Pin %d Terdeteksi LOW! (Catatan: Mesin masih STANDBY, tekan PB HIJAU)\n", PIN_SENS_IN);
     }
-    lastSensInState = currentSensInState;
-
-    // --- PHOTOSENSOR 2 (OUTLET / OUTPUT): AUTO-SHUTTER TRIGGER KAMERA ---
-    bool currentSensOutState = digitalRead(PIN_SENS_OUT);
-    if (currentSensOutState == LOW && lastSensOutState == HIGH) {
-      if (now - lastTriggerOutTime > DEBOUNCE_TIME) {
-        lastTriggerOutTime = now;
-        hangerOutCount++;
-        Serial.printf("[AUTO-SHUTTER] Hanger #%d Tiba di Depan Kamera (Pin 27) -> Kirim Nilai 1 ke Web!\n", hangerOutCount);
-        
-        // Flash / Trigger Shutter Kamera Output via Pin 27
-        if (flashOutputMode == 2) {
-          ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
-          kirimTriggerKeWeb("output", 1);
-          delay(200);
-          ledcWrite(PIN_FLASH, 0); // Matikan flash kembali
-        } else {
-          // Mode Solid (Nyala Terus) atau OFF: Cahaya sudah konstan, langsung kirim trigger
-          kirimTriggerKeWeb("output", 1);
-        }
-      }
-    }
-    lastSensOutState = currentSensOutState;
-  } 
-  else {
-    // Jika mesin OFF, simpan kondisi sensor agar tidak loncat saat mesin baru di-ON-kan
-    lastSensInState  = digitalRead(PIN_SENS_IN);
-    lastSensOutState = digitalRead(PIN_SENS_OUT);
   }
+  lastSensInState = currentSensInState;
+
+  // --- PHOTOSENSOR 2 (OUTLET): AUTO-SHUTTER TRIGGER KAMERA ---
+  bool currentSensOutState = digitalRead(PIN_SENS_OUT);
+  if (currentSensOutState == LOW && lastSensOutState == HIGH) {
+    // Falling Edge: Begitu tersentuh objek (LOW), detik itu juga langsung kirim trigger ke Web!
+    hangerOutCount++;
+    Serial.printf("[AUTO-SHUTTER] Hanger #%d Tiba di Depan Kamera (Pin %d) -> Kirim Nilai 1 ke Web!\n", hangerOutCount, PIN_SENS_OUT);
+    if (flashOutputMode == 2) {
+      ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
+      flashOffTime = now + 200; // Mati otomatis tanpa delay
+    }
+    kirimTriggerKeWeb("output", 1);
+  }
+  lastSensOutState = currentSensOutState;
 
   // 4. PUSH DATA STATUS KE SERVER SECARA BERKALA
   if (now - lastPostTime > POST_INTERVAL) {
