@@ -1,28 +1,55 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
+#include <string.h>
 
 const char* ssid     = "SSID";       // Ganti dengan nama WiFi pabrik/laptop
 const char* password = "12345678";   // Ganti dengan password WiFi
 
 const char* server_ip = "10.171.46.201:8000"; 
 
+// ================================================================
+// KONFIGURASI IP MANUAL / STATIC IP ESP32 DEVKIT
+// ================================================================
+// true  = Menggunakan IP Statis / Manual yang ditentukan di bawah
+// false = Otomatis meminta IP dari router (DHCP)
+const bool USE_STATIC_IP = true;
+
+IPAddress devkit_static_ip(10, 171, 46, 102);  // Ganti dengan IP DevKit yang Anda inginkan
+IPAddress devkit_gateway(10, 171, 46, 193);    // Gateway router Anda (dari ipconfig)
+IPAddress devkit_subnet(255, 255, 255, 0);     // Subnet mask
+IPAddress devkit_dns(8, 8, 8, 8);              // DNS opsional
+
 String dashboard_trigger_url = String("http://") + server_ip + "/api/sensor-trigger";
 String dashboard_confirm_url = String("http://") + server_ip + "/api/confirm-hanger-output";
-String master_painting_url   = String("http://") + server_ip + "/master-painting/public/api/sensor-data";
 
 WebServer server(80);
 
 const int PIN_BTN_ON   = 13; // Push Button HIJAU: NO (Normally Open)   -> Normal=HIGH (pullup), Ditekan=LOW (START Mesin)
 const int PIN_BTN_OFF  = 12; // Push Button MERAH: NC (Normally Closed) -> Normal=LOW (ke GND), Ditekan=HIGH (STOP Mesin)
-const int PIN_SENS_IN  = 14; // Sensor Inlet (Input Hanger)
+const int PIN_SENS_IN  = 25; // Sensor Inlet (Input Hanger)
 const int PIN_SENS_OUT = 27; // Sensor Outlet (Kamera Shutter)
 
 // ================================================================
-// KONFIGURASI TIPE LOGIKA SENSOR FISIK (PIN 14 & PIN 27)
+// KONFIGURASI TIPE LOGIKA SENSOR (PIN 25 & PIN 27)
 // ================================================================
-// ACTIVE-LOW / NPN: Standby = HIGH (3.3V Pullup), Deteksi = LOW (0V GND)
-// Murni pembacaan langsung tanpa filter & tanpa delay!
+// true  = Active-LOW  (Standby = HIGH/1, Saat deteksi/kedip = LOW/0  -> Interrupt FALLING, +1 per barang)
+// false = Active-HIGH (Standby = LOW/0,  Saat deteksi/kedip = HIGH/1 -> Interrupt RISING,  +1 per barang)
+
+// PIN 25 (Inlet Sensor melalui Modul Optocoupler PC817):
+// Dengan perkabelan NPN (IN1 ke +24V, GND input ke kabel Hitam sensor):
+// - Standby (LED PC817 mati)   : Output ditarik pullup ke 3.3V (HIGH / 1)
+// - Deteksi (LED PC817 nyala)  : Output ditarik transistor ke 0V (LOW / 0)
+// Sehingga logikanya adalah Active-LOW (true), persis sama dengan Pin 27.
+const bool SENS_IN_ACTIVE_LOW  = true;
+
+// PIN 27 (Outlet Sensor - Shutter Kamera):
+// Sensor NPN langsung (Active-LOW: Standby = HIGH, Saat deteksi = LOW).
+const bool SENS_OUT_ACTIVE_LOW = true;
+
+// Durasi standby bersih (ms) setelah objek dilepas/lampu sensor mati sebelum siap hitung barang berikutnya.
+// Deteksi saat barang masuk tetap INSTAN 0 ms! Ini khusus mencegah pantulan saat dilepas ikut terhitung #2.
+const unsigned long RELEASE_SETTLE_MS = 100;
 
 const int PIN_FLASH    = 26; // Lampu Flash / Penerangan Output (Area Kamera)
 
@@ -45,47 +72,112 @@ int hangerOutCount = 0;
 
 bool lastBtnOnState   = HIGH; // NO (Pin 13 Hijau) default = HIGH (floating, ditarik pullup)
 bool lastBtnOffState  = LOW;  // NC (Pin 12 Merah) default = LOW (tersambung ke GND)
-bool lastSensInState  = HIGH; // Standby (Pullup) = HIGH (3.3V)
-bool lastSensOutState = HIGH; // Standby (Pullup) = HIGH (3.3V)
 
-// Timer non-blocking untuk mematikan lampu flash (tanpa delay)
-unsigned long flashOffTime = 0;
+// State Interrupt & Re-Arm Bersih Photosensor (0 ms saat masuk deteksi, anti double-count saat dilepas)
+volatile bool sensInEdgeFlag  = false;
+volatile bool sensOutEdgeFlag = false;
 
-unsigned long lastPostTime = 0;
-const unsigned long POST_INTERVAL = 2000; // Kirim status ke server tiap 2 detik
+bool sensInArmed              = true;
+unsigned long sensInIdleStart = 0;
+bool sensOutArmed             = true;
+unsigned long sensOutIdleStart = 0;
 
-void kirimTriggerKeWeb(String tipe, int val = 1) {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    String targetUrl = dashboard_trigger_url + "?type=" + tipe + "&val=" + String(val);
-    
-    http.begin(targetUrl);
-    http.setTimeout(1500); // Timeout cepat agar loop tidak terhambat
-    int httpCode = http.GET();
-    
-    if (httpCode > 0) {
-      Serial.printf("[WEB-API] Trigger '%s' (val=%d) berhasil dikirim ke Web Dashboard (HTTP %d)\n", tipe.c_str(), val, httpCode);
-    } else {
-      Serial.printf("[WEB-API] Gagal kirim trigger '%s'. Error: %s\n", tipe.c_str(), http.errorToString(httpCode).c_str());
+void IRAM_ATTR handleSensInISR() {
+  sensInEdgeFlag = true;
+}
+
+void IRAM_ATTR handleSensOutISR() {
+  sensOutEdgeFlag = true;
+}
+
+bool isSensorRawActive(int pin, bool activeLow) {
+  int activeLevel = activeLow ? LOW : HIGH;
+  return digitalRead(pin) == activeLevel;
+}
+
+// Memicu counter +1 secara INSTAN (0 ms) begitu masuk kondisi deteksi,
+// lalu menahan pantulan sinyal selama objek masih di depan sensor maupun saat baru dilepas
+// hingga sensor kembali standby stabil selama RELEASE_SETTLE_MS.
+bool checkSensorTrigger(int pin, bool activeLow, volatile bool &edgeFlag, bool &armed, unsigned long &idleStartMs, unsigned long now) {
+  bool hasEdge = false;
+  if (edgeFlag) {
+    edgeFlag = false;
+    hasEdge = true;
+  }
+
+  bool isIdle = !isSensorRawActive(pin, activeLow);
+
+  if (armed) {
+    if (hasEdge || !isIdle) {
+      armed = false;
+      idleStartMs = 0;
+      return true;
     }
-    http.end();
+    return false;
+  }
+
+  if (isIdle && !hasEdge) {
+    if (idleStartMs == 0) {
+      idleStartMs = now;
+    } else if (now - idleStartMs >= RELEASE_SETTLE_MS) {
+      armed = true;
+      idleStartMs = 0;
+    }
+  } else {
+    idleStartMs = 0;
+  }
+  return false;
+}
+
+// Timer non-blocking untuk mematikan lampu flash & reconnect WiFi (tanpa delay)
+unsigned long flashOffTime    = 0;
+unsigned long lastWifiRetryMs = 0;
+
+// ================================================================
+// ANTREAN HTTP ASINKRON (CORE 0) - AGAR LOOP SENSOR TIDAK PERNAH NGE-LAG!
+// ================================================================
+typedef struct {
+  char tipe[16];
+  int val;
+} TriggerEventMsg;
+
+QueueHandle_t triggerQueue = NULL;
+
+void httpWorkerTask(void* pvParameters) {
+  TriggerEventMsg msg;
+  for (;;) {
+    if (xQueueReceive(triggerQueue, &msg, portMAX_DELAY) == pdTRUE) {
+      if (WiFi.status() == WL_CONNECTED) {
+        HTTPClient http;
+        String targetUrl = dashboard_trigger_url + "?type=" + String(msg.tipe) + "&val=" + String(msg.val);
+        
+        http.begin(targetUrl);
+        http.setConnectTimeout(800); // Timeout koneksi cepat 800 ms (bukan 5000 ms default)
+        http.setTimeout(1000);       // Timeout baca respons maks 1000 ms
+        http.setReuse(false);
+        int httpCode = http.GET();
+        
+        if (httpCode > 0) {
+          Serial.printf("[WEB-API] Trigger '%s' (val=%d) berhasil dikirim ke Web Dashboard (HTTP %d)\n", msg.tipe, msg.val, httpCode);
+        } else {
+          Serial.printf("[WEB-API] Gagal kirim trigger '%s'. Error: %s\n", msg.tipe, http.errorToString(httpCode).c_str());
+        }
+        http.end();
+      } else {
+        Serial.printf("[WEB-API] Trigger '%s' dilewati (WiFi belum terhubung)\n", msg.tipe);
+      }
+    }
   }
 }
 
-// Push data status produksi ke Master Painting
-void sendDataToLaravel() {
-  if (WiFi.status() == WL_CONNECTED) {
-    HTTPClient http;
-    http.begin(master_painting_url);
-    http.addHeader("Content-Type", "application/json");
-    http.setTimeout(1500);
-
-    String json = "{\"isProduksi\":" + String(isProduksi ? "true" : "false") + 
-                  ",\"in\":" + String(hangerInCount) + 
-                  ",\"out\":" + String(hangerOutCount) + "}";
-
-    int httpCode = http.POST(json);
-    http.end();
+void kirimTriggerKeWeb(String tipe, int val = 1) {
+  if (triggerQueue == NULL) return;
+  TriggerEventMsg msg;
+  memset(&msg, 0, sizeof(msg));
+  strncpy(msg.tipe, tipe.c_str(), sizeof(msg.tipe) - 1);
+  msg.val = val;
+  if (xQueueSend(triggerQueue, &msg, 0) != pdTRUE) {
+    Serial.printf("[WEB-API] Antrean HTTP penuh, trigger '%s' dilewati\n", msg.tipe);
   }
 }
 
@@ -137,7 +229,7 @@ void handleLampu() {
     int val = constrain(server.arg("val").toInt(), 0, 255);
     flashBrightness = val;
     if (val > 0) {
-      flashOutputMode = 1; // Otomatis aktifkan SOLID jika nilai > 0
+      flashOutputMode = 1;
       ledcWrite(PIN_FLASH, flashBrightness);
     } else {
       flashOutputMode = 0;
@@ -171,23 +263,21 @@ void handleOptions() {
 void setup() {
   Serial.begin(115200);
   
-  // RS-485 to TTL UART ke ESP32-CAM / Sensor Bus
+  // RS-485 to TTL UART ke ESP32-CAM / Sensor Bus (timeout 10ms agar tidak memblokir loop)
   Serial2.begin(115200, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
+  Serial2.setTimeout(10);
 
-  // Pin Tombol Push Button & Sensor (Internal Pullup Murni)
+  // Pin Tombol Push Button & Sensor
   pinMode(PIN_BTN_ON, INPUT_PULLUP);
   pinMode(PIN_BTN_OFF, INPUT_PULLUP);
-  pinMode(PIN_SENS_IN, INPUT_PULLUP);
-  pinMode(PIN_SENS_OUT, INPUT_PULLUP);
+  pinMode(PIN_SENS_IN, SENS_IN_ACTIVE_LOW ? INPUT_PULLUP : INPUT_PULLDOWN);
+  pinMode(PIN_SENS_OUT, SENS_OUT_ACTIVE_LOW ? INPUT_PULLUP : INPUT_PULLDOWN);
 
   // Tunggu sejenak agar tegangan pin stabil saat bootup
   delay(100);
-  lastBtnOnState   = digitalRead(PIN_BTN_ON);
-  lastBtnOffState  = digitalRead(PIN_BTN_OFF);
-  lastSensInState  = digitalRead(PIN_SENS_IN);
-  lastSensOutState = digitalRead(PIN_SENS_OUT);
+  lastBtnOnState  = digitalRead(PIN_BTN_ON);
+  lastBtnOffState = digitalRead(PIN_BTN_OFF);
 
-  // Inisialisasi Lampu Flash PWM (Pin 26)
   ledcAttach(PIN_FLASH, 5000, 8);
   if (flashOutputMode == 1) {
     ledcWrite(PIN_FLASH, flashBrightness); // Langsung nyala SOLID konstan
@@ -196,23 +286,53 @@ void setup() {
     ledcWrite(PIN_FLASH, 0);
   }
 
-  // Sambungkan ke Jaringan WiFi
   Serial.print("Menghubungkan ke WiFi: ");
   Serial.println(ssid);
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+
+  if (USE_STATIC_IP) {
+    if (!WiFi.config(devkit_static_ip, devkit_gateway, devkit_subnet, devkit_dns)) {
+      Serial.println("[WIFI] Konfigurasi Static IP Gagal! Menggunakan DHCP router...");
+    } else {
+      Serial.print("[WIFI] Mode Static IP Aktif: ");
+      Serial.println(devkit_static_ip);
+    }
+  }
+
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) { 
-    delay(400); 
+  unsigned long wifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - wifiStart < 8000)) { 
+    delay(250); 
     Serial.print(".");
   }
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("[WIFI] Berhasil terhubung!");
+    // Otomatis sinkronkan IP DevKit ke Dashboard Laragon
+    HTTPClient httpSync;
+    String setIpUrl = String("http://") + server_ip + "/api/set-devkit-ip?ip=" + WiFi.localIP().toString();
+    httpSync.begin(setIpUrl);
+    int syncCode = httpSync.GET();
+    Serial.printf("[DEVKIT-SYNC] Auto-register IP ke Dashboard: %s (Status: %d)\n", setIpUrl.c_str(), syncCode);
+    httpSync.end();
+  } else {
+    Serial.println("[WIFI] Belum terhubung saat boot, lanjutkan sensor & reconnect otomatis di background...");
+  }
   
-  Serial.println("\n==========================================");
+  Serial.println("==========================================");
   Serial.println("  ESP32 DEVKIT (RS-485 + HANGER TRIGGER)  ");
   Serial.println("==========================================");
   Serial.print("IP ESP32      : "); Serial.println(WiFi.localIP());
   Serial.print("Target Server : "); Serial.println(server_ip);
   Serial.println("==========================================");
 
-  // Endpoint WebServer ESP32
+  triggerQueue = xQueueCreate(16, sizeof(TriggerEventMsg));
+  if (triggerQueue != NULL) {
+    xTaskCreatePinnedToCore(httpWorkerTask, "HttpWorkerTask", 8192, NULL, 1, NULL, 0);
+  }
+
   server.on("/kabel", HTTP_GET, handleKabel);
   server.on("/kabel", HTTP_OPTIONS, handleOptions);
   
@@ -222,12 +342,10 @@ void setup() {
   server.on("/status-mesin", HTTP_GET, handleStatus);
   server.on("/status-mesin", HTTP_OPTIONS, handleOptions);
 
-  // Endpoint trigger manual/eksternal jika diperlukan
   server.on("/trigger-in", HTTP_GET, []() {
     setCORS(); 
     server.send(200, "text/plain", "OK"); 
     hangerInCount++;
-    kirimTriggerKeWeb("input");
     kirimTriggerKeWeb("input", 1);
   });
   
@@ -235,131 +353,140 @@ void setup() {
     setCORS(); 
     server.send(200, "text/plain", "OK"); 
     hangerOutCount++;
-    kirimTriggerKeWeb("output");
     kirimTriggerKeWeb("output", 1);
   });
   
   server.begin();
-
-  // STABILISASI & RE-SINKRONISASI PEMBACAAN PIN TEPAT SEBELUM LOOP UTAMA
-  // Memastikan tidak ada false edge trigger akibat glitch bootup atau wifi
   delay(200);
-  lastBtnOnState   = digitalRead(PIN_BTN_ON);
-  lastBtnOffState  = digitalRead(PIN_BTN_OFF);
-  lastSensInState  = digitalRead(PIN_SENS_IN);
-  lastSensOutState = digitalRead(PIN_SENS_OUT);
+  lastBtnOnState  = digitalRead(PIN_BTN_ON);
+  lastBtnOffState = digitalRead(PIN_BTN_OFF);
+
+  int rawSensIn      = digitalRead(PIN_SENS_IN);
+  int rawSensOut     = digitalRead(PIN_SENS_OUT);
+  bool bootInActive  = isSensorRawActive(PIN_SENS_IN, SENS_IN_ACTIVE_LOW);
+  bool bootOutActive = isSensorRawActive(PIN_SENS_OUT, SENS_OUT_ACTIVE_LOW);
+
+  sensInEdgeFlag   = false;
+  sensOutEdgeFlag  = false;
+  sensInArmed      = !bootInActive;
+  sensInIdleStart  = 0;
+  sensOutArmed     = !bootOutActive;
+  sensOutIdleStart = 0;
+
+  int interruptModeIn  = SENS_IN_ACTIVE_LOW  ? FALLING : RISING;
+  int interruptModeOut = SENS_OUT_ACTIVE_LOW ? FALLING : RISING;
+  attachInterrupt(digitalPinToInterrupt(PIN_SENS_IN), handleSensInISR, interruptModeIn);
+  attachInterrupt(digitalPinToInterrupt(PIN_SENS_OUT), handleSensOutISR, interruptModeOut);
 
   Serial.println("------------------------------------------");
   Serial.printf("[PIN INITIAL STATE]\n");
   Serial.printf(" - Pin 13 (PB HIJAU ON  - NO) : %s\n", lastBtnOnState == LOW ? "LOW (Tertutup)" : "HIGH (Standby)");
   Serial.printf(" - Pin 12 (PB MERAH OFF - NC) : %s\n", lastBtnOffState == LOW ? "LOW (Standby)" : "HIGH (Terbuka)");
-  Serial.printf(" - Pin %d (Sensor INLET)      : %s (Raw: %d)\n", PIN_SENS_IN, lastSensInState == LOW ? "LOW (Terdeteksi)" : "HIGH (Standby)", lastSensInState);
-  Serial.printf(" - Pin %d (Sensor OUTLET)     : %s (Raw: %d)\n", PIN_SENS_OUT, lastSensOutState == LOW ? "LOW (Terdeteksi)" : "HIGH (Standby)", lastSensOutState);
+  Serial.printf(" - Pin %d (INLET via PC817)   : %s (Raw: %d, Mode: %s, Intr: %s)\n",
+                PIN_SENS_IN, bootInActive ? "AKTIF (Terdeteksi)" : "Standby", rawSensIn,
+                SENS_IN_ACTIVE_LOW ? "Active-LOW" : "Active-HIGH",
+                SENS_IN_ACTIVE_LOW ? "FALLING" : "RISING");
+  Serial.printf(" - Pin %d (OUTLET Kamera)     : %s (Raw: %d, Mode: %s, Intr: %s)\n",
+                PIN_SENS_OUT, bootOutActive ? "AKTIF (Terdeteksi)" : "Standby", rawSensOut,
+                SENS_OUT_ACTIVE_LOW ? "Active-LOW" : "Active-HIGH",
+                SENS_OUT_ACTIVE_LOW ? "FALLING" : "RISING");
+  Serial.printf(" - Release Settle Time        : %lu ms\n", RELEASE_SETTLE_MS);
+  if (bootInActive) {
+    Serial.printf(" [PERINGATAN] Pin %d (PC817) terbaca AKTIF saat standby (Raw: %d)!\n", PIN_SENS_IN, rawSensIn);
+    Serial.printf("             Jika saat standby lampu sensor MATI, ubah SENS_IN_ACTIVE_LOW = %s di baris 44.\n",
+                  SENS_IN_ACTIVE_LOW ? "false" : "true");
+  }
+  if (bootOutActive) {
+    Serial.printf(" [PERINGATAN] Pin %d terbaca AKTIF saat standby (Raw: %d)!\n", PIN_SENS_OUT, rawSensOut);
+    Serial.printf("             Jika saat standby lampu sensor MATI, ubah SENS_OUT_ACTIVE_LOW = %s di baris 48.\n",
+                  SENS_OUT_ACTIVE_LOW ? "false" : "true");
+  }
   Serial.printf(" - Status Mesin Awal          : %s\n", isProduksi ? "AKTIF (ON)" : "STANDBY (OFF)");
   Serial.println("------------------------------------------");
-  Serial.println(">> ESP32 SIAP! (Mode Murni Tanpa Filter & Tanpa Delay) <<\n");
+  Serial.println(">> ESP32 SIAP! (Interrupt 0ms + HTTP Async Core 0) <<\n");
 }
 
-// ================================================================
-// LOOP UTAMA (NON-BLOCKING / ZERO DELAY / ZERO FILTER)
-// ================================================================
+void handleRs485Line(String dataRs485, unsigned long now) {
+  dataRs485.trim();
+  if (dataRs485.length() == 0) return;
+
+  Serial.println("[RS485-RX] Diterima: " + dataRs485);
+
+  if (dataRs485.indexOf("IN") >= 0 || dataRs485 == "1") {
+    hangerInCount++;
+    Serial.println("[AUTO-MARK] Hanger Masuk Terdeteksi via RS-485 -> Kirim Nilai 1!");
+    kirimTriggerKeWeb("input", 1);
+  } else if (dataRs485.indexOf("OUT") >= 0 || dataRs485 == "2") {
+    hangerOutCount++;
+    Serial.println("[AUTO-SHUTTER] Hanger Output Terdeteksi via RS-485 -> Trigger Kamera!");
+    if (flashOutputMode == 2) {
+      ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
+      flashOffTime = now + 150; 
+    }
+    kirimTriggerKeWeb("output", 1);
+  }
+}
+
 void loop() {
   server.handleClient();
   unsigned long now = millis();
 
-  // Matikan lampu flash otomatis tanpa delay (jika mode strobe aktif)
-  if (flashOffTime > 0 && now >= flashOffTime) {
+  if (WiFi.status() != WL_CONNECTED && (now - lastWifiRetryMs >= 10000)) {
+    lastWifiRetryMs = now;
+    WiFi.reconnect();
+  }
+
+  if (flashOffTime > 0 && (long)(now - flashOffTime) >= 0) {
     ledcWrite(PIN_FLASH, 0);
     flashOffTime = 0;
   }
 
-  // 1. BACA DATA SERIAL RS-485 (Jika sensor lewat bus serial RS485)
-  if (Serial2.available()) {
-    String dataRs485 = Serial2.readStringUntil('\n');
-    dataRs485.trim();
-    if (dataRs485.length() > 0) {
-      Serial.println("[RS485-RX] Diterima: " + dataRs485);
-
-      if (dataRs485.indexOf("IN") >= 0 || dataRs485 == "1") {
-        if (isProduksi) {
-          hangerInCount++;
-          Serial.println("[AUTO-MARK] Hanger Masuk Terdeteksi via RS-485 -> Kirim Nilai 1!");
-          kirimTriggerKeWeb("input", 1);
-        }
-      }
-      else if (dataRs485.indexOf("OUT") >= 0 || dataRs485 == "2") {
-        if (isProduksi) {
-          hangerOutCount++;
-          Serial.println("[AUTO-SHUTTER] Hanger Output Terdeteksi via RS-485 -> Trigger Kamera!");
-          if (flashOutputMode == 2) {
-            ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
-            flashOffTime = now + 150; // Non-blocking timer
-          }
-          kirimTriggerKeWeb("output", 1);
-        }
-      }
+  static String rs485Buffer = "";
+  while (Serial2.available()) {
+    char c = (char)Serial2.read();
+    if (c == '\n' || c == '\r') {
+      handleRs485Line(rs485Buffer, now);
+      rs485Buffer = "";
+    } else if (rs485Buffer.length() < 64) {
+      rs485Buffer += c;
     }
   }
 
-  // 2. KONTROL MESIN ON/OFF (TOMBOL HARDWARE - MURNI TANPA DELAY)
-  // --- TOMBOL ON: NO (Pin 13 Hijau) -> Normal=HIGH, Ditekan=LOW ---
   bool currentBtnOnState = digitalRead(PIN_BTN_ON);
   if (currentBtnOnState == LOW && lastBtnOnState == HIGH) {
     if (!isProduksi) {
       isProduksi = true; 
       hangerInCount = 0; 
       hangerOutCount = 0;
-      Serial.println("\n>>> MESIN PRODUKSI DI-START (PB HIJAU Pin 13) <<<");
+      Serial.println("\n>>> MESIN PRODUKSI DI-START (OFF -> ON, PB HIJAU Pin 13) <<<");
       kirimTriggerKeWeb("btn_on", 1);
-      sendDataToLaravel();
     } 
   } 
   lastBtnOnState = currentBtnOnState;
 
-  // --- TOMBOL OFF: NC (Pin 12 Merah) -> Normal=LOW, Ditekan=HIGH ---
   bool currentBtnOffState = digitalRead(PIN_BTN_OFF);
   if (currentBtnOffState == HIGH && lastBtnOffState == LOW) {
     if (isProduksi) { 
       isProduksi = false; 
-      Serial.println("\n>>> MESIN PRODUKSI DI-STOP (PB MERAH Pin 12) <<<"); 
+      Serial.println("\n>>> MESIN PRODUKSI DI-STOP (ON -> OFF, PB MERAH Pin 12) <<<"); 
       kirimTriggerKeWeb("btn_off", 0);
-      sendDataToLaravel();
     }
   } 
   lastBtnOffState = currentBtnOffState;
 
-  // 3. PEMBACAAN PIN SENSOR FISIK (MURNI INSTAN TANPA FILTER & TANPA DELAY)
-  // --- PHOTOSENSOR 1 (INLET): AUTO-MARKING HANGER ---
-  bool currentSensInState = digitalRead(PIN_SENS_IN);
-  if (currentSensInState == LOW && lastSensInState == HIGH) {
-    // Falling Edge: Begitu tersentuh objek (LOW), detik itu juga langsung kirim!
-    if (isProduksi) {
-      hangerInCount++;
-      Serial.printf("[AUTO-MARK] Hanger #%d Masuk ke Line (Pin %d) -> Kirim Nilai 1 ke Web!\n", hangerInCount, PIN_SENS_IN);
-      kirimTriggerKeWeb("input", 1);
-    } else {
-      Serial.printf("[TEST SENSOR] Pin %d Terdeteksi LOW! (Catatan: Mesin masih STANDBY, tekan PB HIJAU)\n", PIN_SENS_IN);
-    }
+  if (checkSensorTrigger(PIN_SENS_IN, SENS_IN_ACTIVE_LOW, sensInEdgeFlag, sensInArmed, sensInIdleStart, now)) {
+    hangerInCount++;
+    Serial.printf("[AUTO-MARK] Hanger #%d Masuk ke Line (Pin %d) -> Kirim Nilai 1 ke Web!\n", hangerInCount, PIN_SENS_IN);
+    kirimTriggerKeWeb("input", 1);
   }
-  lastSensInState = currentSensInState;
 
-  // --- PHOTOSENSOR 2 (OUTLET): AUTO-SHUTTER TRIGGER KAMERA ---
-  bool currentSensOutState = digitalRead(PIN_SENS_OUT);
-  if (currentSensOutState == LOW && lastSensOutState == HIGH) {
-    // Falling Edge: Begitu tersentuh objek (LOW), detik itu juga langsung kirim trigger ke Web!
+  if (checkSensorTrigger(PIN_SENS_OUT, SENS_OUT_ACTIVE_LOW, sensOutEdgeFlag, sensOutArmed, sensOutIdleStart, now)) {
     hangerOutCount++;
     Serial.printf("[AUTO-SHUTTER] Hanger #%d Tiba di Depan Kamera (Pin %d) -> Kirim Nilai 1 ke Web!\n", hangerOutCount, PIN_SENS_OUT);
     if (flashOutputMode == 2) {
       ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
-      flashOffTime = now + 200; // Mati otomatis tanpa delay
+      flashOffTime = now + 200;
     }
     kirimTriggerKeWeb("output", 1);
-  }
-  lastSensOutState = currentSensOutState;
-
-  // 4. PUSH DATA STATUS KE SERVER SECARA BERKALA
-  if (now - lastPostTime > POST_INTERVAL) {
-    sendDataToLaravel();
-    lastPostTime = now;
   }
 }

@@ -89,16 +89,16 @@ Route::match(['get', 'post', 'options'], '/api/sensor-trigger', function (Reques
     if ($type === 'btn_on') {
         $stats['is_produksi'] = 1;
         $stats['last_updated'] = now()->toIso8601String();
-        file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT));
+        file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT), LOCK_EX);
     } elseif ($type === 'btn_off') {
         $stats['is_produksi'] = 0;
         $stats['last_updated'] = now()->toIso8601String();
-        file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT));
+        file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT), LOCK_EX);
     } elseif ($type === 'input') {
         $stats['total_input_hangers']++;
         $stats['wip_hangers']++;
         $stats['last_updated'] = now()->toIso8601String();
-        file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT));
+        file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT), LOCK_EX);
     }
 
     // Simpan event trigger terakhir untuk dibaca listener UI
@@ -109,7 +109,7 @@ Route::match(['get', 'post', 'options'], '/api/sensor-trigger', function (Reques
         'timestamp' => $timestamp,
         'created_at' => now()->toIso8601String(),
     ];
-    file_put_contents(storage_path('app/latest_sensor_trigger.json'), json_encode($triggerData));
+    file_put_contents(storage_path('app/latest_sensor_trigger.json'), json_encode($triggerData), LOCK_EX);
 
     return response()->json([
         'status' => 'ok',
@@ -170,7 +170,7 @@ Route::match(['post', 'get', 'options'], '/api/confirm-hanger-output', function 
     }
     $stats['last_updated'] = now()->toIso8601String();
 
-    file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT));
+    file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT), LOCK_EX);
 
     return response()->json([
         'status' => 'ok',

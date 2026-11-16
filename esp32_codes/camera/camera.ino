@@ -17,6 +17,14 @@ const char *ssid = "SSID";
 const char *password = "12345678";
 const char *server_ip = "10.171.46.201:8000"; // IP PC / Server Dashboard Laragon (Port 8000)
 
+
+const bool USE_STATIC_IP = true;
+
+IPAddress cam_static_ip(10, 171, 46, 87);      // Ganti dengan IP Kamera yang Anda inginkan
+IPAddress cam_gateway(10, 171, 46, 193);       // Gateway router Anda (dari ipconfig)
+IPAddress cam_subnet(255, 255, 255, 0);        // Subnet mask
+IPAddress cam_dns(8, 8, 8, 8);                 // DNS opsional
+
 void startCameraServer();
 void setupLedFlash();
 
@@ -24,6 +32,7 @@ void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // Matikan Brownout Detector agar tidak reboot saat tegangan drop
 
   Serial.begin(115200);
+  Serial.setTimeout(20); // Timeout UART cepat 20ms agar video stream tidak tersendat jika data kabel belum selesai
   Serial.setDebugOutput(true);
   Serial.println();
   Serial.println("==========================================");
@@ -101,16 +110,31 @@ void setup() {
   setupLedFlash();
 #endif
 
+  if (USE_STATIC_IP) {
+    if (!WiFi.config(cam_static_ip, cam_gateway, cam_subnet, cam_dns)) {
+      Serial.println("[WIFI] Konfigurasi Static IP Gagal! Menggunakan DHCP router...");
+    } else {
+      Serial.print("[WIFI] Mode Static IP Aktif: ");
+      Serial.println(cam_static_ip);
+    }
+  }
+
+  WiFi.setAutoReconnect(true);
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
 
-  Serial.print("WiFi connecting");
-  while (WiFi.status() != WL_CONNECTED) {
+  Serial.print("Menghubungkan ke WiFi");
+  unsigned long wifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - wifiStart < 10000)) {
     delay(500);
     Serial.print(".");
   }
   Serial.println("");
-  Serial.println("WiFi connected");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("[WIFI] Berhasil terhubung!");
+  } else {
+    Serial.println("[WIFI] Belum terhubung saat boot, kamera akan reconnect otomatis di background...");
+  }
 
   startCameraServer();
 
@@ -130,6 +154,15 @@ void setup() {
 }
 
 void loop() {
+  unsigned long now = millis();
+  static unsigned long lastCamWifiRetryMs = 0;
+
+  // Auto-reconnect non-blocking jika WiFi sempat terputus
+  if (WiFi.status() != WL_CONNECTED && (now - lastCamWifiRetryMs >= 10000)) {
+    lastCamWifiRetryMs = now;
+    WiFi.reconnect();
+  }
+
   // ==========================================
   // MENDENGARKAN PERINTAH KABEL DARI DEVKIT
   // ==========================================
