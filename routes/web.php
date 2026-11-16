@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Models\HangerInput;
+use App\Models\HangerOutput;
+use App\Models\ProductionSummary;
 use Illuminate\Support\Facades\Route;
 
 // Halaman-halaman Multi-Page Dashboard (UI Only)
@@ -99,6 +102,30 @@ Route::match(['get', 'post', 'options'], '/api/sensor-trigger', function (Reques
         $stats['wip_hangers']++;
         $stats['last_updated'] = now()->toIso8601String();
         file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT), LOCK_EX);
+
+        try {
+            $activePart = function_exists('getActivePart') ? getActivePart() : null;
+            HangerInput::create([
+                'hanger_number' => $stats['total_input_hangers'],
+                'part_code'     => $activePart['code'] ?? null,
+                'part_name'     => $activePart['name'] ?? null,
+                'sensor_pin'    => 25,
+                'wip_at_time'   => $stats['wip_hangers'],
+                'status'        => 'in_line',
+                'entered_at'    => now(),
+            ]);
+
+            ProductionSummary::updateOrCreate(
+                ['date' => today()->toDateString(), 'shift' => 'Shift 1'],
+                [
+                    'total_input_hangers' => $stats['total_input_hangers'],
+                    'wip_hangers'         => $stats['wip_hangers'],
+                    'is_active'           => true,
+                ]
+            );
+        } catch (\Throwable $e) {
+            // Abaikan jika database belum siap
+        }
     }
 
     // Simpan event trigger terakhir untuk dibaca listener UI
@@ -172,6 +199,33 @@ Route::match(['post', 'get', 'options'], '/api/confirm-hanger-output', function 
 
     file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT), LOCK_EX);
 
+    try {
+        $activePart = function_exists('getActivePart') ? getActivePart() : null;
+        HangerOutput::create([
+            'hanger_number' => $stats['total_output_hangers'],
+            'part_code'     => $activePart['code'] ?? null,
+            'part_name'     => $activePart['name'] ?? null,
+            'target_pcs'    => $activePart['target_per_hanger'] ?? 4,
+            'detected_pcs'  => $pcsCount,
+            'is_empty'      => ($pcsCount === 0),
+            'sensor_pin'    => 27,
+            'exited_at'     => now(),
+        ]);
+
+        ProductionSummary::updateOrCreate(
+            ['date' => today()->toDateString(), 'shift' => 'Shift 1'],
+            [
+                'total_output_hangers' => $stats['total_output_hangers'],
+                'total_output_pcs'     => $stats['total_output_pcs'],
+                'total_empty_hangers'  => $stats['empty_hangers'],
+                'wip_hangers'          => $stats['wip_hangers'],
+                'is_active'            => true,
+            ]
+        );
+    } catch (\Throwable $e) {
+        // Abaikan jika database belum siap
+    }
+
     return response()->json([
         'status' => 'ok',
         'message' => 'Hanger output berhasil dikonfirmasi',
@@ -233,6 +287,32 @@ Route::match(['post', 'get', 'options'], '/api/reset-hanger-stats', function () 
     ])
     ->header('Access-Control-Allow-Origin', '*')
     ->header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    ->header('Access-Control-Allow-Headers', '*');
+});
+
+/**
+ * 5b. Mengambil log database input, output, dan summary produksi
+ */
+Route::match(['get', 'options'], '/api/production-logs', function (Request $request) {
+    $limit = min(100, max(1, (int)$request->input('limit', 20)));
+    $type = $request->input('type', 'all'); // 'input', 'output', 'all'
+
+    $inputs = ($type === 'all' || $type === 'input') 
+        ? HangerInput::orderBy('id', 'desc')->limit($limit)->get() 
+        : [];
+    $outputs = ($type === 'all' || $type === 'output') 
+        ? HangerOutput::orderBy('id', 'desc')->limit($limit)->get() 
+        : [];
+    $summary = ProductionSummary::orderBy('date', 'desc')->limit(7)->get();
+
+    return response()->json([
+        'status' => 'ok',
+        'inputs' => $inputs,
+        'outputs' => $outputs,
+        'summary' => $summary,
+    ])
+    ->header('Access-Control-Allow-Origin', '*')
+    ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
     ->header('Access-Control-Allow-Headers', '*');
 });
 
