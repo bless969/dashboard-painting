@@ -57,6 +57,52 @@ Route::match(['get', 'options'], '/api/get-devkit-ip', function () {
         ->header('Access-Control-Allow-Headers', '*');
 });
 
+// Proxy pembaca frekuensi noise / gangguan induksi motor dari ESP32 DevKit
+Route::match(['get', 'options'], '/api/devkit-noise', function () {
+    $ip = @file_get_contents(storage_path('app/devkit_ip.txt'));
+    $ip = trim($ip ?: '');
+    if (!$ip) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'IP DevKit belum diset',
+            'in_noise_hz' => 0.0,
+            'out_noise_hz' => 0.0,
+            'in_peak_hz' => 0.0,
+            'out_peak_hz' => 0.0,
+            'diagnosis' => 'IP DevKit Belum Diset'
+        ])->header('Access-Control-Allow-Origin', '*');
+    }
+
+    try {
+        $res = \Illuminate\Support\Facades\Http::timeout(1.5)->get("http://{$ip}/noise-meter");
+        if ($res->successful()) {
+            return response()->json($res->json())->header('Access-Control-Allow-Origin', '*');
+        }
+    } catch (\Throwable $e) {}
+
+    return response()->json([
+        'status' => 'offline',
+        'ip' => $ip,
+        'message' => 'ESP32 DevKit tidak merespon (Offline / Beda Jaringan)',
+        'in_noise_hz' => 0.0,
+        'out_noise_hz' => 0.0,
+        'in_peak_hz' => 0.0,
+        'out_peak_hz' => 0.0,
+        'diagnosis' => 'ESP32 Offline'
+    ])->header('Access-Control-Allow-Origin', '*');
+});
+
+Route::match(['get', 'post', 'options'], '/api/reset-noise-peak', function () {
+    $ip = @file_get_contents(storage_path('app/devkit_ip.txt'));
+    $ip = trim($ip ?: '');
+    if ($ip) {
+        try {
+            \Illuminate\Support\Facades\Http::timeout(1.0)->get("http://{$ip}/reset-noise-peak");
+        } catch (\Throwable $e) {}
+    }
+    return response()->json(['status' => 'ok'])->header('Access-Control-Allow-Origin', '*');
+});
+
 // ===== API INTEGRASI RS-485 PHOTOSENSOR & ROBOFLOW HANGER =====
 
 /**
@@ -68,6 +114,7 @@ Route::match(['get', 'options'], '/api/get-devkit-ip', function () {
 Route::match(['get', 'post', 'options'], '/api/sensor-trigger', function (Request $request) {
     $type = $request->input('type', $request->query('type', 'output'));
     $val = (int) $request->input('val', $request->query('val', 1));
+    $durationMs = (int) $request->input('duration_ms', $request->query('duration_ms', 0));
     $triggerId = uniqid('trig_', true);
     $timestamp = microtime(true);
 
@@ -133,6 +180,7 @@ Route::match(['get', 'post', 'options'], '/api/sensor-trigger', function (Reques
         'trigger_id' => $triggerId,
         'type' => $type,
         'val' => $val,
+        'duration_ms' => $durationMs,
         'timestamp' => $timestamp,
         'created_at' => now()->toIso8601String(),
     ];

@@ -601,6 +601,53 @@
                     </div>
                 </div>
 
+                <!-- CARD: Inspektor Frekuensi Gangguan Motor (EMI Spectrum Monitor) -->
+                <div style="background:#ffffff; border:1.5px solid #c7d2fe; border-radius:10px; padding:18px; box-shadow:0 2px 6px rgba(0,0,0,0.04);">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid #e0e7ff; padding-bottom:8px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:20px;">⚡</span>
+                            <h4 style="margin:0; font-size:15px; color:#3730a3; font-weight:800;">Spektrum Noise Motor Industri</h4>
+                        </div>
+                        <span id="badge-noise-status" style="font-size:11.5px; font-weight:700; background:#dcfce7; color:#16a34a; padding:3px 9px; border-radius:6px; font-family:ui-monospace,monospace;">
+                            🟢 Bersih (0.0 Hz)
+                        </span>
+                    </div>
+
+                    <!-- Indikator Dua Kolom: Pin 25 (Inlet) & Pin 27 (Outlet) -->
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; text-align:center;">
+                            <div style="font-size:11.5px; color:#64748b; font-weight:700;">Pin 25 (Inlet Sensor)</div>
+                            <div id="val-noise-in" style="font-size:20px; font-weight:800; color:#1e293b; font-family:monospace; margin:4px 0;">0.0 <span style="font-size:12px; color:#94a3b8;">Hz</span></div>
+                            <div style="font-size:11px; color:#94a3b8;">Peak: <span id="val-peak-in" style="font-weight:700; color:#475569;">0.0 Hz</span></div>
+                        </div>
+
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; text-align:center;">
+                            <div style="font-size:11.5px; color:#64748b; font-weight:700;">Pin 27 (Outlet Sensor)</div>
+                            <div id="val-noise-out" style="font-size:20px; font-weight:800; color:#1e293b; font-family:monospace; margin:4px 0;">0.0 <span style="font-size:12px; color:#94a3b8;">Hz</span></div>
+                            <div style="font-size:11px; color:#94a3b8;">Peak: <span id="val-peak-out" style="font-weight:700; color:#475569;">0.0 Hz</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Diagnosa & Rekomendasi Filter -->
+                    <div style="background:#eef2ff; border-left:3px solid #6366f1; border-radius:6px; padding:8px 10px; margin-bottom:10px; font-size:12px;">
+                        <div style="color:#4338ca; font-weight:700; margin-bottom:2px;">
+                            Diagnosa: <span id="text-noise-diagnosis" style="font-weight:800;">Memuat spektrum...</span>
+                        </div>
+                        <div style="color:#6366f1; font-size:11px;">
+                            Semua pulsa palsu akibat motor industri otomatis disaring oleh filter ESP32.
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span id="text-noise-rejected-summary" style="font-size:11.5px; color:#64748b;">
+                            Total noise disaring: <b id="val-total-noise-rejected" style="color:#ef4444;">0</b> pulsa
+                        </span>
+                        <button type="button" id="btn-reset-noise-peak" style="font-size:11px; font-weight:700; color:#4f46e5; background:#e0e7ff; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">
+                            Reset Peak
+                        </button>
+                    </div>
+                </div>
+
                 <!-- CARD 3: Status Sistem & Timeline Log Deteksi -->
                 <div style="background:#f8fafc; border:1.5px solid #dbe4f3; border-radius:10px; padding:18px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -1062,6 +1109,75 @@
         }
     }
     loadDevkitIp();
+
+    // ================================================================
+    // LISTENER SPEKTRUM FREKUENSI NOISE MOTOR INDUSTRI (POLLING 2s)
+    // ================================================================
+    const badgeNoiseStatus = document.getElementById('badge-noise-status');
+    const valNoiseIn = document.getElementById('val-noise-in');
+    const valNoiseOut = document.getElementById('val-noise-out');
+    const valPeakIn = document.getElementById('val-peak-in');
+    const valPeakOut = document.getElementById('val-peak-out');
+    const textNoiseDiagnosis = document.getElementById('text-noise-diagnosis');
+    const valTotalNoiseRejected = document.getElementById('val-total-noise-rejected');
+    const btnResetNoisePeak = document.getElementById('btn-reset-noise-peak');
+
+    async function pollDevkitNoise() {
+        try {
+            const res = await fetch('/api/devkit-noise');
+            const data = await res.json();
+            if (data && data.status === 'ok') {
+                const inHz = parseFloat(data.in_noise_hz) || 0;
+                const outHz = parseFloat(data.out_noise_hz) || 0;
+                const peakIn = parseFloat(data.in_peak_hz) || 0;
+                const peakOut = parseFloat(data.out_peak_hz) || 0;
+                const maxHz = Math.max(inHz, outHz);
+
+                if (valNoiseIn) valNoiseIn.innerHTML = `${inHz.toFixed(1)} <span style="font-size:12px; color:#94a3b8;">Hz</span>`;
+                if (valNoiseOut) valNoiseOut.innerHTML = `${outHz.toFixed(1)} <span style="font-size:12px; color:#94a3b8;">Hz</span>`;
+                if (valPeakIn) valPeakIn.innerText = `${peakIn.toFixed(1)} Hz`;
+                if (valPeakOut) valPeakOut.innerText = `${peakOut.toFixed(1)} Hz`;
+
+                const totalRejected = (parseInt(data.in_blind_rejected) || 0) + (parseInt(data.out_blind_rejected) || 0);
+                if (valTotalNoiseRejected) valTotalNoiseRejected.innerText = totalRejected;
+                if (textNoiseDiagnosis) textNoiseDiagnosis.innerText = data.diagnosis || 'Normal';
+
+                if (badgeNoiseStatus) {
+                    if (maxHz < 1.5) {
+                        badgeNoiseStatus.innerText = `🟢 Bersih (${maxHz.toFixed(1)} Hz)`;
+                        badgeNoiseStatus.style.background = '#dcfce7';
+                        badgeNoiseStatus.style.color = '#16a34a';
+                    } else if (maxHz < 50) {
+                        badgeNoiseStatus.innerText = `🟡 Noise (${maxHz.toFixed(1)} Hz)`;
+                        badgeNoiseStatus.style.background = '#fef3c7';
+                        badgeNoiseStatus.style.color = '#b45309';
+                    } else {
+                        badgeNoiseStatus.innerText = `🚨 Tinggi (${maxHz.toFixed(1)} Hz)`;
+                        badgeNoiseStatus.style.background = '#fee2e2';
+                        badgeNoiseStatus.style.color = '#dc2626';
+                    }
+                }
+            } else if (data && data.status === 'offline') {
+                if (badgeNoiseStatus) {
+                    badgeNoiseStatus.innerText = '⚪ DevKit Offline';
+                    badgeNoiseStatus.style.background = '#f1f5f9';
+                    badgeNoiseStatus.style.color = '#64748b';
+                }
+            }
+        } catch (e) {}
+    }
+
+    setInterval(pollDevkitNoise, 5000); // Polling santai setiap 5 detik agar tidak membebani jaringan & ESP32
+    pollDevkitNoise();
+
+    if (btnResetNoisePeak) {
+        btnResetNoisePeak.addEventListener('click', async () => {
+            await fetch('/api/reset-noise-peak');
+            if (valPeakIn) valPeakIn.innerText = '0.0 Hz';
+            if (valPeakOut) valPeakOut.innerText = '0.0 Hz';
+            appendLog('🔄 Peak frekuensi noise motor di-reset ke 0 Hz.', '#6366f1');
+        });
+    }
 
     // Load Saved Settings dari LocalStorage
     const savedModel = localStorage.getItem('rf_model_id');
@@ -2383,7 +2499,8 @@
                     textSensorInput.innerText = 'TRIGGER DETECTED!';
                     textSensorInput.style.color = '#16a34a';
 
-                    appendLog('🚪 Photosensor 1 (Input) menandai Hanger Baru Masuk ke Line (Nilai 1).', '#16a34a');
+                    const durText = trig.duration_ms ? ` (${trig.duration_ms}ms - Data Asli)` : '';
+                    appendLog(`🚪 Photosensor 1 (Input) Hanger Asli Masuk ke Line${durText}.`, '#16a34a');
                     loadHangerStats();
 
                     setTimeout(() => {
@@ -2400,6 +2517,9 @@
                     dotSensorOutput.style.boxShadow = '0 0 12px #22c55e';
                     textSensorOutput.innerText = 'SHUTTER TRIGGER!';
                     textSensorOutput.style.color = '#16a34a';
+
+                    const durText = trig.duration_ms ? ` (${trig.duration_ms}ms - Data Asli)` : '';
+                    appendLog(`📸 Photosensor 2 (Output) Hanger Asli Tiba di Kamera${durText} -> Shutter AI Aktif!`, '#16a34a');
 
                     // Efek Rana / Flash Kamera di Layar (Border Hijau)
                     videoContainer.style.borderColor = '#22c55e';
@@ -2441,6 +2561,9 @@
         btnSimOn.addEventListener('click', async () => {
             try {
                 await fetch('/api/sensor-trigger?type=btn_on&val=1');
+                if (activeDevkitIp) {
+                    fetch(`http://${activeDevkitIp}/start`, { mode: 'no-cors' }).catch(() => {});
+                }
             } catch (e) {}
         });
     }
@@ -2450,6 +2573,9 @@
         btnSimOff.addEventListener('click', async () => {
             try {
                 await fetch('/api/sensor-trigger?type=btn_off&val=0');
+                if (activeDevkitIp) {
+                    fetch(`http://${activeDevkitIp}/stop`, { mode: 'no-cors' }).catch(() => {});
+                }
             } catch (e) {}
         });
     }
