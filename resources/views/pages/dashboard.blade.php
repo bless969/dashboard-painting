@@ -1,16 +1,21 @@
+@php
+    $dashStatsFile = storage_path('app/hanger_stats.json');
+    $dashStats = file_exists($dashStatsFile) ? (@json_decode(file_get_contents($dashStatsFile), true) ?: []) : [];
+    $dashIsRunning = !empty($dashStats['is_produksi']);
+@endphp
 <div id="view-dashboard" style="{{ $view_aktif !== 'dashboard' ? 'display:none;' : '' }}">
     <!-- ===== TOP CONTROL BAR (Grid 2 Kolom: Status Mesin & Choose Part) ===== -->
     <div class="dashboard-top-grid">
         <!-- Kolom Kiri: Status Mesin (Tower Light - 2 Warna Standar: MERAH & HIJAU) -->
         <div class="panel tower-light-panel" id="tower-light-panel-card">
             <div class="tower-light-visual" id="tower-light-visual">
-                <div class="tower-lamp lamp-merah" id="lamp-merah" title="Status Stop / Standby"></div>
-                <div class="tower-lamp lamp-hijau" id="lamp-hijau" title="Status Running / Produksi Aktif"></div>
+                <div class="tower-lamp lamp-merah {{ !$dashIsRunning ? 'aktif' : '' }}" id="lamp-merah" title="Status Stop / Standby"></div>
+                <div class="tower-lamp lamp-hijau {{ $dashIsRunning ? 'aktif' : '' }}" id="lamp-hijau" title="Status Running / Produksi Aktif"></div>
             </div>
             <div class="tower-light-info">
                 <div class="tower-light-label">Status Mesin Painting</div>
-                <div class="tower-light-status" id="teks-status-mesin">Memuat...</div>
-                <div class="tower-light-updated" id="teks-update-status">-</div>
+                <div class="tower-light-status" id="teks-status-mesin" style="color:{{ $dashIsRunning ? '#16a34a' : '#dc2626' }};">{{ $dashIsRunning ? 'RUNNING (PRODUKSI AKTIF)' : 'STOP / STANDBY (OFF)' }}</div>
+                <div class="tower-light-updated" id="teks-update-status">{{ $dashStats['last_updated'] ?? '-' }}</div>
                 <div class="tower-light-warning" id="stop-alasan-warning" style="display:none;" onclick="bukaModalAlasanStop()">
                     <span class="pulse-dot-warning"></span>
                     <span id="stop-alasan-warning-teks">Belum sempat isi alasan stop? Klik untuk isi alasan stop</span>
@@ -111,24 +116,18 @@
                 </div>
             </div>
             <div class="metric-grid-3">
-                <!-- PCS: Input Produksi -->
-                <div class="metric-card input">
+                <!-- GABUNGAN INPUT & OUTPUT: KELUARAN TOTAL PRODUKSI (PCS) -->
+                <div class="metric-card output" style="grid-column: span 2;">
                     <div class="metric-card-header">
-                        <div class="icon">IN</div>
+                        <div class="icon" style="background:rgba(255,255,255,0.22); font-weight:800; letter-spacing:0.5px; padding:0 10px; border-radius:6px; font-size:12px;">OUT TOTAL</div>
                         <div class="metric-tanggal-label" id="metric-tanggal-label">Hari Ini</div>
                     </div>
-                    <div class="value skeleton" id="input-value">0</div>
-                    <div class="label">Input Produksi <span class="metric-unit-tag">PCS</span></div>
-                </div>
-
-                <!-- PCS: Output Produksi -->
-                <div class="metric-card output">
-                    <div class="metric-card-header">
-                        <div class="icon">OUT</div>
-                        <div class="metric-tanggal-label">Hari Ini</div>
-                    </div>
                     <div class="value skeleton" id="output-value">0</div>
-                    <div class="label">Output Produksi <span class="metric-unit-tag">PCS</span></div>
+                    <span id="input-value" style="display:none;">0</span>
+                    <div class="label" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                        <span>Keluaran Total Produksi <span class="metric-unit-tag">PCS</span></span>
+                        <span style="font-size:11.5px; opacity:0.88; font-weight:600; font-family:monospace;">• Terverifikasi Kamera Roboflow AI (Part)</span>
+                    </div>
                 </div>
 
                 <!-- PCS: Yield -->

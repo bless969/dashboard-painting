@@ -490,7 +490,7 @@ void setup() {
     if (wip < 0) wip = 0;
     Serial.printf("🌐 [WEB TRIGGER IN] TOTAL IN: %d | TOTAL OUT: %d | WIP: %d Hanger\n",
                   hangerInCount, hangerOutCount, wip);
-    kirimTriggerKeWeb("input", 1);
+    kirimTriggerKeWeb("input", hangerInCount);
   });
   
   server.on("/trigger-out", HTTP_GET, []() {
@@ -501,7 +501,7 @@ void setup() {
     if (wip < 0) wip = 0;
     Serial.printf("🌐 [WEB TRIGGER OUT] TOTAL IN: %d | TOTAL OUT: %d | WIP: %d Hanger\n",
                   hangerInCount, hangerOutCount, wip);
-    kirimTriggerKeWeb("output", 1);
+    kirimTriggerKeWeb("output", hangerOutCount);
   });
   
   server.begin();
@@ -635,7 +635,7 @@ void handleRs485Line(String dataRs485, unsigned long now) {
     if (wip < 0) wip = 0;
     Serial.printf("📊 [RS485 COUNTER IN] TOTAL IN: %d | TOTAL OUT: %d | WIP: %d Hanger\n",
                   hangerInCount, hangerOutCount, wip);
-    kirimTriggerKeWeb("input", 1);
+    kirimTriggerKeWeb("input", hangerInCount);
   } else if (dataRs485.indexOf("OUT") >= 0 || dataRs485 == "2") {
     hangerOutCount++;
     int wip = hangerInCount - hangerOutCount;
@@ -646,7 +646,7 @@ void handleRs485Line(String dataRs485, unsigned long now) {
       ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
       flashOffTime = now + 150; 
     }
-    kirimTriggerKeWeb("output", 1);
+    kirimTriggerKeWeb("output", hangerOutCount);
   }
 }
 
@@ -708,12 +708,26 @@ void loop() {
   }
 
   // ================================================================
-  // JIKA MESIN BELUM DI-START: CUEKIN SEMUA SENSOR & JANGAN TAMPILKAN APA-APA!
+  // 5. SIGNAL HEARTBEAT KE WEB SERVER
   // ================================================================
+  static unsigned long lastWebHeartbeatMs = 0;
+
+  // JIKA MESIN BELUM DI-START: CUEKIN SEMUA SENSOR & JANGAN TAMPILKAN APA-APA!
   if (!isProduksi) {
+    if (now - lastWebHeartbeatMs >= 10000) {
+      lastWebHeartbeatMs = now;
+      kirimTriggerKeWeb("heartbeat", 0);
+    }
     sensInEdgeFlag  = false;
     sensOutEdgeFlag = false;
     return; // KELUAR DARI loop()! Sensor fotosel dicuekin total!
+  }
+
+  // JIKA MESIN AKTIF PRODUKSI: Kirim sinyal heartbeat berkala setiap 3 detik
+  // Agar lampu indikator web server tahu sinyal ESP32 tetap tersambung & aktif
+  if (now - lastWebHeartbeatMs >= 3000) {
+    lastWebHeartbeatMs = now;
+    kirimTriggerKeWeb("heartbeat", 1);
   }
 
   // ================================================================
@@ -728,7 +742,7 @@ void loop() {
     Serial.printf("   📊 HASIL AKUMULASI -> TOTAL INPUT: %d | TOTAL OUTPUT: %d | WIP: %d Hanger\n",
                   hangerInCount, hangerOutCount, wip);
     Serial.println("--------------------------------------------------");
-    kirimTriggerKeWeb("input", 1);
+    kirimTriggerKeWeb("input", hangerInCount);
   }
 
   if (checkSensorTrigger(PIN_SENS_OUT, SENS_OUT_ACTIVE_LOW, sensOutEdgeFlag, sensOutArmed, sensOutIdleStart, now)) {
@@ -744,7 +758,7 @@ void loop() {
       ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
       flashOffTime = now + 200;
     }
-    kirimTriggerKeWeb("output", 1);
+    kirimTriggerKeWeb("output", hangerOutCount);
   }
 
   // Heartbeat berkala santai (setiap 30 detik) HANYA saat mesin AKTIF berproduksi

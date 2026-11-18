@@ -1,3 +1,8 @@
+@php
+    $statsFileAi = storage_path('app/hanger_stats.json');
+    $initialStatsAi = file_exists($statsFileAi) ? (@json_decode(file_get_contents($statsFileAi), true) ?: []) : [];
+    $isMesinActiveAi = !empty($initialStatsAi['is_produksi']);
+@endphp
 <div id="view-ai-vision" style="{{ $view_aktif !== 'ai-vision' ? 'display:none;' : '' }}">
     <div class="panel">
         <div class="panel-header-row">
@@ -70,9 +75,9 @@
                 <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
                     <!-- Indikator Status Mesin Produksi (PB ON / PB OFF) - Standar 2 Warna: MERAH (Off) & HIJAU (On) -->
                     <div style="display:flex; align-items:center; gap:8px; background:#ffffff; border:1px solid #cbd5e1; padding:7px 14px; border-radius:8px;">
-                        <span id="dot-mesin-status" style="width:12px; height:12px; border-radius:50%; background:#ef4444; box-shadow:0 0 8px rgba(239,68,68,0.5); display:inline-block; transition:all 0.3s;"></span>
+                        <span id="dot-mesin-status" style="width:12px; height:12px; border-radius:50%; background:{{ $isMesinActiveAi ? '#22c55e' : '#ef4444' }}; box-shadow:0 0 {{ $isMesinActiveAi ? '12px #22c55e' : '8px rgba(239,68,68,0.5)' }}; display:inline-block; transition:all 0.3s;"></span>
                         <span style="font-size:13px; font-weight:700; color:#334155;">Status Mesin:</span>
-                        <span id="status-mesin-text" style="font-size:13px; font-weight:800; color:#dc2626; font-family:monospace;">STANDBY (Nilai 0)</span>
+                        <span id="status-mesin-text" style="font-size:13px; font-weight:800; color:{{ $isMesinActiveAi ? '#16a34a' : '#dc2626' }}; font-family:monospace;">{{ $isMesinActiveAi ? 'PRODUKSI AKTIF (Nilai 1)' : 'STANDBY (Nilai 0)' }}</span>
                     </div>
 
                     <!-- Indikator Sensor 1 (Input) - Standar 2 Warna: MERAH (Standby) & HIJAU (Trigger) -->
@@ -158,7 +163,7 @@
                             Hanger di Line (WIP)
                         </div>
                         <div style="display:flex; align-items:baseline; gap:6px;">
-                            <span id="kpi-wip-hangers" style="font-size:34px; font-weight:800; color:#f59e0b; line-height:1;">0</span>
+                            <span id="kpi-wip-hangers" style="font-size:34px; font-weight:800; color:#f59e0b; line-height:1;">{{ $initialStatsAi['wip_hangers'] ?? 0 }}</span>
                             <span style="font-size:14px; font-weight:700; color:#64748b;">Hanger</span>
                         </div>
                         <div style="font-size:12px; color:#d97706; font-weight:700; margin-top:5px;">
@@ -186,7 +191,7 @@
                             Hanger Selesai
                         </div>
                         <div style="display:flex; align-items:baseline; gap:6px;">
-                            <span id="kpi-output-hangers" style="font-size:34px; font-weight:800; color:#0f172a; line-height:1;">0</span>
+                            <span id="kpi-output-hangers" style="font-size:34px; font-weight:800; color:#0f172a; line-height:1;">{{ $initialStatsAi['total_output_hangers'] ?? 0 }}</span>
                             <span style="font-size:14px; font-weight:700; color:#64748b;">Hanger</span>
                         </div>
                         <div style="font-size:12px; color:#64748b; font-weight:600; margin-top:5px;">
@@ -201,7 +206,7 @@
                             <button type="button" id="btn-reset-counter" style="background:none; border:none; color:#ef4444; font-size:12px; cursor:pointer; font-weight:700; text-decoration:underline;">Reset</button>
                         </div>
                         <div style="display:flex; align-items:baseline; gap:6px;">
-                            <span id="kpi-total-parts" style="font-size:34px; font-weight:800; color:#16a34a; line-height:1;">0</span>
+                            <span id="kpi-total-parts" style="font-size:34px; font-weight:800; color:#16a34a; line-height:1;">{{ $initialStatsAi['total_output_pcs'] ?? 0 }}</span>
                             <span style="font-size:14px; font-weight:700; color:#64748b;">Pcs</span>
                         </div>
                         <div style="font-size:12px; color:#16a34a; font-weight:700; margin-top:5px;">
@@ -243,20 +248,18 @@
                         </div>
                     </div>
 
-                    <!-- Pilihan Mode & Tombol Aksi -->
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
-                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600; color:#334155;">
-                            <input type="checkbox" id="chk-auto-sample-on-hanger" checked style="width:17px; height:17px; accent-color:#4f46e5;">
-                            <span>Auto-Capture saat Photosensor Output (Sensor 2) Terpicu</span>
-                        </label>
+                    <!-- Kontrol Pengambilan Sampel Dataset -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <button type="button" id="btn-toggle-sampling" style="display:inline-flex; align-items:center; gap:8px; padding:9px 20px; background:#4f46e5; color:white; border:none; border-radius:8px; font-weight:800; font-size:14px; cursor:pointer; transition:all 0.25s; box-shadow:0 2px 6px rgba(79,70,229,0.3);">
+                                ▶ Mulai Ambil Sampel
+                            </button>
+                            <button type="button" id="btn-capture-manual-sample" style="display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:#f8fafc; color:#1e293b; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;" title="Ambil 1 foto secara manual">
+                                📷 1x Jepret Manual
+                            </button>
+                        </div>
 
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <button type="button" id="btn-toggle-sampling" style="display:inline-flex; align-items:center; gap:6px; padding:8px 16px; background:#4f46e5; color:white; border:none; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; transition:all 0.2s;">
-                                ▶ Mulai Pengumpulan
-                            </button>
-                            <button type="button" id="btn-capture-manual-sample" style="display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:#f8fafc; color:#1e293b; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;">
-                                📷 Jepret Manual
-                            </button>
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                             <a id="btn-download-dataset-zip" href="/api/download-roboflow-zip" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; padding:8px 16px; background:#16a34a; color:white; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; opacity:0.6; pointer-events:none; transition:all 0.2s;">
                                 📦 Download ZIP
                             </a>
@@ -269,11 +272,16 @@
                         </div>
                     </div>
 
+                    <div style="font-size:12px; color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; border-radius:6px; padding:6px 10px; margin-bottom:14px; display:flex; align-items:center; gap:6px;">
+                        <span>⚡</span>
+                        <span><strong>Pengambilan Foto Mandiri:</strong> Kamera langsung memotret terus-menerus secara cepat tanpa menunggu sensor, trigger hardware, ataupun konveyor.</span>
+                    </div>
+
                     <!-- Filmstrip Preview Sampel Terbaru -->
                     <div>
                         <div style="font-size:12.5px; font-weight:700; color:#475569; margin-bottom:6px;">Preview Sampel Terakhir:</div>
                         <div id="sample-preview-container" style="display:flex; gap:8px; overflow-x:auto; padding:6px 0; min-height:72px; align-items:center;">
-                            <div id="sample-empty-notice" style="font-size:12.5px; color:#94a3b8; font-style:italic;">Belum ada sampel foto yang diambil. Klik 'Mulai Pengumpulan' atau 'Jepret Manual'.</div>
+                            <div id="sample-empty-notice" style="font-size:12.5px; color:#94a3b8; font-style:italic;">Belum ada sampel foto yang diambil. Klik 'Mulai Ambil Sampel' untuk mengambil foto beruntun.</div>
                         </div>
                     </div>
                 </div>
@@ -1212,7 +1220,7 @@
         });
     }
 
-    // Muat data statistik hanger saat halaman dibuka
+    // Muat data statistik hanger saat halaman dibuka & refresh berkala
     async function loadHangerStats() {
         try {
             const res = await fetch('/api/get-hanger-stats');
@@ -1222,12 +1230,13 @@
                 kpiOutputHangers.innerText = data.stats.total_output_hangers || 0;
                 kpiTotalParts.innerText = data.stats.total_output_pcs || 0;
                 if (data.stats.is_produksi !== undefined) {
-                    updateMesinUI(data.stats.is_produksi == 1);
+                    updateMesinUI(data.stats.is_produksi == 1, true);
                 }
             }
         } catch (e) {}
     }
     loadHangerStats();
+    setInterval(loadHangerStats, 3000); // Sinkronisasi berkala status produksi & sinyal ESP32
 
     // Reset Statistik Counter
     btnResetCounter.addEventListener('click', async () => {
@@ -1822,11 +1831,12 @@
     let sampleCount = 0;
     const maxSamples = 100;
     let isSamplingActive = false;
+    let continuousSamplingTimeout = null;
+    let isCapturingFrame = false;
 
     const badgeSampleStatus = document.getElementById('badge-sample-status');
     const labelSampleProgress = document.getElementById('label-sample-progress');
     const barSampleProgress = document.getElementById('bar-sample-progress');
-    const chkAutoSampleOnHanger = document.getElementById('chk-auto-sample-on-hanger');
     const btnToggleSampling = document.getElementById('btn-toggle-sampling');
     const btnCaptureManualSample = document.getElementById('btn-capture-manual-sample');
     const btnDownloadDatasetZip = document.getElementById('btn-download-dataset-zip');
@@ -1834,8 +1844,8 @@
     const samplePreviewContainer = document.getElementById('sample-preview-container');
     const sampleEmptyNotice = document.getElementById('sample-empty-notice');
 
-    function updateMesinUI(isOn) {
-        if (isOn) {
+    function updateMesinUI(isOn, hasSignal = true) {
+        if (isOn && hasSignal) {
             if (dotMesinStatus) {
                 dotMesinStatus.style.background = '#22c55e';
                 dotMesinStatus.style.boxShadow = '0 0 12px #22c55e';
@@ -1850,7 +1860,11 @@
                 dotMesinStatus.style.boxShadow = '0 0 8px rgba(239,68,68,0.5)';
             }
             if (textMesinStatus) {
-                textMesinStatus.innerText = 'STANDBY (Nilai 0)';
+                if (!hasSignal) {
+                    textMesinStatus.innerText = 'BERHENTI PRODUKSI (Tidak Ada Signal ESP)';
+                } else {
+                    textMesinStatus.innerText = 'STANDBY (Nilai 0)';
+                }
                 textMesinStatus.style.color = '#dc2626';
             }
         }
@@ -1871,9 +1885,9 @@
             btnDownloadDatasetZip.style.pointerEvents = 'auto';
             btnDownloadDatasetZip.style.boxShadow = '0 0 12px rgba(22, 163, 74, 0.4)';
         } else if (isSamplingActive) {
-            badgeSampleStatus.innerText = `🟢 Auto-Sampling (${sampleCount} / 100)`;
-            badgeSampleStatus.style.background = '#fef3c7';
-            badgeSampleStatus.style.color = '#b45309';
+            badgeSampleStatus.innerHTML = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:5px; box-shadow:0 0 6px #ef4444;"></span>Merekam (${sampleCount} / 100)`;
+            badgeSampleStatus.style.background = '#fef2f2';
+            badgeSampleStatus.style.color = '#dc2626';
             if (sampleCount > 0) {
                 btnDownloadDatasetZip.style.opacity = '1';
                 btnDownloadDatasetZip.style.pointerEvents = 'auto';
@@ -1895,11 +1909,13 @@
     function updateSamplingButtonState() {
         if (!btnToggleSampling) return;
         if (isSamplingActive) {
-            btnToggleSampling.innerHTML = '⏸ Jeda Pengumpulan';
-            btnToggleSampling.style.background = '#d97706';
+            btnToggleSampling.innerHTML = '⏹ Berhenti Ambil Sampel';
+            btnToggleSampling.style.background = '#dc2626';
+            btnToggleSampling.style.boxShadow = '0 0 14px rgba(220, 38, 38, 0.45)';
         } else {
-            btnToggleSampling.innerHTML = '▶ Mulai Pengumpulan Sampel';
+            btnToggleSampling.innerHTML = '▶ Mulai Ambil Sampel';
             btnToggleSampling.style.background = '#4f46e5';
+            btnToggleSampling.style.boxShadow = '0 2px 6px rgba(79, 70, 229, 0.3)';
         }
         updateSampleUI();
     }
@@ -1946,26 +1962,76 @@
         }
     }
 
-    async function captureRoboflowSample(source = 'Manual') {
-        if (sampleCount >= maxSamples) {
-            appendLog('✅ Koleksi 100 sampel Roboflow sudah lengkap! Silakan klik "Download Dataset (ZIP)".', '#16a34a');
-            return;
-        }
-
+    // Ekstraksi frame kamera yang handal: coba canvas stream dulu, jika gagal fallback langsung ke endpoint /capture ESP32-CAM
+    async function getFrameBase64() {
+        // 1. Coba capture instan dari canvas stream <img id="ai-mjpeg-stream">
         try {
-            let base64Data = '';
             if (streamImg && (streamImg.naturalWidth > 0 || streamImg.clientWidth > 0)) {
                 const snapCanvas = document.createElement('canvas');
                 snapCanvas.width = streamImg.naturalWidth || 640;
                 snapCanvas.height = streamImg.naturalHeight || 480;
                 const snapCtx = snapCanvas.getContext('2d');
                 snapCtx.drawImage(streamImg, 0, 0, snapCanvas.width, snapCanvas.height);
-                base64Data = snapCanvas.toDataURL('image/jpeg', 0.90);
+                const dataUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
+                if (dataUrl && dataUrl.length > 500) {
+                    return dataUrl;
+                }
             }
+        } catch (eCanvas) {
+            console.warn('Canvas toDataURL gagal/tainted, mencoba fallback capture:', eCanvas);
+        }
+
+        // 2. Fallback: Ambil langsung 1 frame JPEG dari endpoint /capture ESP32-CAM
+        if (activeCamIp) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 1200);
+                const res = await fetch(`http://${activeCamIp}/capture?_t=${Date.now()}`, {
+                    signal: controller.signal,
+                    cache: 'no-store'
+                });
+                clearTimeout(timeoutId);
+                if (res.ok) {
+                    const blob = await res.blob();
+                    if (blob.size > 500) {
+                        return await new Promise((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => resolve(reader.result);
+                            reader.readAsDataURL(blob);
+                        });
+                    }
+                }
+            } catch (eFetch) {
+                console.warn('Fallback /capture ESP32 gagal:', eFetch);
+            }
+        }
+
+        return '';
+    }
+
+    async function captureRoboflowSample(source = 'Manual') {
+        if (sampleCount >= maxSamples) {
+            stopContinuousSampling();
+            appendLog('✅ Koleksi 100 sampel Roboflow sudah lengkap! Silakan klik "Download ZIP".', '#16a34a');
+            return;
+        }
+
+        try {
+            const base64Data = await getFrameBase64();
 
             if (!base64Data) {
                 appendLog('⚠ Gagal mengambil sampel: Kamera belum siap / stream belum aktif.', '#dc2626');
                 return;
+            }
+
+            // Efek Rana / Flash Kamera pada frame saat foto sampel diambil (Visual Feedback Langsung)
+            if (shutterFlash) {
+                shutterFlash.style.display = 'block';
+                setTimeout(() => { shutterFlash.style.display = 'none'; }, 60);
+            }
+            if (videoContainer) {
+                videoContainer.style.borderColor = '#6366f1';
+                setTimeout(() => { videoContainer.style.borderColor = '#1e293b'; }, 90);
             }
 
             const activePartId = activePart ? activePart.id : '';
@@ -1983,15 +2049,15 @@
                 sampleCount = data.count;
                 updateSampleUI();
                 addThumbnailToPreview(base64Data, sampleCount);
-                appendLog(`📸 [Sampel #${sampleCount}/100] ${source}: Foto sampel disimpan untuk Part [${activePart ? activePart.code : 'Default'}]!`, '#4f46e5');
+                appendLog(`📸 [Sampel #${sampleCount}/100] ${source}: Foto tersimpan untuk Part [${activePart ? activePart.code : 'Default'}]!`, '#4f46e5');
 
                 if (sampleCount >= maxSamples) {
-                    isSamplingActive = false;
-                    updateSamplingButtonState();
-                    alert('🎉 Target 100 Sampel Gambar untuk Training Roboflow berhasil dikumpulkan!\n\nKlik tombol "Download Dataset (ZIP)" untuk mengunduh semua file gambar yang siap di-upload ke Roboflow.');
+                    stopContinuousSampling();
+                    alert('🎉 Target 100 Sampel Gambar untuk Training Roboflow berhasil dikumpulkan!\n\nKlik tombol "Download ZIP" untuk mengunduh semua file gambar yang siap di-upload ke Roboflow.');
                 }
             } else if (data && data.status === 'full') {
                 sampleCount = maxSamples;
+                stopContinuousSampling();
                 updateSampleUI();
             }
         } catch (e) {
@@ -1999,25 +2065,64 @@
         }
     }
 
+    // ================================================================
+    // LOGIKA PENGAMBILAN SAMPEL BERUNTUN (CONTINUOUS SAMPLING)
+    // ================================================================
+    function stopContinuousSampling() {
+        isSamplingActive = false;
+        if (continuousSamplingTimeout) {
+            clearTimeout(continuousSamplingTimeout);
+            continuousSamplingTimeout = null;
+        }
+        updateSamplingButtonState();
+    }
+
+    async function runContinuousSamplingLoop() {
+        if (!isSamplingActive) return;
+
+        if (sampleCount >= maxSamples) {
+            stopContinuousSampling();
+            alert('🎉 Target 100 Sampel Gambar untuk Training Roboflow berhasil dikumpulkan!\n\nKlik tombol "Download ZIP" untuk mengunduh semua file gambar yang siap di-upload ke Roboflow.');
+            return;
+        }
+
+        try {
+            await captureRoboflowSample('Beruntun');
+        } catch (err) {
+            console.error('Error continuous capture:', err);
+        }
+
+        // Ambil foto berikutnya 250ms SETELAH foto sebelumnya berhasil diproses (cepat & konsisten)
+        if (isSamplingActive && sampleCount < maxSamples) {
+            continuousSamplingTimeout = setTimeout(runContinuousSamplingLoop, 250);
+        }
+    }
+
+    function startContinuousSampling() {
+        if (sampleCount >= maxSamples) {
+            alert('Koleksi sudah 100 sampel. Jika ingin mengambil lagi dari awal, klik tombol Reset terlebih dahulu.');
+            return;
+        }
+        isSamplingActive = true;
+        updateSamplingButtonState();
+        appendLog('📸 Pengambilan sampel foto beruntun DIMULAI. Kamera akan memotret beruntun sampai tombol Berhenti dipencet.', '#16a34a');
+        runContinuousSamplingLoop();
+    }
+
     if (btnToggleSampling) {
         btnToggleSampling.addEventListener('click', () => {
-            if (sampleCount >= maxSamples) {
-                alert('Koleksi sudah 100 sampel. Jika ingin mengambil lagi dari awal, klik tombol Reset terlebih dahulu.');
-                return;
-            }
-            isSamplingActive = !isSamplingActive;
-            updateSamplingButtonState();
             if (isSamplingActive) {
-                appendLog('🟢 Pengumpulan sampel Roboflow AKTIF. Kamera akan memotret otomatis tiap ada hanger di Sensor 2.', '#4f46e5');
+                stopContinuousSampling();
+                appendLog('⏹ Pengambilan sampel beruntun DIHENTIKAN.', '#dc2626');
             } else {
-                appendLog('⏸ Pengumpulan sampel dijeda.', '#64748b');
+                startContinuousSampling();
             }
         });
     }
 
     if (btnCaptureManualSample) {
         btnCaptureManualSample.addEventListener('click', () => {
-            captureRoboflowSample('Jepret Manual');
+            captureRoboflowSample('1x Manual');
         });
     }
 
@@ -2025,6 +2130,9 @@
         btnResetSamples.addEventListener('click', async () => {
             const pName = activePart ? activePart.name : 'part ini';
             if (!confirm(`Apakah kamu yakin ingin mereset dan menghapus seluruh sampel gambar untuk ${pName}?`)) return;
+            if (isSamplingActive) {
+                stopContinuousSampling();
+            }
             try {
                 await fetch('/api/reset-roboflow-samples', { 
                     method: 'POST',
@@ -2032,10 +2140,9 @@
                     body: JSON.stringify({ part_id: activePart ? activePart.id : '' })
                 });
                 sampleCount = 0;
-                isSamplingActive = false;
                 updateSamplingButtonState();
                 if (samplePreviewContainer) {
-                    samplePreviewContainer.innerHTML = '<div id="sample-empty-notice" style="font-size:11.5px; color:#94a3b8; font-style:italic;">Belum ada sampel foto yang diambil. Klik \'Mulai Pengumpulan\' atau \'Jepret Manual\'.</div>';
+                    samplePreviewContainer.innerHTML = '<div id="sample-empty-notice" style="font-size:12.5px; color:#94a3b8; font-style:italic;">Belum ada sampel foto yang diambil. Klik \'Mulai Ambil Sampel\' untuk mengambil foto beruntun.</div>';
                 }
                 appendLog(`↺ Seluruh sampel foto Roboflow untuk ${pName} berhasil direset.`, '#dc2626');
             } catch (e) {}
@@ -2471,6 +2578,8 @@
     loadPartsCatalog(true);
 
     // 5. LISTENER AUTO-TRIGGER RS-485 (Polling Real-Time dari Backend)
+    let lastEspSignalTime = Date.now();
+
     async function pollSensorTrigger() {
         if (!chkAutoTrigger.checked) return;
 
@@ -2481,19 +2590,26 @@
 
             if (trig && trig.trigger_id && trig.trigger_id !== lastProcessedTriggerId) {
                 lastProcessedTriggerId = trig.trigger_id;
+                lastEspSignalTime = Date.now(); // Perbarui waktu sinyal ESP terakhir
 
                 // Event Tombol Hardware PB ON (Start)
                 if (trig.type === 'btn_on') {
-                    updateMesinUI(true);
+                    updateMesinUI(true, true);
                     appendLog('🚀 [Hardware PB ON] Tombol START Ditekan: Status Produksi Aktif (Nilai 1). Photosensor kini aktif!', '#16a34a');
                 }
                 // Event Tombol Hardware PB OFF (Stop)
                 else if (trig.type === 'btn_off') {
-                    updateMesinUI(false);
+                    updateMesinUI(false, true);
                     appendLog('🛑 [Hardware PB OFF] Tombol STOP Ditekan: Status Produksi Dihentikan (Nilai 0). Photosensor standby.', '#dc2626');
+                }
+                // Event Sinyal Heartbeat dari ESP32
+                else if (trig.type === 'heartbeat') {
+                    const isRunning = (trig.val == 1);
+                    updateMesinUI(isRunning, true);
                 }
                 // Event Photosensor 1 (Inlet / Hanger Masuk) - Standard 2 Warna: Hijau (Trigger) & Merah (Standby)
                 else if (trig.type === 'input') {
+                    updateMesinUI(true, true);
                     dotSensorInput.style.background = '#22c55e';
                     dotSensorInput.style.boxShadow = '0 0 12px #22c55e';
                     textSensorInput.innerText = 'TRIGGER DETECTED!';
@@ -2513,6 +2629,7 @@
                 }
                 // Event Photosensor 2 (Outlet / Shutter Kamera) - Standard 2 Warna: Hijau (Trigger) & Merah (Standby)
                 else if (trig.type === 'output' || trig.type === 'output_trigger') {
+                    updateMesinUI(true, true);
                     dotSensorOutput.style.background = '#22c55e';
                     dotSensorOutput.style.boxShadow = '0 0 12px #22c55e';
                     textSensorOutput.innerText = 'SHUTTER TRIGGER!';
@@ -2536,10 +2653,6 @@
                         console.warn('runObjectDetection warning:', errDet);
                     }
 
-                    // 2. AUTO-CAPTURE: Jepret foto & simpan sampel otomatis jika checkbox aktif!
-                    if (chkAutoSampleOnHanger && chkAutoSampleOnHanger.checked) {
-                        await captureRoboflowSample('Sensor 2 Auto');
-                    }
 
                     setTimeout(() => {
                         dotSensorOutput.style.background = '#ef4444';

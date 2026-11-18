@@ -861,7 +861,42 @@
             const tgl = tanggal || (currentView === 'dashboard' ? (_urlParams.get('tanggal') || tanggalLokalYYYYMMDD()) : getTanggalAktif());
             try {
                 const response = await fetch(`api/data.php?line=${encodeURIComponent(currentLine)}&tanggal=${tgl}&mode=${dashboardModeProduksi}`, { cache: "no-store" });
-                const data = await response.json();
+                let data = null;
+                if (response.ok) {
+                    try {
+                        data = await response.json();
+                    } catch (e) {}
+                }
+
+                // Fallback otomatis ke /api/get-hanger-stats jika endpoint data.php belum merespons
+                if (!data || data.input === undefined) {
+                    try {
+                        const fallbackRes = await fetch('/api/get-hanger-stats');
+                        const fallbackData = await fallbackRes.json();
+                        if (fallbackData && fallbackData.stats) {
+                            const s = fallbackData.stats;
+                            const inHanger = parseInt(s.total_input_hangers) || 0;
+                            const outPcs = parseInt(s.total_output_pcs) || 0;
+                            const outHanger = parseInt(s.total_output_hangers) || 0;
+                            const emptyHanger = parseInt(s.empty_hangers) || 0;
+                            const yPcs = inHanger > 0 ? ((outPcs / inHanger) * 100).toFixed(1) : 0;
+                            data = {
+                                input: inHanger,
+                                output: outPcs,
+                                yield_val: yPcs,
+                                or_value: yPcs,
+                                input_sheet: inHanger,
+                                output_sheet: Math.max(0, outHanger - emptyHanger),
+                                yield_sheet_val: emptyHanger,
+                                mode: dashboardModeProduksi
+                            };
+                        }
+                    } catch (eFallback) {}
+                }
+
+                // Selalu hilangkan kelas skeleton agar angka tidak terjebak putih/transparan
+                document.querySelectorAll('.metric-card .value').forEach(el => el.classList.remove('skeleton'));
+                sudahLoadPertama = true;
 
                 if (!data || data.input === undefined) {
                     console.warn('updateData: respons tidak valid atau terjadi error', data);
@@ -878,10 +913,7 @@
                 const newSheetOutput = isNaN(parseFloat(data.output_sheet)) ? 0 : parseFloat(data.output_sheet);
                 const newSheetYield = isNaN(parseFloat(data.yield_sheet_val)) ? 0 : parseFloat(data.yield_sheet_val);
 
-                if (!sudahLoadPertama) {
-                    document.querySelectorAll('.metric-card .value').forEach(el => el.classList.remove('skeleton'));
-                    sudahLoadPertama = true;
-                }
+
 
                 // Selalu simpan nilai terbaru biar kartu produksi bisa restore dengan benar
                 prevInput = newInput; prevOutput = newOutput; prevYield = newYield; prevOr = newOr;
@@ -1264,6 +1296,15 @@
             }
             } catch (err) {
                 console.warn('updateStatusMesin error:', err);
+                const lampMerah = document.getElementById("lamp-merah");
+                const lampHijau = document.getElementById("lamp-hijau");
+                if (lampMerah) lampMerah.classList.add("aktif");
+                if (lampHijau) lampHijau.classList.remove("aktif", "lamp-berkedip");
+                const teksStatusEl = document.getElementById("teks-status-mesin");
+                if (teksStatusEl) {
+                    teksStatusEl.innerText = "BERHENTI PRODUKSI (TERPUTUS)";
+                    teksStatusEl.style.color = "#dc2626";
+                }
             }
         }
 
