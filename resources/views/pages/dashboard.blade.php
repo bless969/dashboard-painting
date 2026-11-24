@@ -6,19 +6,65 @@
 <div id="view-dashboard" style="{{ $view_aktif !== 'dashboard' ? 'display:none;' : '' }}">
     <!-- ===== TOP CONTROL BAR (Grid 2 Kolom: Status Mesin & Choose Part) ===== -->
     <div class="dashboard-top-grid">
-        <!-- Kolom Kiri: Status Mesin (Tower Light - 2 Warna Standar: MERAH & HIJAU) -->
-        <div class="panel tower-light-panel" id="tower-light-panel-card">
-            <div class="tower-light-visual" id="tower-light-visual">
-                <div class="tower-lamp lamp-merah {{ !$dashIsRunning ? 'aktif' : '' }}" id="lamp-merah" title="Status Stop / Standby"></div>
-                <div class="tower-lamp lamp-hijau {{ $dashIsRunning ? 'aktif' : '' }}" id="lamp-hijau" title="Status Running / Produksi Aktif"></div>
+        <!-- Kolom Kiri: Status Mesin Painting (Unified Modern Card) -->
+        <div class="panel tower-light-panel panel-status-mesin-card" id="tower-light-panel-card" style="background:#ffffff; border:1.5px solid #dbe4f3; border-radius:14px; padding:18px 20px; box-shadow:0 3px 12px rgba(13, 59, 140, 0.05); display:flex; flex-direction:column; justify-content:space-between; height:100%; margin-bottom:0;">
+            <!-- Header Kartu: Status Mesin Painting -->
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:36px; height:36px; border-radius:8px; background:#eff6ff; display:flex; align-items:center; justify-content:center; color:#0d3b8c; font-size:19px; border:1.5px solid #bfdbfe;">
+                        🚦
+                    </div>
+                    <div>
+                        <h3 style="margin:0; font-size:16px; font-weight:800; color:#0f172a; display:flex; align-items:center; gap:8px;">
+                            Status Mesin Painting
+                            <span style="font-size:11px; font-weight:700; background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px;">RS-485 Live</span>
+                        </h3>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">
+                            Monitoring status konveyor, patlite & booth painting
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span id="mr-jam-mulai" style="font-size:12px; font-weight:700; background:#dcfce7; color:#15803d; padding:4px 10px; border-radius:12px; display:inline-flex; align-items:center; gap:5px; border:1px solid #bbf7d0;">
+                        <span style="width:7px; height:7px; border-radius:50%; background:#22c55e;"></span>
+                        Sesi Berjalan
+                    </span>
+                </div>
             </div>
-            <div class="tower-light-info">
-                <div class="tower-light-label">Status Mesin Painting</div>
-                <div class="tower-light-status" id="teks-status-mesin" style="color:{{ $dashIsRunning ? '#16a34a' : '#dc2626' }};">{{ $dashIsRunning ? 'RUNNING (PRODUKSI AKTIF)' : 'STOP / STANDBY (OFF)' }}</div>
-                <div class="tower-light-updated" id="teks-update-status">{{ $dashStats['last_updated'] ?? '-' }}</div>
-                <div class="tower-light-warning" id="stop-alasan-warning" style="display:none;" onclick="bukaModalAlasanStop()">
-                    <span class="pulse-dot-warning"></span>
-                    <span id="stop-alasan-warning-teks">Belum sempat isi alasan stop? Klik untuk isi alasan stop</span>
+
+            <!-- Body: Visual Tower Lamp & Status Utama -->
+            <div style="display:flex; align-items:center; gap:20px; padding:8px 0; flex:1;">
+                <div class="tower-light-visual" id="tower-light-visual" style="background:#0f172a; padding:12px 10px; border-radius:12px; display:flex; flex-direction:column; gap:10px; flex-shrink:0; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+                    <div class="tower-lamp lamp-merah {{ !$dashIsRunning ? 'aktif' : '' }}" id="lamp-merah" title="Status Stop / Standby"></div>
+                    <div class="tower-lamp lamp-hijau {{ $dashIsRunning ? 'aktif' : '' }}" id="lamp-hijau" title="Status Running / Produksi Aktif"></div>
+                </div>
+
+                <div class="tower-light-info" style="flex:1;">
+                    <div class="tower-light-label" style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.6px; margin-bottom:4px;">Kondisi Operasional Lini</div>
+                    <div class="tower-light-status" id="teks-status-mesin" style="font-size:22px; font-weight:800; color:{{ $dashIsRunning ? '#16a34a' : '#dc2626' }}; line-height:1.2; margin-bottom:6px;">
+                        {{ $dashIsRunning ? 'RUNNING (PRODUKSI AKTIF)' : 'STOP / STANDBY (OFF)' }}
+                    </div>
+                    <div class="tower-light-updated" id="teks-update-status" style="font-size:12px; color:#64748b; font-weight:600; display:flex; align-items:center; gap:5px;">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span>Terakhir diperbarui: {{ !empty($dashStats['last_updated']) ? (date('H:i:s \W\I\B', strtotime($dashStats['last_updated'])) ?: 'Live') : 'Live' }}</span>
+                    </div>
+
+                    <div class="tower-light-warning" id="stop-alasan-warning" style="display:none; margin-top:8px;" onclick="bukaModalAlasanStop()">
+                        <span class="pulse-dot-warning"></span>
+                        <span id="stop-alasan-warning-teks">Belum sempat isi alasan stop? Klik untuk isi alasan stop</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer: Ringkasan Part Terpasang -->
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:11.5px; font-weight:700; color:#64748b; text-transform:uppercase;">Part Terpasang:</span>
+                    <span id="mr-nama-part" style="font-size:13.5px; font-weight:800; color:#0d3b8c; font-family:monospace;">{{ !empty($active_part_ai['code']) ? '[' . $active_part_ai['code'] . '] ' : '' }}{{ $active_part_ai['name'] ?? '-' }}</span>
+                </div>
+                <div style="font-size:11.5px; font-weight:600; color:#475569; display:inline-flex; align-items:center; gap:4px;">
+                    <span>⚡ Patlite Standar 2 Warna</span>
                 </div>
             </div>
         </div>
@@ -28,7 +74,7 @@
     </div>
 
     <!-- ===== PANEL TARGET PRODUKSI BULANAN (PCS) & PENCAPAIAN (%) ===== -->
-    <div class="panel panel-target-bulanan" style="background:#ffffff; border:1.5px solid #dbe4f3; border-radius:12px; padding:18px 20px; margin-bottom:20px; box-shadow:0 3px 12px rgba(13, 59, 140, 0.05);">
+    <div class="panel panel-target-bulanan" style="background:#ffffff; border:1.5px solid #dbe4f3; border-radius:14px; padding:18px 20px; margin-bottom:20px; box-shadow:0 3px 12px rgba(13, 59, 140, 0.05);">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
             <div style="display:flex; align-items:center; gap:10px;">
                 <div style="width:38px; height:38px; border-radius:8px; background:#eff6ff; display:flex; align-items:center; justify-content:center; color:#0d3b8c; font-size:20px; border:1.5px solid #bfdbfe;">
@@ -116,8 +162,8 @@
                 </div>
             </div>
             <div class="metric-grid-3">
-                <!-- GABUNGAN INPUT & OUTPUT: KELUARAN TOTAL PRODUKSI (PCS) -->
-                <div class="metric-card output" style="grid-column: span 2;">
+                <!-- 1. KELUARAN TOTAL PRODUKSI (PCS) -->
+                <div class="metric-card output">
                     <div class="metric-card-header">
                         <div class="icon" style="background:rgba(255,255,255,0.22); font-weight:800; letter-spacing:0.5px; padding:0 10px; border-radius:6px; font-size:12px;">OUT TOTAL</div>
                         <div class="metric-tanggal-label" id="metric-tanggal-label">Hari Ini</div>
@@ -125,19 +171,37 @@
                     <div class="value skeleton" id="output-value">0</div>
                     <span id="input-value" style="display:none;">0</span>
                     <div class="label" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
-                        <span>Keluaran Total Produksi <span class="metric-unit-tag">PCS</span></span>
-                        <span style="font-size:11.5px; opacity:0.88; font-weight:600; font-family:monospace;">• Terverifikasi Kamera Roboflow AI (Part)</span>
+                        <span>Keluaran Total <span class="metric-unit-tag">PCS</span></span>
+                        <span style="font-size:11px; opacity:0.88; font-weight:600; font-family:monospace;">• Kamera AI</span>
                     </div>
                 </div>
 
-                <!-- PCS: Yield -->
+                <!-- 2. PART CACAT / DEFECT (NG) -->
+                <div class="metric-card sheet-input" style="background:linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);">
+                    <div class="metric-card-header">
+                        <div class="icon" style="background:rgba(255,255,255,0.25); font-weight:800; letter-spacing:0.5px; padding:0 10px; border-radius:6px; font-size:12px;">NG / REJECT</div>
+                        <button type="button" onclick="bukaModalInputNg()" style="background:#ffffff; color:#b91c1c; border:none; border-radius:6px; font-size:11.5px; font-weight:800; padding:3px 10px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.15); display:inline-flex; align-items:center; gap:4px; transition:transform 0.15s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+                            ➕ Catat NG
+                        </button>
+                    </div>
+                    <div class="value skeleton" id="ng-value" style="color:#ffffff;">0</div>
+                    <div class="label" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                        <span>Part Cacat (NG) <span class="metric-unit-tag" style="background:rgba(255,255,255,0.25); color:#ffffff;">PCS</span></span>
+                        <span style="font-size:11px; opacity:0.92; font-weight:700; font-family:monospace;" id="ng-subtext">0.0% Defect</span>
+                    </div>
+                </div>
+
+                <!-- 3. PCS: Yield -->
                 <div class="metric-card yield">
                     <div class="metric-card-header">
-                        <div class="icon">%</div>
+                        <div class="icon">% YIELD</div>
                         <div class="metric-tanggal-label">Hari Ini</div>
                     </div>
-                    <div class="value skeleton" id="yield-value">0</div>
-                    <div class="label">Yield Produksi <span class="metric-unit-tag">%</span></div>
+                    <div class="value skeleton" id="yield-value">0.0%</div>
+                    <div class="label" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                        <span>Yield Produksi <span class="metric-unit-tag">%</span></span>
+                        <span style="font-size:11px; opacity:0.92; font-weight:700; font-family:monospace;" id="yield-formula-text">OK / Out</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -147,7 +211,7 @@
             <div class="metric-group-header">
                 <div class="metric-group-badge badge-sheet">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    <span>METRIK HANGER / WADAH</span>
+                    <span>METRIK HANGER</span>
                 </div>
             </div>
             <div class="metric-grid-3">
@@ -161,93 +225,26 @@
                     <div class="label">Total Hanger <span class="metric-unit-tag sheet">HANGER</span></div>
                 </div>
 
-                <!-- Hanger: Hanger Terisi Wadah -->
+                <!-- Hanger: Hanger Terisi -->
                 <div class="metric-card sheet-output">
                     <div class="metric-card-header">
                         <div class="icon">HNG OK</div>
                         <div class="metric-tanggal-label">Hari Ini</div>
                     </div>
                     <div class="value skeleton" id="sheet-output-value">0</div>
-                    <div class="label">Hanger Terisi Wadah <span class="metric-unit-tag sheet">ADA WADAH</span></div>
+                    <div class="label">Hanger Terisi <span class="metric-unit-tag sheet">TERISI</span></div>
                 </div>
 
-                <!-- Hanger: Hanger Kosong (Tanpa Wadah) -->
+                <!-- Hanger: Hanger Kosong -->
                 <div class="metric-card sheet-yield">
                     <div class="metric-card-header">
                         <div class="icon">HNG 0</div>
                         <div class="metric-tanggal-label">Hari Ini</div>
                     </div>
                     <div class="value skeleton" id="sheet-yield-value">0</div>
-                    <div class="label">Hanger Kosong <span class="metric-unit-tag sheet">TANPA WADAH</span></div>
+                    <div class="label">Hanger Kosong <span class="metric-unit-tag sheet">KOSONG</span></div>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <!-- ===== MACHINE RATIO: Sesi Part Aktif ===== -->
-    <div class="panel panel-machine-ratio">
-        <div id="mr-tidak-ada-sesi" class="mr-empty-state">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-            <p>Belum ada sesi produksi part yang sedang berjalan.</p>
-            <span>Mulai sesi lewat halaman <strong>Machine Control</strong> dulu — begitu mesin Running dan part dipilih, angka di sini otomatis muncul dan ter-update tiap beberapa detik.</span>
-        </div>
-
-        <div id="mr-konten" style="display:none;">
-            <div class="mr-header-part">
-                <div class="mr-header-left">
-                    <span class="mr-header-label">Part Aktif</span>
-                    <span class="mr-header-value" id="mr-nama-part">-</span>
-                    <span class="mr-header-jam" id="mr-jam-mulai">Mulai —</span>
-                </div>
-                <a href="{{ route('machine-control', ['line' => $line_aktif]) }}" class="btn-mr-detail" onclick="navigateTo(currentLine, 'machine-control'); return false;">Detail Machine Control &rarr;</a>
-            </div>
-
-            <div class="mr-grid">
-                <div class="mr-card mr-card-wide">
-                    <div class="mr-card-label">Total Product</div>
-                    <div class="mr-card-value mr-card-dark" id="mr-total-product">- PCS</div>
-                </div>
-                <div class="mr-card mr-card-wide">
-                    <div class="mr-card-label">OK Product</div>
-                    <div class="mr-card-value mr-card-dark" id="mr-ok-product">- PCS</div>
-                </div>
-                <div class="mr-card mr-card-wide">
-                    <div class="mr-card-label">NG Ratio</div>
-                    <div class="mr-card-value mr-card-red" id="mr-ng-ratio">-%</div>
-                </div>
-                <div class="mr-card mr-card-wide">
-                    <div class="mr-card-label">NG Product</div>
-                    <div class="mr-card-value mr-card-dark" id="mr-ng-product">- PCS</div>
-                </div>
-
-                <div class="mr-card mr-card-highlight">
-                    <div class="mr-card-label">Product Rate <span class="mr-card-sub">(H)</span></div>
-                    <div class="mr-card-value mr-card-yellow" id="mr-product-rate">-%</div>
-                </div>
-                <div class="mr-card mr-card-highlight">
-                    <div class="mr-card-label">Machine Rate <span class="mr-card-sub">(Working Time %)</span></div>
-                    <div class="mr-card-value mr-card-dark" id="mr-machine-rate">-%</div>
-                </div>
-
-                <div class="mr-card">
-                    <div class="mr-card-label">Product Time <span class="mr-card-sub">(B)</span></div>
-                    <div class="mr-card-value mr-card-dark" id="mr-product-time">-</div>
-                </div>
-                <div class="mr-card">
-                    <div class="mr-card-label">Run Time <span class="mr-card-sub">(Shift)</span></div>
-                    <div class="mr-card-value mr-card-dark" id="mr-run-time">-</div>
-                </div>
-                <div class="mr-card">
-                    <div class="mr-card-label">Planned <span class="mr-card-sub">(P)</span></div>
-                    <div class="mr-card-value mr-card-dark" id="mr-waiting-loss">-</div>
-                </div>
-                <div class="mr-card">
-                    <div class="mr-card-label">Loss Time <span class="mr-card-sub">(I)</span></div>
-                    <div class="mr-card-value mr-card-dark" id="mr-machine-trouble">-</div>
-                </div>
-            </div>
-
-            <a href="{{ route('machine-control', ['line' => $line_aktif]) }}" class="btn-lihat-detail-lain" style="display:inline-block; text-decoration:none; text-align:center;" onclick="navigateTo(currentLine, 'machine-control'); return false;">Lihat detail rumus lengkap di Machine Control &rarr;</a>
         </div>
     </div>
 </div>

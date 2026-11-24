@@ -68,13 +68,11 @@ class DashboardController extends Controller
     }
 
     /**
-     * Halaman Machine Control
+     * Halaman Machine Control (Dialihkan ke AI Vision & Kamera untuk Line Painting)
      */
     public function machineControl(Request $request)
     {
-        $data = $this->prepareCommonData($request, 'machine-control');
-
-        return $this->renderPageView('pages.machine-control', $data);
+        return redirect()->route('ai-vision', $request->query());
     }
 
     /**

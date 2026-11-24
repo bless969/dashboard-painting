@@ -43,7 +43,9 @@
                     </div>
                 </div>
             </div>
-            <canvas id="chartProduksi" height="80"></canvas>
+            <div style="position:relative; width:100%; min-height:300px; height:320px; margin-top:14px;">
+                <canvas id="chartProduksi"></canvas>
+            </div>
         </div>
     </div>
 

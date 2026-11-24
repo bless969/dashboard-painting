@@ -20,17 +20,23 @@
                         🏷️
                     </div>
                     <div>
-                        <div style="font-size:12.5px; text-transform:uppercase; letter-spacing:0.8px; color:#a5b4fc; font-weight:700;">
-                            Sesi Produksi Aktif (Single-Part Batch)
+                        <div style="font-size:12.5px; text-transform:uppercase; letter-spacing:0.8px; color:#a5b4fc; font-weight:700; display:flex; align-items:center; gap:6px;">
+                            <span>✨</span> Deteksi Part Otomatis (Vision AI)
                         </div>
                         <div style="display:flex; align-items:center; gap:12px; margin-top:3px;">
-                            <span id="active-part-name" style="font-size:22px; font-weight:800; color:#ffffff; letter-spacing:-0.2px;">Memuat Part...</span>
-                            <span id="active-part-code" style="background:#4f46e5; color:#e0e7ff; font-size:13px; font-weight:700; padding:3px 10px; border-radius:6px; font-family:monospace;">P-01</span>
+                            <span id="active-part-name" style="font-size:22px; font-weight:800; color:#ffffff; letter-spacing:-0.2px;">Part Otomatis</span>
+                            <span id="active-part-code" style="background:#4f46e5; color:#e0e7ff; font-size:13px; font-weight:700; padding:3px 10px; border-radius:6px; font-family:monospace;">AUTO</span>
                         </div>
                     </div>
                 </div>
 
-                <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <!-- Status Mode Otomatis -->
+                    <div style="background:rgba(34,197,94,0.18); padding:8px 14px; border-radius:8px; border:1px solid rgba(34,197,94,0.4); font-size:13px; color:#4ade80; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+                        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 8px #22c55e;"></span>
+                        Auto-Recognition Active
+                    </div>
+
                     <!-- Info Model Roboflow yang sedang aktif -->
                     <div style="background:rgba(255,255,255,0.1); padding:8px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); font-size:13.5px;">
                         <span style="color:#c7d2fe;">Model AI:</span>
@@ -38,13 +44,14 @@
                         <span id="badge-model-version" style="background:#22c55e; color:#ffffff; font-size:12px; font-weight:700; padding:2px 8px; border-radius:5px; margin-left:6px;">v1</span>
                     </div>
 
-                    <!-- Tombol Ganti Part (Changeover) -->
-                    <button type="button" id="btn-open-change-part" style="display:inline-flex; align-items:center; gap:8px; padding:10px 18px; background:#f59e0b; color:#78350f; border:none; border-radius:8px; font-weight:800; font-size:13.5px; cursor:pointer; box-shadow:0 3px 8px rgba(245,158,11,0.35); transition:all 0.2s;">
-                        🔄 Ganti Part (Changeover)
-                    </button>
+                    <!-- Operator PIC Shift Aktif -->
+                    <div onclick="bukaModalGantiShift()" style="background:rgba(255,255,255,0.12); padding:8px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); font-size:13px; color:#ffffff; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" title="Klik untuk Ganti Operator Shift">
+                        <span>👤</span>
+                        <span>PIC: <strong id="label-ai-operator" style="color:#fde047;">Mukhamad Nawwaf</strong></span>
+                    </div>
 
                     <!-- Tombol Kelola Part -->
-                    <button type="button" id="btn-open-manage-parts" style="display:inline-flex; align-items:center; gap:8px; padding:10px 15px; background:rgba(255,255,255,0.15); color:white; border:1px solid rgba(255,255,255,0.3); border-radius:8px; font-weight:700; font-size:13.5px; cursor:pointer;" title="Kelola Katalog Part">
+                    <button type="button" id="btn-open-manage-parts" style="display:inline-flex; align-items:center; gap:8px; padding:9px 15px; background:rgba(255,255,255,0.15); color:white; border:1px solid rgba(255,255,255,0.3); border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;" title="Kelola Data Spesifikasi & SUT Part">
                         ⚙️ Katalog Part
                     </button>
                 </div>
@@ -80,17 +87,17 @@
                         <span id="status-mesin-text" style="font-size:13px; font-weight:800; color:{{ $isMesinActiveAi ? '#16a34a' : '#dc2626' }}; font-family:monospace;">{{ $isMesinActiveAi ? 'PRODUKSI AKTIF (Nilai 1)' : 'STANDBY (Nilai 0)' }}</span>
                     </div>
 
-                    <!-- Indikator Sensor 1 (Input) - Standar 2 Warna: MERAH (Standby) & HIJAU (Trigger) -->
+                    <!-- Indikator Sensor 1 (Input Box - Pin 27) - Standar 2 Warna: MERAH (Standby) & HIJAU (Trigger) -->
                     <div style="display:flex; align-items:center; gap:8px; background:#ffffff; border:1px solid #cbd5e1; padding:7px 14px; border-radius:8px;">
                         <span id="dot-sensor-input" style="width:12px; height:12px; border-radius:50%; background:#ef4444; box-shadow:0 0 8px rgba(239,68,68,0.5); display:inline-block; transition:all 0.3s;"></span>
-                        <span style="font-size:13px; font-weight:700; color:#334155;">Sensor 1 (Input):</span>
+                        <span style="font-size:13px; font-weight:700; color:#334155;">Sensor Masuk (Pin 27):</span>
                         <span id="status-sensor-input-text" style="font-size:13px; font-weight:800; color:#dc2626; font-family:monospace;">Standby</span>
                     </div>
 
-                    <!-- Indikator Sensor 2 (Output Shutter) - Standar 2 Warna: MERAH (Standby) & HIJAU (Trigger) -->
+                    <!-- Indikator Sensor 2 (Output Box - Pin 25) - Standar 2 Warna: MERAH (Standby) & HIJAU (Trigger) -->
                     <div style="display:flex; align-items:center; gap:8px; background:#ffffff; border:1px solid #cbd5e1; padding:7px 14px; border-radius:8px;">
                         <span id="dot-sensor-output" style="width:12px; height:12px; border-radius:50%; background:#ef4444; box-shadow:0 0 8px rgba(239,68,68,0.5); display:inline-block; transition:all 0.3s;"></span>
-                        <span style="font-size:13px; font-weight:700; color:#334155;">Sensor 2 (Output Shutter):</span>
+                        <span style="font-size:13px; font-weight:700; color:#334155;">Sensor Keluar (Pin 25):</span>
                         <span id="status-sensor-output-text" style="font-size:13px; font-weight:800; color:#dc2626; font-family:monospace;">Standby</span>
                     </div>
                 </div>
@@ -220,31 +227,34 @@
                     💡 <strong>Alur Sistem RS-485:</strong> Saat Photosensor 1 mendeteksi hanger masuk, antrean <em>WIP Hanger</em> bertambah. Begitu hanger keluar di depan kamera dan memicu Photosensor 2, sistem otomatis mem-freeze frame, menghitung jumlah barang via Roboflow, dan menambahkan jumlah pcs ke <em>Total Output</em>!
                 </div>
 
-                <!-- CARD KOLEKTOR DATASET ROBOFLOW (100 SAMPEL TRAINING) -->
+                <!-- CARD KOLEKTOR DATASET ROBOFLOW (UNLIMITED & CEPAT) -->
                 <div style="background:#ffffff; border:1.5px solid #c7d2fe; border-radius:12px; padding:18px; box-shadow:0 2px 8px rgba(99,102,241,0.06);">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; border-bottom:1px solid #e0e7ff; padding-bottom:12px; flex-wrap:wrap; gap:8px;">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <span style="font-size:24px;">📸</span>
                             <div>
-                                <h4 style="margin:0; font-size:16px; color:#3730a3; font-weight:800;">Kolektor Dataset Roboflow (100 Sampel Training)</h4>
+                                <h4 style="margin:0; font-size:16px; color:#3730a3; font-weight:800;">Kolektor Dataset Foto Part</h4>
                                 <div style="font-size:13px; color:#4338ca; font-weight:700; margin-top:2px;">
                                     Part Sasaran: <span id="label-kolektor-part-name" style="background:#e0e7ff; padding:2px 10px; border-radius:5px; font-family:monospace; color:#3730a3; font-size:13px;">Memuat...</span>
                                 </div>
                             </div>
                         </div>
                         <span id="badge-sample-status" style="font-size:12.5px; font-weight:700; background:#e0e7ff; color:#3730a3; padding:5px 12px; border-radius:6px; font-family:ui-monospace,monospace;">
-                            Standby (0 / 100)
+                            Standby (0 Foto Terkumpul)
                         </span>
                     </div>
 
-                    <!-- Progress Bar Koleksi Sampel -->
-                    <div style="margin-bottom:16px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:13.5px; font-weight:700; margin-bottom:6px;">
-                            <span style="color:#334155;">Progres Pengumpulan:</span>
-                            <span id="label-sample-progress" style="color:#4f46e5; font-family:monospace; font-weight:800; font-size:14px;">0 / 100 Sampel (0%)</span>
+                    <!-- Indikator Total Sampel Terkumpul (Bebas & Dinamis) -->
+                    <div style="background:#f8fafc; border:1.5px solid #e0e7ff; border-radius:10px; padding:14px 18px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                        <div>
+                            <div style="font-size:12px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Total Sampel Tersimpan:</div>
+                            <div style="display:flex; align-items:baseline; gap:8px; margin-top:2px;">
+                                <span id="label-sample-progress" style="color:#4f46e5; font-family:monospace; font-weight:900; font-size:28px;">0</span>
+                                <span style="color:#334155; font-weight:800; font-size:14.5px;">Foto Sampel</span>
+                            </div>
                         </div>
-                        <div style="background:#f1f5f9; border-radius:8px; height:14px; overflow:hidden; border:1px solid #cbd5e1; position:relative;">
-                            <div id="bar-sample-progress" style="background:linear-gradient(90deg, #6366f1, #4f46e5); width:0%; height:100%; transition:width 0.3s; border-radius:6px;"></div>
+                        <div style="font-size:12.5px; color:#475569; text-align:right; max-width:340px; line-height:1.45;">
+                            ⚡ <strong>Jumlah Sampel Bebas:</strong> Tidak dibatasi 100 foto. Klik <strong>Mulai Ambil Sampel</strong> untuk memotret beruntun super cepat, dan klik <strong>Berhenti</strong> kapan pun Anda mau.
                         </div>
                     </div>
 
@@ -254,6 +264,16 @@
                             <button type="button" id="btn-toggle-sampling" style="display:inline-flex; align-items:center; gap:8px; padding:9px 20px; background:#4f46e5; color:white; border:none; border-radius:8px; font-weight:800; font-size:14px; cursor:pointer; transition:all 0.25s; box-shadow:0 2px 6px rgba(79,70,229,0.3);">
                                 ▶ Mulai Ambil Sampel
                             </button>
+                            <div style="display:inline-flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:6px 10px;">
+                                <span style="font-size:12px; font-weight:700; color:#475569;">⏱️ Jeda:</span>
+                                <select id="select-sampling-speed" style="font-size:12.5px; font-weight:700; color:#1e293b; background:transparent; border:none; outline:none; cursor:pointer;">
+                                    <option value="500" selected>0.5 detik (Pas &amp; Rekomendasi)</option>
+                                    <option value="350">0.35 detik (Sedikit Lebih Cepat)</option>
+                                    <option value="750">0.75 detik (Santai)</option>
+                                    <option value="1000">1.0 detik (Pelan / 1 foto per detik)</option>
+                                    <option value="150">0.15 detik (Kilat / Sangat Cepat)</option>
+                                </select>
+                            </div>
                             <button type="button" id="btn-capture-manual-sample" style="display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:#f8fafc; color:#1e293b; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;" title="Ambil 1 foto secara manual">
                                 📷 1x Jepret Manual
                             </button>
@@ -302,6 +322,19 @@
                         </span>
                     </div>
 
+                    <!-- Diagnostik Error Model Roboflow (Otomatis muncul jika gagal) -->
+                    <div id="ai-model-error-hint" style="display:none; margin-bottom:14px; padding:12px 14px; background:#fef2f2; border:1.5px solid #fecaca; border-radius:8px; font-size:12.5px; color:#991b1b;">
+                        <div style="font-weight:800; display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:13px;">
+                            <span>⚠️</span> <span id="ai-model-error-title">Gagal Memuat Model Roboflow</span>
+                        </div>
+                        <div id="ai-model-error-msg" style="font-family:monospace; font-size:11.5px; background:#ffffff; color:#b91c1c; padding:8px 10px; border-radius:6px; border:1px solid #fee2e2; margin-bottom:8px; word-break:break-word; line-height:1.4;">
+                            -
+                        </div>
+                        <div style="font-size:11.5px; color:#7f1d1d; line-height:1.45;">
+                            💡 <strong>Solusi:</strong> Klik <strong>⚙️ Pengaturan Manual (Advanced / Override)</strong> di bawah atau tombol <strong>⚙️ Katalog Part</strong>, lalu sesuaikan <strong>Model Slug</strong>, <strong>Versi</strong>, dan <strong>Publishable API Key</strong> dari akun Roboflow Anda.
+                        </div>
+                    </div>
+
                     <!-- Profil Part Aktif Box -->
                     <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:14px;">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
@@ -318,8 +351,8 @@
                         </div>
 
                         <div style="display:flex; gap:8px; margin-top:12px;">
-                            <button type="button" id="btn-quick-change-part" style="flex:1; padding:8px 12px; background:#f1f5f9; color:#0d3b8c; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer;">
-                                🔄 Ganti Part
+                            <button type="button" id="btn-quick-manage-parts" style="flex:1; padding:8px 12px; background:#f1f5f9; color:#0d3b8c; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer;" title="Lihat & Kelola Spesifikasi Part di Katalog">
+                                ⚙️ Katalog Part
                             </button>
                             <button type="button" id="btn-quick-update-ver" style="padding:8px 12px; background:#e0f2fe; color:#0284c7; border:1px solid #bae6fd; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer;" title="Update Versi Model Setelah Retraining">
                                 🆙 Update Versi
@@ -351,12 +384,14 @@
                         <div id="panel-advanced-rf" style="display:none; padding:12px; border-top:1px solid #e2e8f0; font-size:12.5px;">
                             <div style="margin-bottom:10px;">
                                 <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:3px;">Model ID (Project Slug):</label>
-                                <input type="text" id="rf-model-input" class="filter-select" style="width:100%; padding:8px 10px; font-size:12.5px;" placeholder="contoh: bracket-motor-detection">
+                                <input type="text" id="rf-model-input" class="filter-select" style="width:100%; padding:8px 10px; font-size:12.5px;" placeholder="contoh: hanger-object-detection">
+                                <div style="font-size:11px; color:#64748b; margin-top:3px;">* Tanpa spasi (gunakan tanda strip <code style="background:#e2e8f0; padding:1px 4px; border-radius:3px;">-</code>). Contoh: <b>hanger-object-detection</b></div>
                             </div>
 
                             <div style="margin-bottom:10px;">
                                 <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:3px;">Versi Model:</label>
                                 <input type="number" id="rf-version-input" class="filter-select" style="width:100%; padding:8px 10px; font-size:12.5px;" value="1" min="1">
+                                <div style="font-size:11px; color:#64748b; margin-top:3px;">* Sesuai nomor versi training Roboflow (misal: <b>2</b>).</div>
                             </div>
 
                             <div style="margin-bottom:12px;">
@@ -545,9 +580,9 @@
                         </div>
                     </div>
 
-                    <!-- Tombol Mulai Deteksi Kontinu -->
-                    <button type="button" id="btn-start-ai" style="padding:13px 18px; width:100%; text-align:center; background:#16a34a; color:white; border:none; border-radius:8px; font-weight:800; font-size:14.5px; cursor:pointer; transition:all 0.2s;" disabled>
-                        ▶ Mulai Deteksi Object (AI)
+                    <!-- Tombol Kontrol Deteksi AI (Default Otomatis Aktif) -->
+                    <button type="button" id="btn-start-ai" style="padding:13px 18px; width:100%; text-align:center; background:#16a34a; color:white; border:none; border-radius:8px; font-weight:800; font-size:14.5px; cursor:pointer; transition:all 0.2s;">
+                        🟢 Deteksi AI Aktif Otomatis (Klik untuk Jeda)
                     </button>
                 </div>
 
@@ -642,7 +677,21 @@
                             Diagnosa: <span id="text-noise-diagnosis" style="font-weight:800;">Memuat spektrum...</span>
                         </div>
                         <div style="color:#6366f1; font-size:11px;">
-                            Semua pulsa palsu akibat motor industri otomatis disaring oleh filter ESP32.
+                            Input (Pin 25): <b>RAW Tanpa Filter (Instant 0 ms)</b> | Outlet (Pin 27): <b>Filter 10 Hz (100 ms)</b>.
+                        </div>
+                    </div>
+
+                    <!-- Live Serial Stream Log Frekuensi Motor (Mirip Serial Monitor) -->
+                    <div style="background:#090d16; border:1px solid #1e293b; border-radius:6px; padding:8px 10px; margin-bottom:10px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; border-bottom:1px solid #1e293b; padding-bottom:3px;">
+                            <span style="color:#38bdf8; font-weight:700; display:flex; align-items:center; gap:5px;">
+                                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e;"></span>
+                                Aliran Serial Monitor Frekuensi
+                            </span>
+                            <span id="noise-stream-status" style="color:#64748b; font-size:10px;">Live Sync</span>
+                        </div>
+                        <div id="noise-serial-log-list" style="max-height:80px; overflow-y:auto; display:flex; flex-direction:column; gap:3px;">
+                            <div style="color:#64748b; font-style:italic;">[Menunggu sinyal frekuensi dari Serial Monitor ESP32...]</div>
                         </div>
                     </div>
 
@@ -784,8 +833,8 @@
             <div style="display:flex; align-items:center; gap:10px;">
                 <span style="font-size:26px;">📋</span>
                 <div>
-                    <h3 style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Katalog & Profil Part Roboflow</h3>
-                    <div style="font-size:13px; color:#64748b;">Kelola daftar part dan konfigurasi model AI pendeteksi part</div>
+                    <h3 style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Katalog & Profil Part (AI Offline)</h3>
+                    <div style="font-size:13px; color:#64748b;">Kelola daftar part dan upload file model AI (.pt / .onnx) hasil download Roboflow</div>
                 </div>
             </div>
             <button type="button" id="btn-close-manage-parts-x" style="background:none; border:none; font-size:20px; color:#94a3b8; cursor:pointer; padding:4px 8px; border-radius:4px;">✕</button>
@@ -799,8 +848,7 @@
                     <thead>
                         <tr style="background:#f8fafc; border-bottom:1px solid #cbd5e1; color:#475569; font-weight:700;">
                             <th style="padding:11px 14px;">Kode & Nama Part</th>
-                            <th style="padding:11px 14px;">Model Slug Roboflow</th>
-                            <th style="padding:11px 14px; text-align:center;">Versi</th>
+                            <th style="padding:11px 14px;">File Model AI (Offline)</th>
                             <th style="padding:11px 14px; text-align:center;">Target/Hgr</th>
                             <th style="padding:11px 14px; text-align:center;">Status</th>
                             <th style="padding:11px 14px; text-align:center;">Aksi</th>
@@ -820,38 +868,64 @@
                 <span id="form-part-title">Tambah Part Baru ke Katalog</span>
             </div>
 
-            <form id="form-save-part" onsubmit="return false;">
+            <form id="form-save-part" onsubmit="return false;" enctype="multipart/form-data">
                 <input type="hidden" id="part-form-id">
                 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:14px;">
                     <div>
                         <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">Kode Part <span style="color:#ef4444;">*</span></label>
-                        <input type="text" id="part-form-code" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" placeholder="contoh: BRK-01" required>
+                        <input type="text" id="part-form-code" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" placeholder="contoh: PART-001" required>
                     </div>
                     <div>
                         <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">Nama Part <span style="color:#ef4444;">*</span></label>
-                        <input type="text" id="part-form-name" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" placeholder="contoh: Bracket Depan Motor V2" required>
-                    </div>
-                </div>
-
-                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px; margin-bottom:14px;">
-                    <div>
-                        <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">Roboflow Model Slug <span style="color:#ef4444;">*</span></label>
-                        <input type="text" id="part-form-slug" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px; font-family:monospace;" placeholder="contoh: bracket-motor-detection" required>
-                    </div>
-                    <div>
-                        <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">Versi Model <span style="color:#ef4444;">*</span></label>
-                        <input type="number" id="part-form-version" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" value="1" min="1" required>
+                        <input type="text" id="part-form-name" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" placeholder="contoh: PART-Tester" required>
                     </div>
                     <div>
                         <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">Target Pcs / Hanger <span style="color:#ef4444;">*</span></label>
-                        <input type="number" id="part-form-target" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" value="4" min="1" required>
+                        <input type="number" id="part-form-target" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" value="15" min="1" required>
                     </div>
                 </div>
 
+                <!-- Upload File Model AI (.pt / .onnx) -->
                 <div style="margin-bottom:16px;">
-                    <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">Roboflow Publishable API Key <span style="color:#ef4444;">*</span></label>
-                    <input type="text" id="part-form-key" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px; font-family:monospace;" placeholder="rf_xxxxxxxxxxxx" required>
-                    <div style="font-size:11.5px; color:#94a3b8; margin-top:4px;">Diambil dari menu Deploy > JavaScript Library pada project Roboflow Anda.</div>
+                    <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">
+                        File Model AI Offline (.pt / .onnx)
+                    </label>
+                    <div id="part-form-model-info" style="display:none; margin-bottom:8px; padding:9px 13px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; font-size:12.5px; color:#15803d; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span>🟢 Model Tersimpan: <strong id="current-model-filename">PART-001_v1.pt</strong></span>
+                            <span id="current-model-size" style="font-size:11px; background:#dcfce7; padding:2px 8px; border-radius:4px; font-weight:700;">42.0 MB</span>
+                        </div>
+                        <button type="button" id="btn-delete-model-file" style="padding:4px 10px; background:#fef2f2; border:1px solid #fecaca; color:#dc2626; border-radius:6px; font-weight:700; font-size:11.5px; cursor:pointer; display:inline-flex; align-items:center; gap:4px; transition:all 0.15s;" title="Hapus file weights (.pt/.onnx) ini dari server">
+                            🗑️ Hapus Model Saja
+                        </button>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                        <input type="file" id="part-form-file" accept=".pt,.onnx" style="display:none;">
+                        <button type="button" id="btn-browse-model-file" style="padding:9px 16px; background:#ffffff; color:#0d3b8c; border:1.5px solid #0d3b8c; border-radius:7px; font-size:13px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                            📂 Pilih File weights.pt / .onnx
+                        </button>
+                        <span id="label-selected-model-file" style="font-size:12.5px; color:#64748b; font-family:monospace;">
+                            Belum ada file baru dipilih (opsional jika sudah ada)
+                        </span>
+                    </div>
+                    <div style="font-size:11.5px; color:#64748b; margin-top:6px; line-height:1.4;">
+                        💡 <em>Cukup upload file <strong>weights.pt</strong> atau <strong>.onnx</strong> hasil download dari Roboflow. Sistem akan mengeksekusi model ini secara 100% offline di PC pabrik tanpa butuh internet lagi!</em>
+                    </div>
+                </div>
+
+                <!-- Progress Bar Upload Model AI (Realtime) -->
+                <div id="part-upload-progress-container" style="display:none; margin-bottom:14px; background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:12px 14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12.5px; font-weight:700; color:#1e40af; margin-bottom:6px;">
+                        <span id="part-upload-progress-text">Mengupload file model weights...</span>
+                        <span id="part-upload-progress-percent">0%</span>
+                    </div>
+                    <div style="background:#dbeafe; border-radius:6px; height:10px; width:100%; overflow:hidden;">
+                        <div id="part-upload-progress-bar" style="height:100%; width:0%; background:linear-gradient(90deg, #2563eb, #16a34a); border-radius:6px; transition:width 0.15s ease;"></div>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#64748b; margin-top:5px; font-family:monospace;">
+                        <span id="part-upload-progress-bytes">0 MB / 0 MB</span>
+                        <span id="part-upload-progress-speed">Memulai upload...</span>
+                    </div>
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:10px;">
@@ -930,6 +1004,7 @@
 <script>
     // State Global AI & RS-485
     let rfModel = null;
+    let isOfflineAiReady = false;
     let isDetecting = false;
     let detectionLoopId = null;
     let lastDetectionTime = 0;
@@ -1129,12 +1204,17 @@
     const textNoiseDiagnosis = document.getElementById('text-noise-diagnosis');
     const valTotalNoiseRejected = document.getElementById('val-total-noise-rejected');
     const btnResetNoisePeak = document.getElementById('btn-reset-noise-peak');
+    const noiseSerialLogList = document.getElementById('noise-serial-log-list');
+    let lastLoggedNoiseHz = -1;
+    let isPollingDevkit = false;
 
     async function pollDevkitNoise() {
+        if (window.isUploadingLargeFile || isPollingDevkit) return;
+        isPollingDevkit = true;
         try {
             const res = await fetch('/api/devkit-noise');
             const data = await res.json();
-            if (data && data.status === 'ok') {
+            if (data && (data.status === 'ok' || data.status === 'cached')) {
                 const inHz = parseFloat(data.in_noise_hz) || 0;
                 const outHz = parseFloat(data.out_noise_hz) || 0;
                 const peakIn = parseFloat(data.in_peak_hz) || 0;
@@ -1146,7 +1226,7 @@
                 if (valPeakIn) valPeakIn.innerText = `${peakIn.toFixed(1)} Hz`;
                 if (valPeakOut) valPeakOut.innerText = `${peakOut.toFixed(1)} Hz`;
 
-                const totalRejected = (parseInt(data.in_blind_rejected) || 0) + (parseInt(data.out_blind_rejected) || 0);
+                const totalRejected = data.total_rejected ?? ((parseInt(data.in_blind_rejected) || 0) + (parseInt(data.out_blind_rejected) || 0));
                 if (valTotalNoiseRejected) valTotalNoiseRejected.innerText = totalRejected;
                 if (textNoiseDiagnosis) textNoiseDiagnosis.innerText = data.diagnosis || 'Normal';
 
@@ -1165,6 +1245,39 @@
                         badgeNoiseStatus.style.color = '#dc2626';
                     }
                 }
+
+                // Render Live Aliran Serial Stream
+                if (noiseSerialLogList) {
+                    if (Array.isArray(data.events) && data.events.length > 0) {
+                        noiseSerialLogList.innerHTML = data.events.map(ev => {
+                            const isClean = ev.hz < 1.5;
+                            const color = isClean ? '#4ade80' : (ev.hz >= 50 ? '#f87171' : '#fbbf24');
+                            const icon = isClean ? '🟢' : (ev.hz >= 50 ? '🚨' : '⚡');
+                            return `<div style="color:${color}; display:flex; gap:6px; line-height:1.4;">
+                                <span style="color:#64748b;">[${ev.time || '-'}]</span>
+                                <span>${icon} <b>${ev.hz} Hz</b></span>
+                                <span style="color:#cbd5e1;">— ${ev.diagnosis || 'Gangguan Motor'}</span>
+                            </div>`;
+                        }).join('');
+                    } else if (maxHz > 0) {
+                        const nowTime = new Date().toLocaleTimeString('id-ID');
+                        const isClean = maxHz < 1.5;
+                        const color = isClean ? '#4ade80' : (maxHz >= 50 ? '#f87171' : '#fbbf24');
+                        const icon = isClean ? '🟢' : (maxHz >= 50 ? '🚨' : '⚡');
+                        noiseSerialLogList.innerHTML = `<div style="color:${color};">
+                            <span style="color:#64748b;">[${nowTime}]</span> ${icon} <b>${maxHz.toFixed(1)} Hz</b> — ${data.diagnosis || 'Sinyal Terdeteksi'}
+                        </div>`;
+                    }
+                }
+
+                // Log ke konsol & timeline utama saat ada lonjakan noise
+                if (maxHz >= 3.0 && Math.abs(maxHz - lastLoggedNoiseHz) >= 2.0) {
+                    lastLoggedNoiseHz = maxHz;
+                    appendLog(`⚡ [Noise Motor] Terdeteksi frekuensi ${maxHz.toFixed(1)} Hz (${data.diagnosis}). Filter otomatis menyaring pulsa palsu.`, '#f59e0b');
+                } else if (maxHz < 1.5 && lastLoggedNoiseHz >= 3.0) {
+                    lastLoggedNoiseHz = 0;
+                    appendLog('🟢 [Jalur Sensor Bersih] Gangguan motor telah reda / hilang.', '#16a34a');
+                }
             } else if (data && data.status === 'offline') {
                 if (badgeNoiseStatus) {
                     badgeNoiseStatus.innerText = '⚪ DevKit Offline';
@@ -1172,10 +1285,13 @@
                     badgeNoiseStatus.style.color = '#64748b';
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+        } finally {
+            isPollingDevkit = false;
+        }
     }
 
-    setInterval(pollDevkitNoise, 5000); // Polling santai setiap 5 detik agar tidak membebani jaringan & ESP32
+    setInterval(pollDevkitNoise, 2500); // Polling berkala 2.5 detik
     pollDevkitNoise();
 
     if (btnResetNoisePeak) {
@@ -1183,6 +1299,9 @@
             await fetch('/api/reset-noise-peak');
             if (valPeakIn) valPeakIn.innerText = '0.0 Hz';
             if (valPeakOut) valPeakOut.innerText = '0.0 Hz';
+            if (noiseSerialLogList) {
+                noiseSerialLogList.innerHTML = '<div style="color:#a5b4fc; font-style:italic;">[Peak & log frekuensi di-reset ke 0 Hz]</div>';
+            }
             appendLog('🔄 Peak frekuensi noise motor di-reset ke 0 Hz.', '#6366f1');
         });
     }
@@ -1221,7 +1340,10 @@
     }
 
     // Muat data statistik hanger saat halaman dibuka & refresh berkala
+    let isPollingStats = false;
     async function loadHangerStats() {
+        if (window.isUploadingLargeFile || isPollingStats) return;
+        isPollingStats = true;
         try {
             const res = await fetch('/api/get-hanger-stats');
             const data = await res.json();
@@ -1233,7 +1355,10 @@
                     updateMesinUI(data.stats.is_produksi == 1, true);
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+        } finally {
+            isPollingStats = false;
+        }
     }
     loadHangerStats();
     setInterval(loadHangerStats, 3000); // Sinkronisasi berkala status produksi & sinyal ESP32
@@ -1286,12 +1411,35 @@
             statusModel.style.color = '#94a3b8';
             const badgeModel = document.getElementById('badge-ai-model-ready');
             if (badgeModel) {
-                badgeModel.innerText = '⚠ Belum Siap';
-                badgeModel.style.background = '#fee2e2';
-                badgeModel.style.color = '#dc2626';
+                badgeModel.innerText = '⚙ Belum Dikonfigurasi';
+                badgeModel.style.background = '#fef3c7';
+                badgeModel.style.color = '#b45309';
+                badgeModel.style.cursor = 'default';
+                badgeModel.onclick = null;
+                badgeModel.title = 'Model Roboflow belum diisi. Masukkan slug & API key di Pengaturan Manual.';
             }
+            const errBox = document.getElementById('ai-model-error-hint');
+            if (errBox) errBox.style.display = 'none';
             return false;
         }
+
+        // Sanitasi modelId: jika user memasukkan full name seperti 'part-tester-6cyho-1-yolo26m-t1' atau 'part-tester-6cyho/1'
+        let cleanModelId = String(modelId).trim().replace(/\s+/g, '-');
+        if (cleanModelId.includes('/')) {
+            const parts = cleanModelId.split('/');
+            cleanModelId = parts[0];
+            if (parts[1] && !isNaN(parseInt(parts[1], 10))) {
+                version = parseInt(parts[1], 10);
+            }
+        } else if (cleanModelId.includes('-yolo') || cleanModelId.includes('-rf-detr')) {
+            const match = cleanModelId.match(/^(.+?)-(\d+)-(?:yolo|rf-detr|coco|m6|m7|t\d+)/i);
+            if (match) {
+                cleanModelId = match[1];
+                version = parseInt(match[2], 10);
+            }
+        }
+        modelId = cleanModelId;
+        version = parseInt(version, 10) || 1;
 
         const badgeModel = document.getElementById('badge-ai-model-ready');
         if (badgeModel) {
@@ -1312,30 +1460,60 @@
                 publishable_key: apiKey
             }).load({
                 model: modelId,
-                version: parseInt(version, 10) || 1
+                version: version
             });
 
             statusModel.innerText = `Model Siap (${modelId} v${version})`;
             statusModel.style.color = '#16a34a';
             if (badgeModel) {
                 badgeModel.innerText = `🟢 v${version} Siap`;
+                badgeModel.title = `Model ${modelId} v${version} aktif & siap mendeteksi`;
                 badgeModel.style.background = '#dcfce7';
                 badgeModel.style.color = '#15803d';
+                badgeModel.style.cursor = 'default';
+                badgeModel.onclick = null;
             }
+            const errBox = document.getElementById('ai-model-error-hint');
+            if (errBox) errBox.style.display = 'none';
+
             checkEnableDetectButton();
             appendLog(`🤖 Model Roboflow [${modelId} v${version}] aktif & siap mendeteksi.`, '#16a34a');
             return true;
         } catch (err) {
             console.error('Error memuat model Roboflow:', err);
-            statusModel.innerText = 'Gagal memuat model!';
+            const rawMsg = err.message || String(err);
+            let userFriendlyMsg = rawMsg;
+            if (rawMsg.includes('Library roboflow.js belum termuat')) {
+                userFriendlyMsg = 'Library Roboflow tidak dapat dimuat. Pastikan komputer/browser terhubung ke Internet.';
+            } else if (rawMsg.includes('404') || rawMsg.toLowerCase().includes('not found')) {
+                userFriendlyMsg = `Model [${modelId} v${version}] tidak ditemukan di Roboflow. Periksa Model Slug dan pastikan versi sudah selesai di-train.`;
+            } else if (rawMsg.includes('401') || rawMsg.includes('403') || rawMsg.toLowerCase().includes('unauthorized') || rawMsg.toLowerCase().includes('key')) {
+                userFriendlyMsg = 'Roboflow Publishable API Key salah atau tidak memiliki akses ke project ini.';
+            } else if (rawMsg.toLowerCase().includes('failed to fetch')) {
+                userFriendlyMsg = 'Koneksi ke server Roboflow gagal (periksa internet / blokir firewall).';
+            }
+
+            statusModel.innerText = 'Gagal: ' + userFriendlyMsg;
             statusModel.style.color = '#dc2626';
             if (badgeModel) {
                 badgeModel.innerText = '🔴 Gagal';
+                badgeModel.title = `Klik untuk detail: ${userFriendlyMsg}`;
+                badgeModel.style.cursor = 'pointer';
+                badgeModel.onclick = () => alert(`Detail Error Roboflow:\n\n${rawMsg}\n\nSolusi:\n1. Buka 'Pengaturan Manual' di bawah.\n2. Masukkan Model Slug & Publishable API Key yang sesuai dari project Roboflow Anda.\n3. Pastikan versi model (v${version}) sudah selesai di-training.`);
                 badgeModel.style.background = '#fee2e2';
                 badgeModel.style.color = '#dc2626';
             }
+
+            const errBox = document.getElementById('ai-model-error-hint');
+            const errMsgEl = document.getElementById('ai-model-error-msg');
+            if (errBox && errMsgEl) {
+                errMsgEl.innerText = `${userFriendlyMsg} (Error: ${rawMsg})`;
+                errBox.style.display = 'block';
+            }
+
+            appendLog(`❌ Gagal muat model [${modelId} v${version}]: ${userFriendlyMsg}`, '#dc2626');
             if (!silent) {
-                alert(`Gagal memuat model Roboflow (${modelId} v${version}). Periksa koneksi internet atau Publishable API Key.`);
+                alert(`Gagal memuat model Roboflow [${modelId} v${version}]:\n\n${userFriendlyMsg}\n\n(Error teknis: ${rawMsg})`);
             }
             return false;
         } finally {
@@ -1344,9 +1522,26 @@
     }
 
     btnLoadModel.addEventListener('click', async () => {
-        const modelId = document.getElementById('rf-model-input').value.trim();
-        const version = parseInt(document.getElementById('rf-version-input').value.trim(), 10) || 1;
+        const inputModelEl = document.getElementById('rf-model-input');
+        const inputVerEl = document.getElementById('rf-version-input');
+        let modelId = inputModelEl.value.trim().replace(/\s+/g, '-');
+        let version = parseInt(inputVerEl.value.trim(), 10) || 1;
         const apiKey = document.getElementById('rf-key-input').value.trim();
+
+        // Auto-clean jika user memasukkan nama panjang seperti 'part-tester-6cyho-1-yolo26m-t1'
+        if (modelId.includes('/')) {
+            const parts = modelId.split('/');
+            modelId = parts[0];
+            if (parts[1] && !isNaN(parseInt(parts[1], 10))) version = parseInt(parts[1], 10);
+        } else if (modelId.includes('-yolo') || modelId.includes('-rf-detr')) {
+            const match = modelId.match(/^(.+?)-(\d+)-(?:yolo|rf-detr|coco|m6|m7|t\d+)/i);
+            if (match) {
+                modelId = match[1];
+                version = parseInt(match[2], 10);
+            }
+        }
+        inputModelEl.value = modelId;
+        inputVerEl.value = version;
 
         if (!modelId || !apiKey) {
             alert('Harap isi Model ID dan Publishable API Key dari Roboflow terlebih dahulu!');
@@ -1357,7 +1552,36 @@
         localStorage.setItem('rf_model_version', version);
         localStorage.setItem('rf_api_key', apiKey);
 
-        await initRoboflowModel(modelId, version, apiKey, false);
+        const ok = await initRoboflowModel(modelId, version, apiKey, false);
+        if (ok && activePart) {
+            const cardModelSlug = document.getElementById('card-model-slug');
+            const cardModelVersion = document.getElementById('card-model-version');
+            if (cardModelSlug) cardModelSlug.innerText = modelId;
+            if (cardModelVersion) cardModelVersion.innerText = `v${version}`;
+
+            // Simpan otomatis ke katalog part aktif di backend agar permanen
+            try {
+                await fetch('/api/save-part', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: activePart.id,
+                        code: activePart.code,
+                        name: activePart.name,
+                        model_id: modelId,
+                        model_version: version,
+                        target_per_hanger: activePart.target_per_hanger || 4,
+                        publishable_key: apiKey
+                    })
+                });
+                activePart.model_id = modelId;
+                activePart.model_version = version;
+                activePart.publishable_key = apiKey;
+                appendLog(`💾 Konfigurasi model untuk part [${activePart.code}] telah diperbarui permanen di katalog.`, '#16a34a');
+            } catch (e) {
+                console.warn('Gagal sync part katalog:', e);
+            }
+        }
     });
 
     // Toggle Collapsible Pengaturan Manual Roboflow
@@ -1717,9 +1941,23 @@
     });
 
     function checkEnableDetectButton() {
-        if (rfModel && statusCam.innerText === 'Tersambung') {
+        const isCamConnected = statusCam && (
+            statusCam.innerText.includes('Tersambung') || 
+            statusCam.innerText.includes('Online') ||
+            (typeof activeCamIp === 'string' && activeCamIp.length > 6)
+        );
+        const isModelReady = !!(rfModel || isOfflineAiReady);
+
+        if (isModelReady && isCamConnected) {
             btnStartAi.disabled = false;
-        } else {
+            // AUTO-START: Deteksi AI langsung aktif otomatis tanpa perlu klik tombol manual!
+            if (!isDetecting) {
+                isDetecting = true;
+                updateDetectButtonState();
+                detectLoop();
+                appendLog('🚀 Deteksi AI Vision otomatis AKTIF (Real-Time Monitoring).', '#16a34a');
+            }
+        } else if (!isCamConnected) {
             btnStartAi.disabled = true;
             if (isDetecting) {
                 isDetecting = false;
@@ -1730,84 +1968,193 @@
 
     function updateDetectButtonState() {
         if (isDetecting) {
-            btnStartAi.innerHTML = '⏹ Hentikan Deteksi Kontinu';
-            btnStartAi.style.background = '#dc2626';
+            btnStartAi.innerHTML = '🟢 Deteksi AI Aktif Otomatis (Klik untuk Jeda)';
+            btnStartAi.style.background = '#15803d';
             badgeLatency.style.display = 'inline-block';
         } else {
-            btnStartAi.innerHTML = '▶ Mulai Deteksi Object (AI)';
-            btnStartAi.style.background = '#16a34a';
+            btnStartAi.innerHTML = '▶ Lanjutkan Deteksi AI';
+            btnStartAi.style.background = '#0284c7';
             badgeLatency.style.display = 'none';
         }
     }
 
-    // Loop Prediksi Kontinu
+    // Loop Prediksi Kontinu (Auto-Detection)
+    let isDetectingBusy = false;
     async function detectLoop() {
         if (!isDetecting) return;
 
         const now = Date.now();
-        if (now - lastDetectionTime > 120) {
+        if (!isDetectingBusy && (now - lastDetectionTime > 150)) {
             lastDetectionTime = now;
-            await runObjectDetection(false); // false = jangan trigger konfirmasi otomatis saat sekadar live preview
+            isDetectingBusy = true;
+            try {
+                await runObjectDetection(false); // false = jangan trigger konfirmasi otomatis saat sekadar live preview
+            } catch (eLoop) {
+                console.warn('detectLoop error:', eLoop);
+            } finally {
+                isDetectingBusy = false;
+            }
         }
 
-        detectionLoopId = requestAnimationFrame(detectLoop);
+        if (isDetecting) {
+            detectionLoopId = requestAnimationFrame(detectLoop);
+        }
     }
 
     // 4. INFERENSI OBJECT DETECTION & GAMBAR BOUNDING BOX
     async function runObjectDetection(isShutterTrigger = false) {
-        if (!rfModel || streamWrapper.style.display === 'none') return 0;
+        if ((!rfModel && !isOfflineAiReady) || streamWrapper.style.display === 'none') return 0;
+
+        // Pastikan ukuran canvas overlay presisi sesuai resolusi kamera saat ini
+        if (streamImg.naturalWidth && (canvasOverlay.width !== streamImg.naturalWidth || canvasOverlay.height !== streamImg.naturalHeight)) {
+            canvasOverlay.width = streamImg.naturalWidth;
+            canvasOverlay.height = streamImg.naturalHeight;
+        }
 
         const tStart = performance.now();
 
         try {
-            const predictions = await rfModel.detect(streamImg);
-            const tEnd = performance.now();
-            badgeLatency.innerText = Math.round(tEnd - tStart) + ' ms';
+            let predictions = [];
+            if (isOfflineAiReady) {
+                // Snapshot frame kamera ke base64 (dengan fallback getFrameBase64)
+                let b64 = '';
+                try {
+                    const offCanvas = document.createElement('canvas');
+                    offCanvas.width = streamImg.naturalWidth || 640;
+                    offCanvas.height = streamImg.naturalHeight || 480;
+                    const offCtx = offCanvas.getContext('2d');
+                    offCtx.drawImage(streamImg, 0, 0, offCanvas.width, offCanvas.height);
+                    b64 = offCanvas.toDataURL('image/jpeg', 0.85);
+                } catch (eCanvas) {
+                    b64 = await getFrameBase64();
+                }
 
-            const minConfidence = (parseInt(sliderConf.value, 10) || 50) / 100;
+                const minConf = (parseInt(sliderConf.value, 10) || 35) / 100;
+                const res = await fetch('/api/detect-local', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_base64: b64 || '',
+                        conf: minConf,
+                        model_file: activePart ? activePart.model_file : 'PART-001_v1.pt'
+                    })
+                });
+                const detData = await res.json();
+                if (detData && detData.status === 'ok') {
+                    predictions = detData.predictions || [];
+                    const tEnd = performance.now();
+                    const lat = detData.latency_ms || Math.round(tEnd - tStart);
+                    badgeLatency.innerText = `${lat} ms (Offline AI)`;
+
+                    // Auto-sync jika backend mendeteksi part aktif baru dari AI
+                    if (detData.active_part && (!activePart || activePart.id !== detData.active_part.id)) {
+                        activePart = detData.active_part;
+                        if (activePartName) activePartName.innerText = activePart.name;
+                        if (activePartCode) activePartCode.innerText = activePart.code;
+                        if (cardPartName) cardPartName.innerText = activePart.name;
+                        if (cardPartCode) cardPartCode.innerText = activePart.code;
+                        if (cardPartTarget) cardPartTarget.innerText = activePart.target_per_hanger;
+                        if (labelKolektorPartName) labelKolektorPartName.innerText = `[${activePart.code}] ${activePart.name}`;
+                        appendLog(`🤖 [AI Auto-Switch] Kamera mendeteksi: [${activePart.code}] ${activePart.name}. Part aktif otomatis diganti!`, '#0284c7');
+                    }
+                }
+            } else if (rfModel) {
+                predictions = await rfModel.detect(streamImg);
+                const tEnd = performance.now();
+                badgeLatency.innerText = Math.round(tEnd - tStart) + ' ms';
+            }
+
+            const minConfidence = (parseInt(sliderConf.value, 10) || 35) / 100;
             const validDetections = (predictions || []).filter(p => (p.confidence || 0) >= minConfidence);
 
             ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
 
-            const countPart = validDetections.length;
+            // Pisahkan deteksi part vs deteksi hanger/gantungan
+            const partDetections = [];
+            const hangerDetections = [];
+
+            validDetections.forEach(pred => {
+                const cls = (pred.class || pred.name || '').trim().toLowerCase();
+                if (cls.includes('hanger') || cls.includes('gantungan') || cls.includes('kosong') || cls.includes('empty')) {
+                    hangerDetections.push(pred);
+                } else {
+                    partDetections.push(pred);
+                }
+            });
+
+            // Jumlah part aktual yang dihitung (tidak menghitung bounding box hanger)
+            const countPart = partDetections.length;
             kpiCurrentParts.innerText = countPart;
 
             // Gambar setiap bounding box
-            validDetections.forEach((pred, index) => {
+            let partIndex = 0;
+            validDetections.forEach((pred) => {
                 const bbox = pred.bbox || pred;
                 const x = bbox.x;
                 const y = bbox.y;
                 const width = bbox.width;
                 const height = bbox.height;
                 const className = pred.class || pred.name || 'Part';
+                const clsLower = className.toLowerCase();
+                const isHanger = clsLower.includes('hanger') || clsLower.includes('gantungan') || clsLower.includes('kosong') || clsLower.includes('empty');
                 const confScore = Math.round((pred.confidence || 0) * 100);
 
                 const left = x - width / 2;
                 const top = y - height / 2;
 
-                // Box Deteksi Bounding Box (Hijau Standar)
-                ctxOverlay.strokeStyle = '#22c55e';
+                // Box Deteksi: Biru untuk Hanger/Gantungan, Hijau untuk Part Produk
+                const boxColor = isHanger ? '#0284c7' : '#22c55e';
+                ctxOverlay.strokeStyle = boxColor;
                 ctxOverlay.lineWidth = 3;
                 ctxOverlay.strokeRect(left, top, width, height);
 
                 // Label
-                const labelText = `#${index + 1} ${className} ${confScore}%`;
+                let labelText = '';
+                if (isHanger) {
+                    labelText = `[Hanger] ${className} ${confScore}%`;
+                } else {
+                    partIndex++;
+                    labelText = `#${partIndex} ${className} ${confScore}%`;
+                }
+
                 ctxOverlay.font = 'bold 12px Inter, sans-serif';
                 const textWidth = ctxOverlay.measureText(labelText).width;
 
-                ctxOverlay.fillStyle = '#22c55e';
+                ctxOverlay.fillStyle = boxColor;
                 ctxOverlay.fillRect(left, Math.max(0, top - 20), textWidth + 10, 20);
 
                 ctxOverlay.fillStyle = '#ffffff';
                 ctxOverlay.fillText(labelText, left + 5, Math.max(14, top - 5));
             });
 
+            // Ekstraksi kode part otomatis dari kelas deteksi AI (Auto-Recognition)
+            let detectedPartCode = '';
+            const classCounts = {};
+            partDetections.forEach(pred => {
+                const cls = (pred.class || pred.name || '').trim();
+                if (cls && cls.toLowerCase() !== 'part' && cls.toLowerCase() !== 'object' && cls.toLowerCase() !== 'item') {
+                    classCounts[cls] = (classCounts[cls] || 0) + 1;
+                }
+            });
+
+            let maxCount = 0;
+            for (const [cls, cnt] of Object.entries(classCounts)) {
+                if (cnt > maxCount) {
+                    maxCount = cnt;
+                    detectedPartCode = cls;
+                }
+            }
+
             // Jika dipanggil oleh trigger Photosensor Output, simpan konfirmasi ke backend!
             if (isShutterTrigger) {
                 const res = await fetch('/api/confirm-hanger-output', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pcs_count: countPart })
+                    body: JSON.stringify({ 
+                        pcs_count: countPart,
+                        detected_part_code: detectedPartCode,
+                        detected_classes: classCounts
+                    })
                 });
                 const resData = await res.json();
                 if (resData && resData.stats) {
@@ -1815,7 +2162,58 @@
                     kpiOutputHangers.innerText = resData.stats.total_output_hangers || 0;
                     kpiTotalParts.innerText = resData.stats.total_output_pcs || 0;
                 }
-                appendLog(`📸 [Trigger Sensor 2] Hanger Selesai & Terkonfirmasi: ${countPart} Pcs Part!`, '#0d3b8c');
+                if (resData && resData.part) {
+                    activePart = resData.part;
+                    if (activePartName) activePartName.innerText = activePart.name;
+                    if (activePartCode) activePartCode.innerText = activePart.code;
+                    if (cardPartName) cardPartName.innerText = activePart.name;
+                    if (cardPartCode) cardPartCode.innerText = activePart.code;
+                    if (cardPartTarget) cardPartTarget.innerText = activePart.target_per_hanger;
+                    if (labelKolektorPartName) labelKolektorPartName.innerText = `[${activePart.code}] ${activePart.name}`;
+                }
+                const partLabel = detectedPartCode ? ` [Part: ${detectedPartCode}]` : (activePart ? ` [Part: ${activePart.code}]` : '');
+                if (countPart === 0) {
+                    appendLog(`📸 [Sensor Keluar - Pin 25] Hanger KOSONG Lewat (0 Pcs)${partLabel} — Counter part tidak bertambah.`, '#f59e0b');
+                } else {
+                    appendLog(`📸 [Sensor Keluar - Pin 25] Hanger Selesai: ${countPart} Pcs${partLabel} diverifikasi!`, '#0d3b8c');
+                }
+
+                // Tahan bounding box di layar selama 2.5 detik agar terlihat jelas oleh operator
+                if (!isDetecting) {
+                    clearTimeout(window._shutterOverlayTimer);
+                    window._shutterOverlayTimer = setTimeout(() => {
+                        ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+                    }, 2500);
+                }
+            } else if (detectedPartCode && partsCatalog && partsCatalog.length > 0) {
+                // Saat live preview: perbarui info part jika kamera mengenali jenis part tertentu
+                const det = detectedPartCode.trim().toLowerCase();
+                const matched = partsCatalog.find(p => {
+                    const code = (p.code || '').toLowerCase();
+                    const name = (p.name || '').toLowerCase();
+                    const id = (p.id || '').toLowerCase();
+                    return code === det || name === det || id === det ||
+                           det.includes(code) || code.includes(det) ||
+                           det.includes(name) || name.includes(det);
+                });
+                if (matched && (!activePart || activePart.id !== matched.id)) {
+                    activePart = matched;
+                    if (activePartName) activePartName.innerText = activePart.name;
+                    if (activePartCode) activePartCode.innerText = activePart.code;
+                    if (cardPartName) cardPartName.innerText = activePart.name;
+                    if (cardPartCode) cardPartCode.innerText = activePart.code;
+                    if (cardPartTarget) cardPartTarget.innerText = activePart.target_per_hanger;
+                    if (labelKolektorPartName) labelKolektorPartName.innerText = `[${activePart.code}] ${activePart.name}`;
+
+                    // Auto-sync part aktif baru ke backend
+                    fetch('/api/change-part', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ part_id: matched.id })
+                    }).catch(e => console.warn('Auto-sync part aktif error:', e));
+
+                    appendLog(`🤖 [AI Auto-Switch] Kamera mendeteksi: [${matched.code}] ${matched.name}. Part aktif otomatis diganti!`, '#0284c7');
+                }
             }
 
             return countPart;
@@ -1826,13 +2224,11 @@
     }
 
     // ================================================================
-    // KOLEKTOR DATASET ROBOFLOW (100 SAMPEL TRAINING)
+    // KOLEKTOR DATASET ROBOFLOW (UNLIMITED & ULTRA-FAST)
     // ================================================================
     let sampleCount = 0;
-    const maxSamples = 100;
     let isSamplingActive = false;
     let continuousSamplingTimeout = null;
-    let isCapturingFrame = false;
 
     const badgeSampleStatus = document.getElementById('badge-sample-status');
     const labelSampleProgress = document.getElementById('label-sample-progress');
@@ -1871,38 +2267,27 @@
     }
 
     function updateSampleUI() {
-        const percent = Math.min(100, Math.round((sampleCount / maxSamples) * 100));
-        if (barSampleProgress) barSampleProgress.style.width = percent + '%';
-        if (labelSampleProgress) labelSampleProgress.innerText = `${sampleCount} / ${maxSamples} Sampel (${percent}%)`;
-
+        if (labelSampleProgress) labelSampleProgress.innerText = sampleCount;
         if (!badgeSampleStatus || !btnDownloadDatasetZip) return;
 
-        if (sampleCount >= maxSamples) {
-            badgeSampleStatus.innerText = `✅ Lengkap (100 / 100)`;
-            badgeSampleStatus.style.background = '#dcfce7';
-            badgeSampleStatus.style.color = '#16a34a';
-            btnDownloadDatasetZip.style.opacity = '1';
-            btnDownloadDatasetZip.style.pointerEvents = 'auto';
-            btnDownloadDatasetZip.style.boxShadow = '0 0 12px rgba(22, 163, 74, 0.4)';
-        } else if (isSamplingActive) {
-            badgeSampleStatus.innerHTML = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:5px; box-shadow:0 0 6px #ef4444;"></span>Merekam (${sampleCount} / 100)`;
+        if (isSamplingActive) {
+            badgeSampleStatus.innerHTML = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:6px; box-shadow:0 0 8px #ef4444;"></span>Merekam (${sampleCount} Foto...)`;
             badgeSampleStatus.style.background = '#fef2f2';
             badgeSampleStatus.style.color = '#dc2626';
-            if (sampleCount > 0) {
-                btnDownloadDatasetZip.style.opacity = '1';
-                btnDownloadDatasetZip.style.pointerEvents = 'auto';
-            }
         } else {
-            badgeSampleStatus.innerText = `Standby (${sampleCount} / 100)`;
+            badgeSampleStatus.innerText = `Standby (${sampleCount} Foto Terkumpul)`;
             badgeSampleStatus.style.background = '#e0e7ff';
             badgeSampleStatus.style.color = '#3730a3';
-            if (sampleCount > 0) {
-                btnDownloadDatasetZip.style.opacity = '1';
-                btnDownloadDatasetZip.style.pointerEvents = 'auto';
-            } else {
-                btnDownloadDatasetZip.style.opacity = '0.6';
-                btnDownloadDatasetZip.style.pointerEvents = 'none';
-            }
+        }
+
+        if (sampleCount > 0) {
+            btnDownloadDatasetZip.style.opacity = '1';
+            btnDownloadDatasetZip.style.pointerEvents = 'auto';
+            btnDownloadDatasetZip.style.boxShadow = '0 2px 8px rgba(22, 163, 74, 0.35)';
+        } else {
+            btnDownloadDatasetZip.style.opacity = '0.5';
+            btnDownloadDatasetZip.style.pointerEvents = 'none';
+            btnDownloadDatasetZip.style.boxShadow = 'none';
         }
     }
 
@@ -1962,30 +2347,44 @@
         }
     }
 
-    // Ekstraksi frame kamera yang handal: coba canvas stream dulu, jika gagal fallback langsung ke endpoint /capture ESP32-CAM
-    async function getFrameBase64() {
-        // 1. Coba capture instan dari canvas stream <img id="ai-mjpeg-stream">
-        try {
-            if (streamImg && (streamImg.naturalWidth > 0 || streamImg.clientWidth > 0)) {
-                const snapCanvas = document.createElement('canvas');
-                snapCanvas.width = streamImg.naturalWidth || 640;
-                snapCanvas.height = streamImg.naturalHeight || 480;
-                const snapCtx = snapCanvas.getContext('2d');
-                snapCtx.drawImage(streamImg, 0, 0, snapCanvas.width, snapCanvas.height);
-                const dataUrl = snapCanvas.toDataURL('image/jpeg', 0.85);
-                if (dataUrl && dataUrl.length > 500) {
-                    return dataUrl;
-                }
-            }
-        } catch (eCanvas) {
-            console.warn('Canvas toDataURL gagal/tainted, mencoba fallback capture:', eCanvas);
-        }
+    // Persistent offscreen canvas untuk capture frame kilat tanpa overhead alokasi memory (<2ms)
+    let persistentSnapCanvas = null;
+    let persistentSnapCtx = null;
 
-        // 2. Fallback: Ambil langsung 1 frame JPEG dari endpoint /capture ESP32-CAM
+    function getFastFrameBase64() {
+        if (!streamImg) return '';
+        const w = streamImg.naturalWidth || streamImg.clientWidth || 640;
+        const h = streamImg.naturalHeight || streamImg.clientHeight || 480;
+        if (w <= 0 || h <= 0) return '';
+
+        if (!persistentSnapCanvas) {
+            persistentSnapCanvas = document.createElement('canvas');
+            persistentSnapCtx = persistentSnapCanvas.getContext('2d', { willReadFrequently: true });
+        }
+        persistentSnapCanvas.width = 640;
+        persistentSnapCanvas.height = 480;
+
+        try {
+            persistentSnapCtx.drawImage(streamImg, 0, 0, 640, 480);
+            const dataUrl = persistentSnapCanvas.toDataURL('image/jpeg', 0.70);
+            if (dataUrl && dataUrl.length > 500) {
+                return dataUrl;
+            }
+        } catch (eCanvas) {}
+        return '';
+    }
+
+    // Ekstraksi frame kamera yang handal & sangat cepat
+    async function getFrameBase64() {
+        // 1. Ekstraksi langsung dari stream canvas (<2ms)
+        const fastFrame = getFastFrameBase64();
+        if (fastFrame) return fastFrame;
+
+        // 2. Fallback cepat: Ambil langsung dari /capture ESP32-CAM dengan timeout pendek (500ms)
         if (activeCamIp) {
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1200);
+                const timeoutId = setTimeout(() => controller.abort(), 500);
                 const res = await fetch(`http://${activeCamIp}/capture?_t=${Date.now()}`, {
                     signal: controller.signal,
                     cache: 'no-store'
@@ -2001,72 +2400,64 @@
                         });
                     }
                 }
-            } catch (eFetch) {
-                console.warn('Fallback /capture ESP32 gagal:', eFetch);
-            }
+            } catch (eFetch) {}
         }
 
         return '';
     }
 
+    // Pengambilan Sampel Kilat (Optimistic Feedback: Shutter & Counter naik seketika <10ms, simpan di background)
     async function captureRoboflowSample(source = 'Manual') {
-        if (sampleCount >= maxSamples) {
-            stopContinuousSampling();
-            appendLog('✅ Koleksi 100 sampel Roboflow sudah lengkap! Silakan klik "Download ZIP".', '#16a34a');
+        const base64Data = await getFrameBase64();
+
+        if (!base64Data) {
+            if (source !== 'Beruntun') {
+                appendLog('⚠ Gagal mengambil sampel: Kamera belum siap / stream belum aktif.', '#dc2626');
+            }
             return;
         }
 
-        try {
-            const base64Data = await getFrameBase64();
+        // 1. Efek Rana / Flash Kamera Instan
+        if (shutterFlash) {
+            shutterFlash.style.display = 'block';
+            setTimeout(() => { shutterFlash.style.display = 'none'; }, 40);
+        }
+        if (videoContainer) {
+            videoContainer.style.borderColor = '#6366f1';
+            setTimeout(() => { videoContainer.style.borderColor = '#1e293b'; }, 60);
+        }
 
-            if (!base64Data) {
-                appendLog('⚠ Gagal mengambil sampel: Kamera belum siap / stream belum aktif.', '#dc2626');
-                return;
-            }
+        // 2. Optimistic UI: Naikkan counter dan tampilkan thumbnail seketika (<10ms)
+        sampleCount++;
+        updateSampleUI();
+        addThumbnailToPreview(base64Data, sampleCount);
 
-            // Efek Rana / Flash Kamera pada frame saat foto sampel diambil (Visual Feedback Langsung)
-            if (shutterFlash) {
-                shutterFlash.style.display = 'block';
-                setTimeout(() => { shutterFlash.style.display = 'none'; }, 60);
-            }
-            if (videoContainer) {
-                videoContainer.style.borderColor = '#6366f1';
-                setTimeout(() => { videoContainer.style.borderColor = '#1e293b'; }, 90);
-            }
-
-            const activePartId = activePart ? activePart.id : '';
-            const res = await fetch('/api/save-roboflow-sample', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    image: base64Data,
-                    part_id: activePartId
-                })
-            });
-            const data = await res.json();
-
-            if (data && data.status === 'ok') {
+        // 3. Simpan ke Backend secara Asinkron (Non-blocking) di background
+        const activePartId = activePart ? activePart.id : '';
+        fetch('/api/save-roboflow-sample', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                image: base64Data,
+                part_id: activePartId
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.count) {
                 sampleCount = data.count;
                 updateSampleUI();
-                addThumbnailToPreview(base64Data, sampleCount);
-                appendLog(`📸 [Sampel #${sampleCount}/100] ${source}: Foto tersimpan untuk Part [${activePart ? activePart.code : 'Default'}]!`, '#4f46e5');
-
-                if (sampleCount >= maxSamples) {
-                    stopContinuousSampling();
-                    alert('🎉 Target 100 Sampel Gambar untuk Training Roboflow berhasil dikumpulkan!\n\nKlik tombol "Download ZIP" untuk mengunduh semua file gambar yang siap di-upload ke Roboflow.');
-                }
-            } else if (data && data.status === 'full') {
-                sampleCount = maxSamples;
-                stopContinuousSampling();
-                updateSampleUI();
             }
-        } catch (e) {
-            console.error('Error saat capture sample:', e);
-        }
+        })
+        .catch(err => {
+            console.error('Error background save sample:', err);
+        });
+
+        appendLog(`📸 [Sampel #${sampleCount}] ${source}: Foto tersimpan untuk Part [${activePart ? activePart.code : 'Default'}]!`, '#4f46e5');
     }
 
     // ================================================================
-    // LOGIKA PENGAMBILAN SAMPEL BERUNTUN (CONTINUOUS SAMPLING)
+    // LOGIKA PENGAMBILAN SAMPEL BERUNTUN (CONTINUOUS SAMPLING CEPAT)
     // ================================================================
     function stopContinuousSampling() {
         isSamplingActive = false;
@@ -2080,32 +2471,26 @@
     async function runContinuousSamplingLoop() {
         if (!isSamplingActive) return;
 
-        if (sampleCount >= maxSamples) {
-            stopContinuousSampling();
-            alert('🎉 Target 100 Sampel Gambar untuk Training Roboflow berhasil dikumpulkan!\n\nKlik tombol "Download ZIP" untuk mengunduh semua file gambar yang siap di-upload ke Roboflow.');
-            return;
-        }
-
         try {
             await captureRoboflowSample('Beruntun');
         } catch (err) {
             console.error('Error continuous capture:', err);
         }
 
-        // Ambil foto berikutnya 250ms SETELAH foto sebelumnya berhasil diproses (cepat & konsisten)
-        if (isSamplingActive && sampleCount < maxSamples) {
-            continuousSamplingTimeout = setTimeout(runContinuousSamplingLoop, 250);
+        // Pengambilan berikutnya berdasarkan jeda yang dipilih (default 500ms = 0.5 detik)
+        if (isSamplingActive) {
+            const speedEl = document.getElementById('select-sampling-speed');
+            const interval = speedEl ? (parseInt(speedEl.value, 10) || 500) : 500;
+            continuousSamplingTimeout = setTimeout(runContinuousSamplingLoop, interval);
         }
     }
 
     function startContinuousSampling() {
-        if (sampleCount >= maxSamples) {
-            alert('Koleksi sudah 100 sampel. Jika ingin mengambil lagi dari awal, klik tombol Reset terlebih dahulu.');
-            return;
-        }
         isSamplingActive = true;
         updateSamplingButtonState();
-        appendLog('📸 Pengambilan sampel foto beruntun DIMULAI. Kamera akan memotret beruntun sampai tombol Berhenti dipencet.', '#16a34a');
+        const speedEl = document.getElementById('select-sampling-speed');
+        const interval = speedEl ? (parseInt(speedEl.value, 10) || 500) : 500;
+        appendLog(`📸 Pengambilan sampel foto beruntun DIMULAI (Jeda: ${interval}ms / ${(interval/1000).toFixed(2)} detik per foto). Klik Berhenti kapan saja!`, '#16a34a');
         runContinuousSamplingLoop();
     }
 
@@ -2129,23 +2514,43 @@
     if (btnResetSamples) {
         btnResetSamples.addEventListener('click', async () => {
             const pName = activePart ? activePart.name : 'part ini';
-            if (!confirm(`Apakah kamu yakin ingin mereset dan menghapus seluruh sampel gambar untuk ${pName}?`)) return;
+            const pId = activePart ? (activePart.id || '') : '';
+            if (!confirm(`Apakah Anda yakin ingin mereset dan menghapus seluruh (${sampleCount}) sampel gambar untuk ${pName}?`)) return;
             if (isSamplingActive) {
                 stopContinuousSampling();
             }
+
+            btnResetSamples.disabled = true;
+            const originalResetHtml = btnResetSamples.innerHTML;
+            btnResetSamples.innerText = 'Mereset...';
+
             try {
-                await fetch('/api/reset-roboflow-samples', { 
+                const res = await fetch('/api/reset-roboflow-samples', { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ part_id: activePart ? activePart.id : '' })
+                    body: JSON.stringify({ part_id: pId })
                 });
+                const resData = await res.json().catch(() => null);
+
                 sampleCount = 0;
                 updateSamplingButtonState();
+                updateSampleUI();
+
                 if (samplePreviewContainer) {
                     samplePreviewContainer.innerHTML = '<div id="sample-empty-notice" style="font-size:12.5px; color:#94a3b8; font-style:italic;">Belum ada sampel foto yang diambil. Klik \'Mulai Ambil Sampel\' untuk mengambil foto beruntun.</div>';
                 }
-                appendLog(`↺ Seluruh sampel foto Roboflow untuk ${pName} berhasil direset.`, '#dc2626');
-            } catch (e) {}
+
+                // Verifikasi ulang dari server
+                await loadRoboflowSamplesStats(pId);
+
+                appendLog(`↺ Seluruh sampel foto Roboflow untuk ${pName} berhasil direset (0 foto).`, '#dc2626');
+                alert(`✅ Seluruh sampel foto untuk ${pName} berhasil direset menjadi 0.`);
+            } catch (e) {
+                alert('Gagal mereset sampel: ' + e.message);
+            } finally {
+                btnResetSamples.disabled = false;
+                btnResetSamples.innerHTML = originalResetHtml;
+            }
         });
     }
 
@@ -2204,14 +2609,14 @@
                     // Update Header Banner
                     if (activePartName) activePartName.innerText = activePart.name;
                     if (activePartCode) activePartCode.innerText = activePart.code;
-                    if (activePartModelInfo) activePartModelInfo.innerText = `Roboflow: ${activePart.model_id}`;
+                    if (activePartModelInfo) activePartModelInfo.innerText = activePart.model_id ? `Roboflow: ${activePart.model_id}` : 'Roboflow: Belum Dikonfigurasi';
                     if (badgeModelVersion) badgeModelVersion.innerText = `v${activePart.model_version}`;
                     if (labelKolektorPartName) labelKolektorPartName.innerText = `[${activePart.code}] ${activePart.name}`;
 
                     // Update Card 1 Profile
                     if (cardPartName) cardPartName.innerText = activePart.name;
                     if (cardPartCode) cardPartCode.innerText = activePart.code;
-                    if (cardModelSlug) cardModelSlug.innerText = activePart.model_id;
+                    if (cardModelSlug) cardModelSlug.innerText = activePart.model_id || '(Belum Dikonfigurasi)';
                     if (cardModelVersion) cardModelVersion.innerText = `v${activePart.model_version}`;
                     if (cardPartTarget) cardPartTarget.innerText = activePart.target_per_hanger;
 
@@ -2219,9 +2624,9 @@
                     const inModel = document.getElementById('rf-model-input');
                     const inVer = document.getElementById('rf-version-input');
                     const inKey = document.getElementById('rf-key-input');
-                    if (inModel) inModel.value = activePart.model_id;
-                    if (inVer) inVer.value = activePart.model_version;
-                    if (inKey) inKey.value = activePart.publishable_key;
+                    if (inModel) inModel.value = activePart.model_id || '';
+                    if (inVer) inVer.value = activePart.model_version || 1;
+                    if (inKey) inKey.value = activePart.publishable_key || '';
 
                     // Update Download Dataset ZIP Link
                     const btnZip = document.getElementById('btn-download-dataset-zip');
@@ -2232,9 +2637,32 @@
                     // Reload samples count for this part
                     loadRoboflowSamplesStats(activePart.id);
 
-                    // Auto load Roboflow model for active part
-                    if (reloadModel && activePart.model_id && activePart.publishable_key) {
+                    // Auto load model for active part
+                    if (activePart.has_local_model) {
+                        isOfflineAiReady = true;
+                        if (activePartModelInfo) activePartModelInfo.innerText = `AI Offline: ${activePart.model_file}`;
+                        const badgeModel = document.getElementById('badge-ai-model-ready');
+                        if (badgeModel) {
+                            badgeModel.innerText = `🟢 Model Offline Siap`;
+                            badgeModel.title = `Model offline ${activePart.model_file} (${activePart.model_size_mb || 42} MB) aktif & siap mendeteksi 100% lokal`;
+                            badgeModel.style.background = '#dcfce7';
+                            badgeModel.style.color = '#15803d';
+                            badgeModel.style.cursor = 'default';
+                            badgeModel.onclick = null;
+                        }
+                        const errBox = document.getElementById('ai-model-error-hint');
+                        if (errBox) errBox.style.display = 'none';
+                        if (statusModel) {
+                            statusModel.innerText = `Model Offline Siap (${activePart.model_file})`;
+                            statusModel.style.color = '#16a34a';
+                        }
+                        checkEnableDetectButton();
+                        appendLog(`🤖 Model AI Offline [${activePart.model_file}] aktif & siap mendeteksi 100% lokal.`, '#16a34a');
+                    } else if (reloadModel && activePart.model_id && activePart.publishable_key && !activePart.model_id.startsWith('offline_')) {
                         initRoboflowModel(activePart.model_id, activePart.model_version, activePart.publishable_key, true);
+                    } else if (reloadModel) {
+                        isOfflineAiReady = false;
+                        initRoboflowModel('', 1, '', true);
                     }
                 } else {
                     // Tampilan ketika belum ada part yang didaftarkan di katalog
@@ -2284,22 +2712,28 @@
             const isActive = activePart && activePart.id === p.id;
             if (isActive) tr.style.background = '#f0f9ff';
 
+            const hasModel = p.has_local_model;
+            const modelBadge = hasModel 
+                ? `<span style="font-size:11.5px; font-weight:700; background:#dcfce7; color:#15803d; padding:3px 9px; border-radius:6px; font-family:monospace;">🟢 ${p.model_file} (${p.model_size_mb || 42} MB)</span>`
+                : `<span style="font-size:11.5px; font-weight:700; background:#fee2e2; color:#dc2626; padding:3px 9px; border-radius:6px; font-family:monospace;">🔴 Belum Upload</span>`;
+
             tr.innerHTML = `
-                <td style="padding:8px 12px;">
+                <td style="padding:10px 14px;">
                     <div style="font-weight:700; color:#0f172a;">${p.name}</div>
                     <span style="font-size:10.5px; font-weight:800; background:#e2e8f0; color:#475569; padding:1px 6px; border-radius:4px; font-family:monospace;">${p.code}</span>
                 </td>
-                <td style="padding:8px 12px; font-family:monospace; color:#0d3b8c; font-weight:600;">${p.model_id}</td>
-                <td style="padding:8px 12px; text-align:center;">
-                    <span style="font-size:11px; font-weight:800; background:#dbeafe; color:#1d4ed8; padding:2px 7px; border-radius:4px; font-family:monospace;">v${p.model_version}</span>
+                <td style="padding:10px 14px;">
+                    ${modelBadge}
                 </td>
-                <td style="padding:8px 12px; text-align:center; font-weight:700; color:#16a34a;">${p.target_per_hanger} pcs</td>
-                <td style="padding:8px 12px; text-align:center;">
+                <td style="padding:10px 14px; text-align:center; font-weight:700; color:#16a34a;">${p.target_per_hanger} pcs</td>
+                <td style="padding:10px 14px; text-align:center;">
                     ${isActive ? '<span style="font-size:11px; font-weight:700; background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px;">● Aktif</span>' : '<span style="color:#94a3b8; font-size:11px;">Standby</span>'}
                 </td>
-                <td style="padding:8px 12px; text-align:center;">
-                    <button type="button" class="btn-edit-part" data-id="${p.id}" style="background:none; border:none; color:#0284c7; cursor:pointer; font-weight:700; font-size:12px; margin-right:6px;" title="Edit Part">✏️</button>
-                    ${!isActive ? `<button type="button" class="btn-delete-part" data-id="${p.id}" data-name="${p.name}" style="background:none; border:none; color:#ef4444; cursor:pointer; font-weight:700; font-size:12px;" title="Hapus Part">🗑️</button>` : ''}
+                <td style="padding:10px 14px; text-align:center;">
+                    <div style="display:inline-flex; align-items:center; gap:6px;">
+                        <button type="button" class="btn-edit-part" data-id="${p.id}" style="background:#f0f9ff; border:1px solid #bae6fd; color:#0284c7; cursor:pointer; font-weight:700; font-size:12px; padding:5px 10px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; transition:all 0.15s;" title="Edit Part" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#f0f9ff'">✏️ Edit</button>
+                        <button type="button" class="btn-delete-part" data-id="${p.id}" data-name="${p.name}" data-is-active="${isActive ? '1' : '0'}" style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; cursor:pointer; font-weight:700; font-size:12px; padding:5px 10px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; transition:all 0.15s;" title="Hapus Part" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'">🗑️ Hapus</button>
+                    </div>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -2314,10 +2748,25 @@
                     document.getElementById('part-form-id').value = part.id;
                     document.getElementById('part-form-code').value = part.code;
                     document.getElementById('part-form-name').value = part.name;
-                    document.getElementById('part-form-slug').value = part.model_id;
-                    document.getElementById('part-form-version').value = part.model_version;
-                    document.getElementById('part-form-target').value = part.target_per_hanger;
-                    document.getElementById('part-form-key').value = part.publishable_key;
+                    document.getElementById('part-form-target').value = part.target_per_hanger || 15;
+                    const modelInfoBox = document.getElementById('part-form-model-info');
+                    const modelFileEl = document.getElementById('current-model-filename');
+                    const modelSizeEl = document.getElementById('current-model-size');
+                    if (part.has_local_model) {
+                        modelFileEl.innerText = part.model_file;
+                        modelSizeEl.innerText = `${part.model_size_mb || 42} MB`;
+                        modelInfoBox.style.display = 'flex';
+                    } else {
+                        modelInfoBox.style.display = 'none';
+                    }
+                    const inputF = document.getElementById('part-form-file');
+                    if (inputF) inputF.value = '';
+                    const lblF = document.getElementById('label-selected-model-file');
+                    if (lblF) {
+                        lblF.innerText = 'Pilih file baru jika ingin mengganti model';
+                        lblF.style.color = '#64748b';
+                        lblF.style.fontWeight = 'normal';
+                    }
                     document.getElementById('form-part-title').innerText = `Edit Part: ${part.name}`;
                 }
             });
@@ -2325,20 +2774,130 @@
 
         // Event listener Delete
         tbody.querySelectorAll('.btn-delete-part').forEach(b => {
-            b.addEventListener('click', async () => {
+            b.addEventListener('click', () => {
                 const id = b.dataset.id;
                 const name = b.dataset.name;
-                if (!confirm(`Hapus part '${name}' dari katalog?`)) return;
-                try {
-                    await fetch('/api/delete-part', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id })
-                    });
-                    loadPartsCatalog(false);
-                } catch (e) {}
+                const isActive = b.dataset.isActive === '1';
+                tampilkanKonfirmasiHapusPart(id, name, isActive);
             });
         });
+    }
+
+    /**
+     * Modal Konfirmasi Hapus Part
+     */
+    function tampilkanKonfirmasiHapusPart(partId, partName, isActive = false) {
+        // Cek apakah modal sudah ada, jika belum buat
+        let modal = document.getElementById('modal-konfirmasi-hapus-part');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modal-konfirmasi-hapus-part';
+            modal.style.cssText = 'display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:10001; justify-content:center; align-items:center; backdrop-filter:blur(3px);';
+            modal.innerHTML = `
+                <div style="background:#ffffff; border-radius:14px; max-width:480px; width:92%; padding:28px; box-shadow:0 20px 40px rgba(0,0,0,0.25); border:1px solid #e2e8f0; animation:modalSlide 0.25s ease-out;">
+                    <div style="display:flex; align-items:center; gap:14px; margin-bottom:18px;">
+                        <div style="width:48px; height:48px; border-radius:12px; background:#fef2f2; display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1.5px solid #fecaca;">
+                            <span style="font-size:24px;">⚠️</span>
+                        </div>
+                        <div>
+                            <h3 style="margin:0; font-size:17px; color:#0f172a; font-weight:800;">Konfirmasi Hapus Part</h3>
+                            <div style="font-size:13px; color:#64748b; margin-top:3px;">Tindakan ini tidak dapat dibatalkan</div>
+                        </div>
+                    </div>
+
+                    <div id="hapus-part-warning-active" style="display:none; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:12.5px; color:#92400e; line-height:1.5;">
+                        ⚠️ <strong>Peringatan Part Aktif:</strong> Part ini sedang <strong>Aktif Diproduksi</strong>. Jika dihapus, sistem akan mengosongkan antrean part aktif atau mengalihkan ke part berikutnya yang tersedia di katalog.
+                    </div>
+
+                    <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:14px 16px; margin-bottom:18px;">
+                        <div style="font-size:13px; color:#991b1b; line-height:1.6;">
+                            Anda akan menghapus part <strong id="hapus-part-nama" style="color:#dc2626;">-</strong> dari katalog.
+                            <br>
+                            <span style="font-size:12px; color:#b91c1c;">• Data profil part akan dihapus permanen<br>• File model AI (.pt / .onnx) juga akan dihapus dari server</span>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:10px;">
+                        <button type="button" id="btn-batal-hapus-part" style="padding:9px 18px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:7px; font-weight:700; font-size:13px; cursor:pointer; transition:all 0.15s;">
+                            Batal
+                        </button>
+                        <button type="button" id="btn-konfirmasi-hapus-part" style="padding:9px 18px; background:#dc2626; color:white; border:none; border-radius:7px; font-weight:700; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.15s;">
+                            🗑️ Ya, Hapus Part
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            document.getElementById('btn-batal-hapus-part').addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.style.display = 'none';
+            });
+        }
+
+        // Isi nama part & status warning
+        document.getElementById('hapus-part-nama').innerText = partName;
+        const warnActive = document.getElementById('hapus-part-warning-active');
+        if (warnActive) warnActive.style.display = isActive ? 'block' : 'none';
+        modal.style.display = 'flex';
+
+        const btnKonfirmasi = document.getElementById('btn-konfirmasi-hapus-part');
+        // Clone untuk hapus event listener lama
+        const newBtn = btnKonfirmasi.cloneNode(true);
+        btnKonfirmasi.parentNode.replaceChild(newBtn, btnKonfirmasi);
+
+        newBtn.addEventListener('click', async () => {
+            newBtn.disabled = true;
+            newBtn.innerHTML = '⏳ Menghapus...';
+
+            try {
+                const res = await fetch(`${APP_BASE_PATH}/api/delete-part`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' },
+                    body: JSON.stringify({ id: partId })
+                });
+                const data = await res.json();
+
+                if (data.status === 'ok') {
+                    modal.style.display = 'none';
+                    // Reset form edit jika part yang dihapus sedang dibuka di form
+                    const formIdInput = document.getElementById('part-form-id');
+                    if (formIdInput && formIdInput.value === partId) {
+                        const resetBtn = document.getElementById('btn-reset-part-form');
+                        if (resetBtn) resetBtn.click();
+                    }
+                    // Refresh katalog
+                    await loadPartsCatalog(false);
+                    // Tampilkan notifikasi sukses
+                    tampilkanNotifikasiHapusPart('success', data.message || `Part '${partName}' berhasil dihapus`);
+                } else {
+                    tampilkanNotifikasiHapusPart('error', data.message || 'Gagal menghapus part');
+                    modal.style.display = 'none';
+                }
+            } catch (e) {
+                tampilkanNotifikasiHapusPart('error', 'Terjadi kesalahan koneksi saat menghapus part');
+                modal.style.display = 'none';
+            } finally {
+                newBtn.disabled = false;
+                newBtn.innerHTML = '🗑️ Ya, Hapus Part';
+            }
+        });
+    }
+
+    function tampilkanNotifikasiHapusPart(type, message) {
+        const notif = document.createElement('div');
+        const isError = type === 'error';
+        notif.style.cssText = `position:fixed; top:20px; right:20px; z-index:10002; padding:14px 20px; border-radius:10px; font-size:13.5px; font-weight:700; box-shadow:0 8px 24px rgba(0,0,0,0.18); display:flex; align-items:center; gap:10px; animation:modalSlide 0.3s ease-out; max-width:420px; background:${isError ? '#fef2f2' : '#f0fdf4'}; border:1.5px solid ${isError ? '#fecaca' : '#bbf7d0'}; color:${isError ? '#991b1b' : '#166534'};`;
+        notif.innerHTML = `<span style="font-size:18px;">${isError ? '❌' : '✅'}</span> <span>${message}</span>`;
+        document.body.appendChild(notif);
+        setTimeout(() => {
+            notif.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+            notif.style.opacity = '0';
+            notif.style.transform = 'translateY(-10px)';
+            setTimeout(() => notif.remove(), 400);
+        }, 3500);
     }
 
     // Modal Changeover Triggers & Handlers
@@ -2406,9 +2965,14 @@
     }
 
     const btnOpenChangePart = document.getElementById('btn-open-change-part');
-    const btnQuickChangePart = document.getElementById('btn-quick-change-part');
+    const btnQuickManageParts = document.getElementById('btn-quick-manage-parts');
     if (btnOpenChangePart) btnOpenChangePart.addEventListener('click', openChangeoverModal);
-    if (btnQuickChangePart) btnQuickChangePart.addEventListener('click', openChangeoverModal);
+    if (btnQuickManageParts) {
+        btnQuickManageParts.addEventListener('click', () => {
+            renderPartsTable();
+            if (modalManageParts) modalManageParts.style.display = 'flex';
+        });
+    }
 
     const btnCloseChangeX = document.getElementById('btn-close-modal-change-x');
     const btnCancelChange = document.getElementById('btn-cancel-change-part');
@@ -2469,56 +3033,198 @@
     if (btnCloseManagePartsX) btnCloseManagePartsX.addEventListener('click', () => modalManageParts.style.display = 'none');
     if (btnCloseManageParts) btnCloseManageParts.addEventListener('click', () => modalManageParts.style.display = 'none');
 
+    const btnBrowseModel = document.getElementById('btn-browse-model-file');
+    const inputModelFile = document.getElementById('part-form-file');
+    const labelSelectedFile = document.getElementById('label-selected-model-file');
+    if (btnBrowseModel && inputModelFile) {
+        btnBrowseModel.addEventListener('click', () => inputModelFile.click());
+        inputModelFile.addEventListener('change', () => {
+            if (inputModelFile.files && inputModelFile.files[0]) {
+                const file = inputModelFile.files[0];
+                const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+                labelSelectedFile.innerText = `📄 ${file.name} (${sizeMb} MB) dipilih`;
+                labelSelectedFile.style.color = '#15803d';
+                labelSelectedFile.style.fontWeight = '700';
+            }
+        });
+    }
+
     const btnResetPartForm = document.getElementById('btn-reset-part-form');
     if (btnResetPartForm) {
         btnResetPartForm.addEventListener('click', () => {
             document.getElementById('part-form-id').value = '';
             document.getElementById('part-form-code').value = '';
             document.getElementById('part-form-name').value = '';
-            document.getElementById('part-form-slug').value = '';
-            document.getElementById('part-form-version').value = '1';
-            document.getElementById('part-form-target').value = '4';
-            document.getElementById('part-form-key').value = '';
+            document.getElementById('part-form-target').value = '15';
+            if (inputModelFile) inputModelFile.value = '';
+            const modelInfoBox = document.getElementById('part-form-model-info');
+            if (modelInfoBox) modelInfoBox.style.display = 'none';
+            if (labelSelectedFile) {
+                labelSelectedFile.innerText = 'Belum ada file baru dipilih';
+                labelSelectedFile.style.color = '#64748b';
+                labelSelectedFile.style.fontWeight = 'normal';
+            }
+            const progressContainer = document.getElementById('part-upload-progress-container');
+            if (progressContainer) progressContainer.style.display = 'none';
             document.getElementById('form-part-title').innerText = 'Tambah Part Baru ke Katalog';
+        });
+    }
+
+    // Event listener Hapus File Model AI Saja
+    const btnDeleteModelFile = document.getElementById('btn-delete-model-file');
+    if (btnDeleteModelFile) {
+        btnDeleteModelFile.addEventListener('click', async () => {
+            const id = document.getElementById('part-form-id').value;
+            const name = document.getElementById('part-form-name').value || 'part ini';
+            if (!id) return;
+            if (!confirm(`Yakin ingin menghapus file model AI (.pt / .onnx) untuk part '${name}' dari server?\n\nProfil part tetap tersimpan di katalog, Anda dapat mengupload model baru kapan saja.`)) return;
+
+            btnDeleteModelFile.disabled = true;
+            btnDeleteModelFile.innerText = '⏳ Menghapus...';
+            try {
+                const res = await fetch(`${APP_BASE_PATH}/api/delete-part-model`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                    },
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    const modelInfoBox = document.getElementById('part-form-model-info');
+                    if (modelInfoBox) modelInfoBox.style.display = 'none';
+                    tampilkanNotifikasiHapusPart('success', data.message || 'File model AI berhasil dihapus');
+                    await loadPartsCatalog(false);
+                } else {
+                    tampilkanNotifikasiHapusPart('error', data.message || 'Gagal menghapus file model');
+                }
+            } catch (e) {
+                tampilkanNotifikasiHapusPart('error', 'Terjadi kesalahan saat menghapus model');
+            } finally {
+                btnDeleteModelFile.disabled = false;
+                btnDeleteModelFile.innerText = '🗑️ Hapus Model Saja';
+            }
         });
     }
 
     const btnSubmitPartForm = document.getElementById('btn-submit-part-form');
     if (btnSubmitPartForm) {
-        btnSubmitPartForm.addEventListener('click', async () => {
+        btnSubmitPartForm.addEventListener('click', () => {
             const id = document.getElementById('part-form-id').value;
             const code = document.getElementById('part-form-code').value.trim();
             const name = document.getElementById('part-form-name').value.trim();
-            const model_id = document.getElementById('part-form-slug').value.trim();
-            const model_version = parseInt(document.getElementById('part-form-version').value, 10) || 1;
-            const target_per_hanger = parseInt(document.getElementById('part-form-target').value, 10) || 4;
-            const publishable_key = document.getElementById('part-form-key').value.trim();
+            const target_per_hanger = parseInt(document.getElementById('part-form-target').value, 10) || 15;
+            const fileInput = document.getElementById('part-form-file');
 
-            if (!code || !name || !model_id || !publishable_key) {
-                alert('Semua field wajib diisi!');
+            if (!code || !name) {
+                alert('Kode Part dan Nama Part wajib diisi!');
                 return;
             }
 
-            try {
-                const res = await fetch('/api/save-part', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, code, name, model_id, model_version, target_per_hanger, publishable_key })
-                });
-                if (!res.ok) {
-                    const errData = await res.json().catch(() => null);
-                    throw new Error((errData && errData.message) ? errData.message : `HTTP ${res.status}`);
-                }
-                const data = await res.json();
-                if (data && data.status === 'ok') {
-                    btnResetPartForm.click();
-                    await loadPartsCatalog(false);
-                    appendLog(`💾 Part [${code}] ${name} berhasil disimpan ke katalog.`, '#16a34a');
-                    alert(`✅ Part '${name}' [${code}] berhasil disimpan ke katalog!`);
-                }
-            } catch (e) {
-                alert('Gagal menyimpan part: ' + e.message);
+            const progressContainer = document.getElementById('part-upload-progress-container');
+            const progressBar = document.getElementById('part-upload-progress-bar');
+            const progressText = document.getElementById('part-upload-progress-text');
+            const progressPercent = document.getElementById('part-upload-progress-percent');
+            const progressBytes = document.getElementById('part-upload-progress-bytes');
+            const progressSpeed = document.getElementById('part-upload-progress-speed');
+
+            const hasFile = fileInput && fileInput.files && fileInput.files[0];
+            const fileSizeMB = hasFile ? (fileInput.files[0].size / 1048576).toFixed(1) : 0;
+
+            btnSubmitPartForm.disabled = true;
+            btnSubmitPartForm.innerText = hasFile ? 'Mengupload Model...' : 'Menyimpan...';
+
+            if (progressContainer) {
+                progressContainer.style.display = hasFile ? 'block' : 'none';
+                if (progressBar) progressBar.style.width = '0%';
+                if (progressPercent) progressPercent.innerText = '0%';
+                if (progressText) progressText.innerText = `Mengupload ${fileInput.files[0].name} (${fileSizeMB} MB)...`;
+                if (progressBytes) progressBytes.innerText = `0.0 MB / ${fileSizeMB} MB`;
+                if (progressSpeed) progressSpeed.innerText = 'Memulai proses upload...';
             }
+
+            // Tandai status upload besar agar background polling dijeda sementara
+            if (hasFile) window.isUploadingLargeFile = true;
+
+            const formData = new FormData();
+            if (id) formData.append('id', id);
+            formData.append('code', code);
+            formData.append('name', name);
+            formData.append('target_per_hanger', target_per_hanger);
+            if (hasFile) {
+                formData.append('model_file', fileInput.files[0]);
+            }
+
+            const xhr = new XMLHttpRequest();
+            const startTime = Date.now();
+
+            if (xhr.upload && hasFile) {
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable && e.total > 0) {
+                        const pct = Math.min(100, Math.round((e.loaded / e.total) * 100));
+                        const loadedMB = (e.loaded / 1048576).toFixed(1);
+                        const totalMB = (e.total / 1048576).toFixed(1);
+                        const elapsedSec = (Date.now() - startTime) / 1000;
+                        const speedMBs = elapsedSec > 0.3 ? ((e.loaded / 1048576) / elapsedSec).toFixed(1) : '-';
+
+                        if (progressBar) progressBar.style.width = pct + '%';
+                        if (progressPercent) progressPercent.innerText = pct + '%';
+                        if (progressBytes) progressBytes.innerText = `${loadedMB} MB / ${totalMB} MB`;
+                        if (progressSpeed) progressSpeed.innerText = `Kecepatan: ${speedMBs} MB/s`;
+
+                        if (pct >= 100) {
+                            if (progressText) progressText.innerText = 'File terkirim! Menyimpan ke storage server...';
+                            if (progressSpeed) progressSpeed.innerText = 'Menyelesaikan penyimpanan...';
+                            btnSubmitPartForm.innerText = 'Menyimpan di server...';
+                        } else {
+                            btnSubmitPartForm.innerText = `Mengupload (${pct}%)...`;
+                        }
+                    }
+                };
+            }
+
+            xhr.onload = async () => {
+                window.isUploadingLargeFile = false;
+                btnSubmitPartForm.disabled = false;
+                btnSubmitPartForm.innerText = '💾 Simpan Part';
+
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data && data.status === 'ok') {
+                            if (progressContainer) progressContainer.style.display = 'none';
+                            btnResetPartForm.click();
+                            await loadPartsCatalog(true);
+                            appendLog(`💾 Part [${code}] ${name} berhasil disimpan ke katalog offline.`, '#16a34a');
+                            alert(`✅ Part '${name}' [${code}] berhasil disimpan!\nModel AI Offline (${fileSizeMB > 0 ? fileSizeMB + ' MB' : 'siap'}) kini aktif.`);
+                            return;
+                        } else {
+                            throw new Error(data.message || 'Gagal menyimpan part');
+                        }
+                    } catch (parseErr) {
+                        alert('Respon server tidak valid: ' + parseErr.message);
+                    }
+                } else {
+                    let errMsg = `HTTP Error ${xhr.status}`;
+                    try {
+                        const errObj = JSON.parse(xhr.responseText);
+                        if (errObj && errObj.message) errMsg = errObj.message;
+                    } catch (e) {}
+                    alert('Gagal menyimpan part: ' + errMsg);
+                }
+            };
+
+            xhr.onerror = () => {
+                window.isUploadingLargeFile = false;
+                btnSubmitPartForm.disabled = false;
+                btnSubmitPartForm.innerText = '💾 Simpan Part';
+                if (progressContainer) progressContainer.style.display = 'none';
+                alert('Gagal menghubungi server saat upload. Periksa koneksi lokal Anda.');
+            };
+
+            xhr.open('POST', '/api/save-part', true);
+            xhr.send(formData);
         });
     }
 
@@ -2579,9 +3285,11 @@
 
     // 5. LISTENER AUTO-TRIGGER RS-485 (Polling Real-Time dari Backend)
     let lastEspSignalTime = Date.now();
+    let isPollingSensor = false;
 
     async function pollSensorTrigger() {
-        if (!chkAutoTrigger.checked) return;
+        if (!chkAutoTrigger.checked || window.isUploadingLargeFile || isPollingSensor) return;
+        isPollingSensor = true;
 
         try {
             const res = await fetch('/api/get-sensor-trigger');
@@ -2615,8 +3323,8 @@
                     textSensorInput.innerText = 'TRIGGER DETECTED!';
                     textSensorInput.style.color = '#16a34a';
 
-                    const durText = trig.duration_ms ? ` (${trig.duration_ms}ms - Data Asli)` : '';
-                    appendLog(`🚪 Photosensor 1 (Input) Hanger Asli Masuk ke Line${durText}.`, '#16a34a');
+                    const durText = trig.duration_ms ? ` (${trig.duration_ms}ms)` : '';
+                    appendLog(`🚪 [Sensor Masuk Box - Pin 27] Hanger Masuk ke Area Inspeksi${durText}.`, '#16a34a');
                     loadHangerStats();
 
                     setTimeout(() => {
@@ -2632,11 +3340,11 @@
                     updateMesinUI(true, true);
                     dotSensorOutput.style.background = '#22c55e';
                     dotSensorOutput.style.boxShadow = '0 0 12px #22c55e';
-                    textSensorOutput.innerText = 'SHUTTER TRIGGER!';
+                    textSensorOutput.innerText = 'ROBOFLOW CONFIRMED!';
                     textSensorOutput.style.color = '#16a34a';
 
-                    const durText = trig.duration_ms ? ` (${trig.duration_ms}ms - Data Asli)` : '';
-                    appendLog(`📸 Photosensor 2 (Output) Hanger Asli Tiba di Kamera${durText} -> Shutter AI Aktif!`, '#16a34a');
+                    const durText = trig.duration_ms ? ` (${trig.duration_ms}ms)` : '';
+                    appendLog(`📸 [Sensor Keluar Box - Pin 25] Hanger Keluar${durText} -> Konfirmasi Deteksi Part via Roboflow!`, '#16a34a');
 
                     // Efek Rana / Flash Kamera di Layar (Border Hijau)
                     videoContainer.style.borderColor = '#22c55e';
@@ -2662,11 +3370,14 @@
                     }, 1200);
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+        } finally {
+            isPollingSensor = false;
+        }
     }
 
-    // Jalankan polling trigger sensor setiap 250ms
-    triggerPollInterval = setInterval(pollSensorTrigger, 250);
+    // Jalankan polling trigger sensor setiap 350ms
+    triggerPollInterval = setInterval(pollSensorTrigger, 350);
 
     // 6. EVENT TOMBOL SIMULASI (Testing tanpa conveyor fisik)
     const btnSimOn = document.getElementById('btn-sim-on');

@@ -166,6 +166,17 @@ body {
     color: #a9c0ec;
 }
 
+.sidebar-operator-card {
+    transition: all 0.2s ease;
+}
+
+.sidebar-operator-card:hover {
+    background: rgba(255, 255, 255, 0.14) !important;
+    border-color: rgba(255, 255, 255, 0.28) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
 .nav-section-title {
     font-size: 11px;
     color: #7f9edd;
@@ -442,7 +453,7 @@ body {
 .topbar.topbar-merged {
     position: relative;
     overflow: hidden;
-    background: url('assets/images/factory-line.png') center 82% / cover no-repeat;
+    background: linear-gradient(135deg, #0b1e3b 0%, #0d3b8c 55%, #1d4ed8 100%);
     border: 1px solid rgba(79, 127, 214, 0.28);
     border-bottom: 1px solid rgba(79, 127, 214, 0.14);
     border-radius: 16px 16px 0 0;
@@ -456,7 +467,7 @@ body {
 .topbar.topbar-standalone {
     position: relative;
     overflow: hidden;
-    background: url('assets/images/factory-line.png') center 82% / cover no-repeat;
+    background: linear-gradient(135deg, #0b1e3b 0%, #0d3b8c 55%, #1d4ed8 100%);
     border: 1px solid rgba(79, 127, 214, 0.28);
     border-radius: 16px;
     padding: 24px 28px;
@@ -801,16 +812,25 @@ body {
 .dashboard-top-grid .panel {
     margin-bottom: 0;
     height: 100%;
+    box-sizing: border-box;
 }
 
-.dashboard-top-grid .tower-light-panel {
-    padding: 16px 20px;
-    gap: 18px;
+.dashboard-top-grid .tower-light-panel,
+.dashboard-top-grid .panel-status-mesin-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 18px 20px;
+    gap: 0;
     margin-bottom: 0;
 }
 
-.dashboard-top-grid .panel-choose-part {
-    padding: 16px 20px;
+.dashboard-top-grid .panel-choose-part,
+.dashboard-top-grid .choose-part-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 18px 20px;
     margin-bottom: 0;
 }
 

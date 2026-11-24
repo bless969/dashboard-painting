@@ -32,19 +32,45 @@
 
     <!-- ===== SIDEBAR AUTO-REVEAL DRAWER ===== -->
     <div class="sidebar sidebar-drawer" id="mainSidebar">
-        <div class="logo">
+        <div class="logo" style="margin-bottom:14px;">
             <img src="{{ asset('assets/images/logo-gobel.png') }}" class="logo-img" alt="Logo Gobel">
             <div class="text">
                 <h3>PT Panasonic Gobel Indonesia</h3>
                 <span id="logo-subtitle">
-                    @if($view_aktif === 'machine-control') Machine Control — Painting
+                    @if($view_aktif === 'ai-vision' || $view_aktif === 'machine-control') AI Vision & Kamera — Painting
                     @elseif($view_aktif === 'pengaturan') Pengaturan — Painting
                     @elseif($view_aktif === 'kwh-control') KWh Meter — Line Painting
-                    @elseif($view_aktif === 'ai-vision') AI Vision & Kamera — Painting
                     @elseif($view_aktif === 'chart') Chart — Painting
                     @elseif(in_array($view_aktif, ['riwayat', 'detail', 'detail-shift'])) Riwayat — Painting
                     @else Dashboard Painting
                     @endif
+                </span>
+            </div>
+        </div>
+
+        <!-- ===== KARTU OPERATOR PIC & SHIFT (SIDEBAR) ===== -->
+        <div class="sidebar-operator-card" onclick="bukaModalGantiShift()" title="Klik untuk Ganti PIC Operator / Serah Terima Shift" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:10px; padding:10px 12px; margin-bottom:18px; cursor:pointer; transition:all 0.2s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+                <div style="display:flex; align-items:center; gap:5px; font-size:10px; font-weight:800; color:#93c5fd; text-transform:uppercase; letter-spacing:0.8px;">
+                    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px #22c55e;"></span>
+                    <span>Operator PIC</span>
+                </div>
+                <span style="font-size:10px; color:#bfdbfe; background:rgba(255,255,255,0.12); padding:1px 6px; border-radius:4px; font-weight:700;">Ganti ⇄</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:7px; margin-bottom:6px;">
+                <div style="width:24px; height:24px; border-radius:6px; background:rgba(255,255,255,0.15); display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0;">
+                    👤
+                </div>
+                <div id="sidebar-operator-name" style="font-size:13px; font-weight:800; color:#ffffff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                    Mukhamad Nawwaf
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span id="sidebar-shift-badge" style="background:rgba(99,102,241,0.3); border:1px solid rgba(165,180,252,0.35); color:#e0e7ff; padding:2px 7px; border-radius:4px; font-size:10.5px; font-weight:700;">
+                    Shift 1 (Pagi)
+                </span>
+                <span id="sidebar-mp-badge" style="background:rgba(255,255,255,0.1); color:#cbd5e1; padding:2px 6px; border-radius:4px; font-size:10.5px; font-weight:600;">
+                    6 MP
                 </span>
             </div>
         </div>
@@ -57,12 +83,12 @@
             <span class="icon-nav"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>
             <span class="nav-line-label">Dashboard</span>
         </a>
-        <a class="nav-item {{ ($view_aktif === 'machine-control') ? 'active' : '' }}"
-           data-view="machine-control"
-           href="{{ route('machine-control', ['line' => 'Painting']) }}"
-           onclick="return navigateSidebar(event, 'machine-control', 'Painting')">
-            <span class="icon-nav"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="14" height="6" rx="1"/><path d="M9 13v4"/><rect x="7" y="17" width="4" height="4" rx="1"/><path d="M16 9h4a2 2 0 0 1 2 2v3"/></svg></span>
-            <span class="nav-line-label">Machine Control</span>
+        <a class="nav-item {{ ($view_aktif === 'ai-vision') ? 'active' : '' }}"
+           data-view="ai-vision"
+           href="{{ route('ai-vision', ['line' => 'Painting']) }}"
+           onclick="return navigateSidebar(event, 'ai-vision', 'Painting')">
+            <span class="icon-nav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
+            <span class="nav-line-label">AI Vision &amp; Kamera</span>
         </a>
         <a class="nav-item {{ ($view_aktif === 'chart') ? 'active' : '' }}"
            data-view="chart"
@@ -78,22 +104,8 @@
             <span class="icon-nav"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
             <span class="nav-line-label">Riwayat</span>
         </a>
-        <a class="nav-item {{ ($view_aktif === 'kwh-control') ? 'active' : '' }}"
-           data-view="kwh-control"
-           href="{{ route('kwh-control', ['line' => 'Painting']) }}"
-           onclick="return navigateSidebar(event, 'kwh-control', 'Painting')">
-            <span class="icon-nav"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
-            <span class="nav-line-label">KWh Meter (Painting)</span>
-        </a>
 
         <div class="nav-section-title">Lainnya</div>
-        <a class="nav-item {{ ($view_aktif === 'ai-vision') ? 'active' : '' }}"
-           data-view="ai-vision"
-           href="{{ route('ai-vision', ['line' => 'Painting']) }}"
-           onclick="return navigateSidebar(event, 'ai-vision', 'Painting')">
-            <span class="icon-nav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></span>
-            <span class="nav-line-label">AI Vision &amp; Kamera</span>
-        </a>
         <a class="nav-item {{ ($view_aktif === 'pengaturan') ? 'active' : '' }}"
            data-view="pengaturan"
            href="{{ route('pengaturan', ['line' => 'Painting']) }}"
@@ -121,14 +133,13 @@
                 <div class="topbar-title-content">
                     <h1 id="page-title">
                         @if($view_aktif === 'dashboard') Dashboard — Line Painting
-                        @elseif($view_aktif === 'machine-control') Machine Control — Line Painting
+                        @elseif($view_aktif === 'ai-vision' || $view_aktif === 'machine-control') AI Vision & Kamera — Line Painting
                         @elseif($view_aktif === 'chart') Chart — Line Painting
                         @elseif($view_aktif === 'riwayat') Riwayat — Line Painting
                         @elseif($view_aktif === 'detail') Detail Harian — Line Painting
                         @elseif($view_aktif === 'detail-shift') Detail Shift — Line Painting
                         @elseif($view_aktif === 'pengaturan') Pengaturan — Line Painting
                         @elseif($view_aktif === 'kwh-control') KWh Meter — Line Painting
-                        @elseif($view_aktif === 'ai-vision') AI Vision & Kamera — Line Painting
                         @else Dashboard — Line Painting
                         @endif
                     </h1>
@@ -195,6 +206,8 @@
     @include('modals.manage-part')
     @include('modals.pilih-shift')
     @include('modals.export-excel')
+    @include('modals.ganti-shift')
+    @include('modals.input-ng')
 
     <!-- ===== JAVASCRIPT GLOBAL & CORE SCRIPTS ===== -->
     @include('layouts.scripts')

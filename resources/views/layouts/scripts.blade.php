@@ -2,8 +2,8 @@
         // ===== DYNAMIC BASE URL (Mendukung Subfolder Laragon /dashboard-painting maupun Localhost) =====
         const APP_BASE_PATH = (function() {
             const p = window.location.pathname;
-            if (p.startsWith('/dashboard-pcb')) {
-                return '/dashboard-pcb';
+            if (p.startsWith('/dashboard-painting')) {
+                return '/dashboard-painting';
             }
             const b = "{{ rtrim(request()->getBaseUrl(), '/') }}";
             return (b && b !== '/') ? b : '';
@@ -70,7 +70,7 @@
 
         // Dipakai buat panggilan internal ke endpoint yang butuh api_key (mis. set_part.php)
         // dari halaman web ini sendiri. Nilainya sama dengan $kunci_rahasia di sisi PHP.
-        const API_KEY_INTERNAL = "pcb101_rahasia_2026";
+        const API_KEY_INTERNAL = "painting_smart_2026";
 
         // Format tanggal lokal (YYYY-MM-DD) yang aman dari pergeseran UTC
         function tanggalLokalYYYYMMDD(d) {
@@ -167,8 +167,8 @@
             interruptTimer: null,
             formResumeTimer: null,
 
-            // Rotasi antara Dashboard, Chart, dan KWh Meter
-            views: ['dashboard', 'chart', 'kwh-control'],
+            // Rotasi antara Dashboard dan Chart
+            views: ['dashboard', 'chart'],
             currentViewIndex: 0,
             secondsRemaining: 20,
             countdownInterval: null,
@@ -797,7 +797,7 @@
         }
 
         // ===== FETCH DASHBOARD (kartu) =====
-        let prevInput = 0, prevOutput = 0, prevYield = 0, prevOr = 0;
+        let prevInput = 0, prevOutput = 0, prevNg = 0, prevYield = 0, prevOr = 0;
         let prevSheetInput = 0, prevSheetOutput = 0, prevSheetYield = 0;
         let sudahLoadPertama = false;
 
@@ -905,28 +905,37 @@
 
                 const newInput = isNaN(parseFloat(data.input)) ? 0 : parseFloat(data.input);
                 const newOutput = isNaN(parseFloat(data.output)) ? 0 : parseFloat(data.output);
-                const newYield = isNaN(parseFloat(data.yield_val)) ? 0 : parseFloat(data.yield_val);
-                const newOr = isNaN(parseFloat(data.or_value)) ? 0 : parseFloat(data.or_value);
+                const newNg = isNaN(parseFloat(data.ng_pcs)) ? 0 : parseFloat(data.ng_pcs);
+                // Yield dihitung dari OK / Output. Jika belum ada keluaran (Output = 0), Yield dimulai dari 0.0%
+                const newYield = (newOutput > 0) ? (isNaN(parseFloat(data.yield_val)) ? 0 : parseFloat(data.yield_val)) : 0.0;
+                const newOr = (newOutput > 0) ? (isNaN(parseFloat(data.or_value)) ? 0 : parseFloat(data.or_value)) : 0.0;
 
                 // Satuan SHEET/PANEL (bukan PCS) -- lihat komentar di api/data.php
                 const newSheetInput = isNaN(parseFloat(data.input_sheet)) ? 0 : parseFloat(data.input_sheet);
                 const newSheetOutput = isNaN(parseFloat(data.output_sheet)) ? 0 : parseFloat(data.output_sheet);
                 const newSheetYield = isNaN(parseFloat(data.yield_sheet_val)) ? 0 : parseFloat(data.yield_sheet_val);
 
-
-
                 // Selalu simpan nilai terbaru biar kartu produksi bisa restore dengan benar
-                prevInput = newInput; prevOutput = newOutput; prevYield = newYield; prevOr = newOr;
+                prevInput = newInput; prevOutput = newOutput; prevNg = newNg; prevYield = newYield; prevOr = newOr;
                 prevSheetInput = newSheetInput; prevSheetOutput = newSheetOutput; prevSheetYield = newSheetYield;
 
                 animateValue("input-value", prevInput, newInput, 600, 0, "");
                 animateValue("output-value", prevOutput, newOutput, 600, 0, "");
+                animateValue("ng-value", prevNg, newNg, 600, 0, "");
                 animateValue("yield-value", prevYield, newYield, 600, 1, "%");
                 animateValue("or-value", prevOr, newOr, 600, 1, "%");
 
+                // Update subtext persentase Defect Rate
+                const elNgSub = document.getElementById('ng-subtext');
+                if (elNgSub) {
+                    const totalProcessed = (newOutput + newNg);
+                    const defectRate = (newNg > 0 && totalProcessed > 0) ? Math.min(100.0, ((newNg / totalProcessed) * 100)).toFixed(1) : 0.0;
+                    elNgSub.innerText = `${defectRate}% Defect`;
+                }
+
                 animateValue("sheet-input-value", prevSheetInput, newSheetInput, 600, 0, "");
                 animateValue("sheet-output-value", prevSheetOutput, newSheetOutput, 600, 0, "");
-                animateValue("sheet-yield-value", prevSheetYield, newSheetYield, 600, 1, "%");
+                animateValue("sheet-yield-value", prevSheetYield, newSheetYield, 600, 0, "");
 
                 const hariIni = tanggalLokalYYYYMMDD();
                 let labelTgl;
@@ -947,6 +956,50 @@
                     } else {
                         btnShift.classList.remove('active');
                         btnHarian.classList.add('active');
+                    }
+                }
+
+                // Sinkronisasi otomatis Part Aktif dari AI Vision & Backend
+                if (data.active_part) {
+                    const ap = data.active_part;
+                    const apCode = ap.code || '';
+                    const apName = ap.name || apCode || '-';
+                    const fullLabel = apCode ? `[${apCode}] ${apName}` : apName;
+
+                    // 1. Banner Part Aktif di atas Lampu Indikator
+                    const elMrPart = document.getElementById('mr-nama-part');
+                    const elMrMulai = document.getElementById('mr-jam-mulai');
+                    if (elMrPart) {
+                        elMrPart.innerText = fullLabel;
+                    }
+                    if (elMrMulai) {
+                        elMrMulai.innerText = '🟢 Sesi Berjalan';
+                        elMrMulai.style.background = '#dcfce7';
+                        elMrMulai.style.color = '#15803d';
+                    }
+
+                    // 2. Card Detail Part di Panel Choose Part
+                    const elCpCode = document.getElementById('choose-part-code');
+                    const elCpName = document.getElementById('choose-part-name');
+                    const elCpModelId = document.getElementById('choose-part-model-id');
+                    const elCpModelVer = document.getElementById('choose-part-model-version');
+                    const elCpTarget = document.getElementById('choose-part-target');
+                    if (elCpCode) elCpCode.innerText = apCode;
+                    if (elCpName) elCpName.innerText = apName;
+                    if (elCpModelId) elCpModelId.innerText = ap.model_file || ap.model_id || '-';
+                    if (elCpModelVer) elCpModelVer.innerText = `v${ap.model_version || 1}`;
+                    if (elCpTarget) elCpTarget.innerText = `${ap.target_per_hanger || 4} pcs / hanger`;
+
+                    // 3. Dropdown Changeover
+                    const selectChangePart = document.getElementById('select-change-part-dashboard');
+                    if (selectChangePart && ap.id && selectChangePart.value !== ap.id) {
+                        selectChangePart.value = ap.id;
+                    }
+
+                    // 4. Label di Machine Control jika ada
+                    const perfPartLabel = document.getElementById('perf-part-label');
+                    if (perfPartLabel) {
+                        perfPartLabel.innerText = apCode || apName;
                     }
                 }
             } catch (err) {
@@ -1193,7 +1246,14 @@
             const teksUpdateStatus = document.getElementById("teks-update-status");
             if (teksUpdateStatus) {
                 if (hasil.updated_at) {
-                    teksUpdateStatus.innerText = "Update terakhir: " + hasil.updated_at;
+                    let formattedTime = hasil.updated_at;
+                    try {
+                        const d = new Date(hasil.updated_at);
+                        if (!isNaN(d.getTime())) {
+                            formattedTime = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+                        }
+                    } catch(e) {}
+                    teksUpdateStatus.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span>Terakhir diperbarui: ${formattedTime}</span>`;
                 } else {
                     teksUpdateStatus.innerText = "Belum ada data status";
                 }
@@ -2507,6 +2567,7 @@
                     chartProduksi.data.datasets[0].data = inputData;
                     chartProduksi.data.datasets[1].data = outputData;
                 }
+                if (typeof chartProduksi.resize === 'function') chartProduksi.resize();
                 chartProduksi.update('none'); // 'none' = tanpa animasi transisi, biar mulus
                 return;
             }
@@ -2593,6 +2654,7 @@
                     },
                     options: {
                         responsive: true,
+                        maintainAspectRatio: false,
                         layout: { padding: { top: 24, left: 6, right: 8, bottom: 4 } },
                         animation: { duration: 400 },
                         interaction: { mode: 'index', intersect: false },
@@ -2719,6 +2781,7 @@
                     },
                     options: {
                         responsive: true,
+                        maintainAspectRatio: false,
                         layout: { padding: { top: 24, left: 6, right: 8, bottom: 4 } },
                         animation: { duration: 400 },
                         interaction: { mode: 'index', intersect: false },
@@ -2933,15 +2996,21 @@
 
                 const totalInput = data.reduce((jumlah, baris) => jumlah + (Number(baris.input) || 0), 0);
                 const totalOutput = data.reduce((jumlah, baris) => jumlah + (Number(baris.output) || 0), 0);
+                const totalNg = data.reduce((jumlah, baris) => jumlah + (Number(baris.ng) || 0), 0);
                 const yieldKeseluruhan = totalInput > 0 ? ((totalOutput / totalInput) * 100).toFixed(1) : "0.0";
+                const defectRateKeseluruhan = totalInput > 0 ? ((totalNg / totalInput) * 100).toFixed(1) : "0.0";
 
                 const elInput = document.getElementById("rw-total-input");
                 const elOutput = document.getElementById("rw-total-output");
+                const elNg = document.getElementById("rw-total-ng");
+                const elDefectRate = document.getElementById("rw-defect-rate");
                 const elYield = document.getElementById("rw-yield");
                 const tbody = document.getElementById("isi-tabel-histori");
 
-                if (elInput) elInput.innerText = totalInput.toLocaleString('id-ID');
-                if (elOutput) elOutput.innerText = totalOutput.toLocaleString('id-ID');
+                if (elInput) elInput.innerText = totalInput.toLocaleString('id-ID') + ' pcs';
+                if (elOutput) elOutput.innerText = totalOutput.toLocaleString('id-ID') + ' pcs';
+                if (elNg) elNg.innerText = totalNg.toLocaleString('id-ID') + ' pcs';
+                if (elDefectRate) elDefectRate.innerText = 'Defect Rate: ' + defectRateKeseluruhan + '%';
                 if (elYield) elYield.innerText = yieldKeseluruhan + "%";
                 if (!tbody) return;
 
@@ -2960,10 +3029,10 @@
                     const pesan = tanggalFilterHistoriAktif
                         ? `Belum ada catatan data riwayat produksi untuk tanggal ${formatTanggalIndo(tanggalFilterHistoriAktif)}.`
                         : `Belum ada catatan data riwayat produksi.`;
-                    tr.innerHTML = `<td colspan="7" style="text-align:center; color:#9a9ab0; padding:20px;">${pesan}</td>`;
+                    tr.innerHTML = `<td colspan="9" style="text-align:center; color:#9a9ab0; padding:24px;">${pesan}</td>`;
                     fragment.appendChild(tr);
                 } else {
-                    // Grouping data per tanggal agar tanggal tidak berulang dan shift tidak ditaruh satu-satu
+                    // Grouping data per tanggal
                     const mapPerTanggal = new Map();
                     data.forEach(baris => {
                         const tgl = baris.tanggal;
@@ -2972,7 +3041,14 @@
                                 tanggal: tgl,
                                 totalInput: 0,
                                 totalOutput: 0,
+                                totalNg: 0,
                                 effList: [],
+                                operator_name: baris.operator_name || 'Mukhamad Nawwaf',
+                                shift: baris.shift || 'Shift 1',
+                                total_manpower: baris.total_manpower || 6,
+                                sesi_count: baris.sesi_count || 1,
+                                defect_breakdown: baris.defect_breakdown || {},
+                                ng_logs: baris.ng_logs || [],
                                 shifts: {
                                     'Pagi': null,
                                     'Sore': null,
@@ -2983,22 +3059,24 @@
                         const entry = mapPerTanggal.get(tgl);
                         const bInput = Number(baris.input) || 0;
                         const bOutput = Number(baris.output) || 0;
+                        const bNg = Number(baris.ng) || 0;
                         const bEff = Number(baris.eff_persen) || 0;
 
                         entry.totalInput += bInput;
                         entry.totalOutput += bOutput;
+                        entry.totalNg += bNg;
+                        if (baris.operator_name) entry.operator_name = baris.operator_name;
+                        if (baris.shift) entry.shift = baris.shift;
+                        if (baris.total_manpower) entry.total_manpower = baris.total_manpower;
+                        if (baris.defect_breakdown && Object.keys(baris.defect_breakdown).length > 0) {
+                            entry.defect_breakdown = baris.defect_breakdown;
+                        }
+                        if (baris.ng_logs && baris.ng_logs.length > 0) {
+                            entry.ng_logs = baris.ng_logs;
+                        }
+
                         if (bEff > 0) {
                             entry.effList.push(bEff);
-                        }
-                        if (baris.shift) {
-                            entry.shifts[baris.shift] = {
-                                shift: baris.shift,
-                                jam_mulai: baris.jam_mulai || '',
-                                jam_selesai: baris.jam_selesai || '',
-                                input: bInput,
-                                output: bOutput,
-                                eff_persen: bEff
-                            };
                         }
                     });
 
@@ -3006,27 +3084,58 @@
 
                     mapPerTanggal.forEach((entry, tgl) => {
                         const tr = document.createElement("tr");
+                        tr.style.borderBottom = "1px solid #f1f5f9";
                         const urlDownload = `${APP_BASE_PATH}/export/export_riwayat_performance.php?line=${encodeURIComponent(currentLine)}&tanggal=${tgl}`;
 
-                        let effRata = 0;
-                        if (entry.effList.length > 0) {
-                            effRata = (entry.effList.reduce((acc, val) => acc + val, 0) / entry.effList.length).toFixed(1);
-                        }
+                        const yieldRow = entry.totalInput > 0 ? ((entry.totalOutput / entry.totalInput) * 100).toFixed(1) : "0.0";
+                        const defectRateRow = entry.totalInput > 0 ? ((entry.totalNg / entry.totalInput) * 100).toFixed(1) : "0.0";
+                        const yieldNum = parseFloat(yieldRow);
 
                         tr.innerHTML = `
                             <td class="td-toggle"><a class="btn-toggle-detail" href="index.php?line=${encodeURIComponent(currentLine)}&view=detail&tanggal=${tgl}" data-nav data-line="${currentLine}" data-view="detail" data-tanggal="${tgl}" title="Lihat detail per jam">&#9656;</a></td>
                             <td class="td-tanggal-klik" onclick="cariSesiProduksiTanggal('${tgl}');" title="Klik untuk menampilkan sesi produksi tanggal ini">
-                                <strong>${formatTanggalIndo(tgl)}</strong>
+                                <div style="font-weight:700; color:#0d3b8c; font-size:13px;">${formatTanggalIndo(tgl)}</div>
+                                <div style="font-size:11px; color:#64748b; margin-top:2px;">${entry.sesi_count || 1} sesi kontrol</div>
                             </td>
-                            <td>${entry.totalInput.toLocaleString('id-ID')} pcs</td>
-                            <td>${entry.totalOutput.toLocaleString('id-ID')} pcs</td>
-                            <td><strong style="color:${effRata > 0 ? '#0d3b8c' : '#9a9ab0'};">${effRata}%</strong></td>
                             <td>
-                                <button type="button" class="btn-detail-shift" onclick="bukaModalPilihShift('${tgl}')" title="Klik untuk memilih dari 3 sesi shift (Pagi, Sore, Malam)">
-                                    Lihat Detail
-                                </button>
+                                <div style="display:flex; align-items:center; gap:5px; font-weight:700; color:#1e293b; font-size:12.5px;">
+                                    <span>👤</span>
+                                    <span>${escapeHtml(entry.operator_name || 'Mukhamad Nawwaf')}</span>
+                                </div>
+                                <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                                    <span style="color:#2563eb; font-weight:600;">${escapeHtml(entry.shift || 'Shift 1')}</span>
+                                    <span style="color:#cbd5e1;">•</span>
+                                    <span style="color:#166534; font-weight:600;">${entry.total_manpower || 6} MP</span>
+                                </div>
                             </td>
-                            <td><a href="${urlDownload}" class="btn-download-row" title="Download Excel Seluruh Sesi Tanggal ${formatTanggalIndo(tgl)}">&#8681;</a></td>
+                            <td style="text-align:right;">
+                                <strong style="color:#1e3a8a; font-size:13.5px;">${entry.totalInput.toLocaleString('id-ID')}</strong> <span style="font-size:11px; color:#64748b;">pcs</span>
+                            </td>
+                            <td style="text-align:right;">
+                                <strong style="color:#059669; font-size:13.5px;">${entry.totalOutput.toLocaleString('id-ID')}</strong> <span style="font-size:11px; color:#64748b;">pcs</span>
+                            </td>
+                            <td style="text-align:right;">
+                                ${entry.totalNg > 0 
+                                    ? `<strong style="color:#dc2626; font-size:13.5px;">${entry.totalNg.toLocaleString('id-ID')}</strong> <span style="font-size:11px; color:#64748b;">pcs</span>
+                                       <div style="font-size:10px; font-weight:700; color:#dc2626; background:#fee2e2; border-radius:4px; padding:1px 5px; width:fit-content; margin-left:auto; margin-top:2px;">${defectRateRow}% Defect</div>`
+                                    : `<span style="color:#059669; font-size:12px; font-weight:600;">0 pcs (0%)</span>`}
+                            </td>
+                            <td style="text-align:center;">
+                                <span style="display:inline-block; font-weight:800; font-size:12.5px; padding:3px 8px; border-radius:6px; background:${yieldNum >= 95 ? '#dcfce7' : (yieldNum >= 85 ? '#fef3c7' : '#fee2e2')}; color:${yieldNum >= 95 ? '#15803d' : (yieldNum >= 85 ? '#b45309' : '#b91c1c')};">
+                                    ${yieldRow}%
+                                </span>
+                            </td>
+                            <td style="text-align:center;">
+                                <div style="display:inline-flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:center;">
+                                    <button type="button" class="btn-detail-shift" onclick="bukaModalPilihShift('${tgl}')" title="Klik untuk memilih dari sesi shift">
+                                        Lihat Sesi
+                                    </button>
+                                    <button type="button" onclick="bukaRincianNgTanggal('${tgl}')" style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:700; cursor:pointer;" title="Lihat detail part cacat tanggal ini">
+                                        ⚠️ Detail NG ${entry.totalNg > 0 ? `(${entry.totalNg})` : ''}
+                                    </button>
+                                </div>
+                            </td>
+                            <td style="text-align:center;"><a href="${urlDownload}" class="btn-download-row" title="Download Excel Seluruh Sesi Tanggal ${formatTanggalIndo(tgl)}">&#8681;</a></td>
                         `;
                         fragment.appendChild(tr);
                     });
@@ -3116,8 +3225,21 @@
                                     Sesi #${r.nomor_sesi} — ${escapeHtml(r.part)}
                                     <span class="riwayat-ph-card-id">${r.jam_mulai} - ${r.jam_selesai}</span>
                                 </div>
-                                <div class="riwayat-ph-card-sub">
-                                    Output: <strong>${r.F} pcs</strong> | NG: <strong>${r.E_persen}%</strong> | Waktu Kerja (B): <strong>${r.B}m</strong> | Stop: <strong>${r.A}m</strong>
+                                <div class="riwayat-ph-card-sub" style="margin-bottom:6px; display:flex; flex-wrap:wrap; gap:6px; font-size:12px;">
+                                    <span>Masuk: <strong style="color:#1e3a8a;">${(r.total_input || (r.F + r.E)).toLocaleString('id-ID')} pcs</strong></span>
+                                    <span style="color:#cbd5e1;">•</span>
+                                    <span>Output OK: <strong style="color:#059669;">${r.F.toLocaleString('id-ID')} pcs</strong></span>
+                                    <span style="color:#cbd5e1;">•</span>
+                                    <span>NG: <strong style="color:${r.E > 0 ? '#dc2626' : '#64748b'};">${r.E} pcs (${r.E_persen}%)</strong></span>
+                                    <span style="color:#cbd5e1;">•</span>
+                                    <span>Yield: <strong style="color:#2563eb;">${r.yield_persen || r.H_v2_persen}%</strong></span>
+                                </div>
+                                <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#475569; background:#f8fafc; padding:3px 9px; border-radius:6px; border:1px solid #e2e8f0; width:fit-content;">
+                                    <span>👤 PIC: <strong style="color:#0f172a;">${escapeHtml(r.operator_name || 'Mukhamad Nawwaf')}</strong></span>
+                                    <span style="color:#cbd5e1;">&bull;</span>
+                                    <span style="color:#2563eb; font-weight:600;">${escapeHtml(r.shift || 'Shift 1')}</span>
+                                    <span style="color:#cbd5e1;">&bull;</span>
+                                    <span style="color:#166534; font-weight:600;">${r.total_manpower || 6} MP</span>
                                 </div>
                             </div>
                             <div class="riwayat-ph-card-eff">
@@ -3125,7 +3247,7 @@
                                 <div class="riwayat-ph-card-eff-lbl">EFF Sesi</div>
                             </div>
                             <div class="riwayat-ph-card-actions">
-                                <button type="button" class="btn-detail-shift" onclick="bukaDetailPerformance(${r.id})">Lihat Detail</button>
+                                <button type="button" class="btn-detail-shift" onclick="bukaDetailPerformance(${r.id})" title="Lihat rincian kalkulasi kontrol & defect sesi ini">🔍 Detail & NG</button>
                                 <a href="${APP_BASE_PATH}/export/export_riwayat_performance.php?id=${r.id}" class="btn-download-row" title="Download Excel sesi ini">&#8681;</a>
                             </div>
                         `;
@@ -3334,7 +3456,7 @@
             }
 
             try {
-                const url = `api/detail_shift_json.php?line=${encodeURIComponent(line)}&tanggal=${encodeURIComponent(tanggal)}&shift=${encodeURIComponent(shift)}`;
+                const url = `${APP_BASE_PATH}/api/detail_shift_json.php?line=${encodeURIComponent(line)}&tanggal=${encodeURIComponent(tanggal)}&shift=${encodeURIComponent(shift)}`;
                 const res  = await fetch(url, { cache: 'no-store' });
                 const data = await res.json();
                 if (data.status !== 'success') throw new Error('Status not success');
@@ -3379,9 +3501,23 @@
             document.getElementById('ds-judul-shift-performance').innerText = `Shift ${data.shift}`;
             document.getElementById('ds-judul-shift-stop').innerText        = `Shift ${data.shift}`;
 
-            document.getElementById('ds-val-input').innerText  = data.total_input ?? 0;
-            document.getElementById('ds-val-output').innerText = data.total_output ?? 0;
-            document.getElementById('ds-val-ng').innerText     = data.ng ?? 0;
+            const elOp = document.getElementById('ds-active-operator-badge');
+            const elShift = document.getElementById('ds-active-shift-badge');
+            const elMp = document.getElementById('ds-active-mp-badge');
+            if (elOp) elOp.innerText = data.operator_name || 'Mukhamad Nawwaf';
+            if (elShift) elShift.innerText = data.shift_name || `Shift ${data.shift}`;
+            if (elMp) elMp.innerText = `${data.total_manpower || 6} MP`;
+
+            const inVal = Number(data.total_input) || 0;
+            const outVal = Number(data.total_output) || 0;
+            const ngVal = Number(data.ng) || 0;
+            const defRate = inVal > 0 ? ((ngVal / inVal) * 100).toFixed(1) : '0.0';
+
+            document.getElementById('ds-val-input').innerText  = inVal.toLocaleString('id-ID');
+            document.getElementById('ds-val-output').innerText = outVal.toLocaleString('id-ID');
+            document.getElementById('ds-val-ng').innerText     = ngVal.toLocaleString('id-ID');
+            const elNgSub = document.getElementById('ds-ng-subtext');
+            if (elNgSub) elNgSub.innerText = `${defRate}% Defect Rate`;
             document.getElementById('ds-val-yield').innerText  = `${data.yield ?? 0}%`;
 
             // EFF card
@@ -3406,24 +3542,39 @@
                 let baris = data.sesi_performance.map(s => {
                     const l = s.l_persen;
                     const cls = l >= 80 ? 'hijau' : l >= 60 ? 'kuning' : 'merah';
+                    const sInput = s.total_input || (s.f + s.e);
+                    const sYield = s.yield_persen !== undefined ? s.yield_persen : (sInput > 0 ? ((s.f / sInput) * 100).toFixed(1) : '100.0');
                     return `<tr>
                         <td class="ds-col-part"><strong>${escapeHtml(s.part)}</strong></td>
                         <td class="ds-col-jam">${s.jam_mulai} – ${s.jam_selesai}</td>
-                        <td class="ds-col-ct">${s.c} mnt</td>
-                        <td class="ds-col-fg">${s.h_persen}%</td>
-                        <td class="ds-col-ability">${s.j_persen}%</td>
-                        <td class="ds-col-optime">${s.k_persen}%</td>
+                        <td>
+                            <div style="font-weight:700; color:#1e293b; font-size:12px;">👤 ${escapeHtml(s.operator_name || data.operator_name || 'Mukhamad Nawwaf')}</div>
+                            <div style="font-size:11px; color:#64748b;">${escapeHtml(s.shift || data.shift_name || 'Shift 1')} • ${s.total_manpower || 6} MP</div>
+                        </td>
+                        <td style="text-align:right; font-weight:700; color:#1e3a8a;">${sInput.toLocaleString('id-ID')} pcs</td>
+                        <td style="text-align:right; font-weight:700; color:#059669;">${s.f.toLocaleString('id-ID')} pcs</td>
+                        <td style="text-align:right;">
+                            ${s.e > 0 ? `<strong style="color:#dc2626;">${s.e} pcs</strong>` : `<span style="color:#059669; font-size:11.5px;">0 pcs</span>`}
+                        </td>
+                        <td style="text-align:center;">
+                            <span style="font-weight:700; color:${sYield >= 95 ? '#059669' : '#dc2626'};">${sYield}%</span>
+                        </td>
                         <td class="ds-col-eff ds-col-center"><span class="ds-eff-chip ${cls}">${l}%</span></td>
+                        <td style="text-align:center;">
+                            <button type="button" class="btn-detail-shift" onclick="bukaDetailPerformance(${s.id || 1})" style="padding:4px 8px; font-size:11px;">🔍 Sesi</button>
+                        </td>
                     </tr>`;
                 }).join('');
                 kontenPerf.innerHTML = `<table class="ds-table ds-table-perf"><thead><tr>
                     <th class="ds-col-part">Part</th>
-                    <th class="ds-col-jam">Jam</th>
-                    <th class="ds-col-ct">CT Standar</th>
-                    <th class="ds-col-fg">Finish Good</th>
-                    <th class="ds-col-ability">Ability</th>
-                    <th class="ds-col-optime">Op. Time</th>
+                    <th class="ds-col-jam">Jam Kerja</th>
+                    <th>Penanggung Jawab</th>
+                    <th style="text-align:right;">Masuk (IN)</th>
+                    <th style="text-align:right;">Output (OK)</th>
+                    <th style="text-align:right;">Cacat (NG)</th>
+                    <th style="text-align:center;">% Yield</th>
                     <th class="ds-col-eff ds-col-center">EFF</th>
+                    <th style="text-align:center;">Aksi</th>
                 </tr></thead><tbody>${baris}</tbody></table>`;
             }
 
@@ -4163,140 +4314,37 @@
             return `${menit}m ${detik}s`;
         }
 
-        // ===== MACHINE RATIO: live-view sesi part yang SEDANG berjalan (read-only, tidak nyimpan riwayat) =====
+        // ===== LIVE-VIEW STATUS PART AKTIF DI ATAS LAMPU INDIKATOR =====
         async function loadMachineRatio() {
-            const kosongEl = document.getElementById('mr-tidak-ada-sesi');
-            const kontenEl = document.getElementById('mr-konten');
-            if (!kosongEl || !kontenEl) return;
+            const elMrPart = document.getElementById('mr-nama-part');
+            const elMrMulai = document.getElementById('mr-jam-mulai');
+            if (!elMrPart) return;
 
             const inputMulai = document.getElementById('perf-jam-mulai');
             const jamMulai = inputMulai ? inputMulai.value : '';
-            const ct = document.getElementById('perf-ct-pilihan')?.value;
-            const namaPart = document.getElementById('perf-part-label')?.innerText || '-';
 
-            const inValEl = document.getElementById('input-value');
-            const outValEl = document.getElementById('output-value');
-
-            // Kalau belum ada sesi aktif, tetap tampilkan data input/output dari dashboard
-            if (!sesiProduksiAktif || !jamMulai || !ct) {
-                const totalInput = inValEl ? (parseInt(inValEl.innerText) || 0) : 0;
-                const totalOutput = outValEl ? (parseInt(outValEl.innerText) || 0) : 0;
-                const ngProduct = Math.max(totalInput - totalOutput, 0);
-                const hPersen = totalInput > 0 ? Math.round((totalOutput / totalInput) * 1000) / 10 : 0;
-                const ePersen = totalInput > 0 ? Math.round((ngProduct / totalInput) * 1000) / 10 : 0;
-                kosongEl.style.display = 'none';
-                kontenEl.style.display = '';
-
-                const elMrPart = document.getElementById('mr-nama-part');
-                const elMrMulai = document.getElementById('mr-jam-mulai');
-                if (elMrPart) elMrPart.innerText = '-';
-                if (elMrMulai) elMrMulai.innerText = 'Sesi belum dimulai';
-
-                const elTotProd = document.getElementById('mr-total-product');
-                const elOkProd = document.getElementById('mr-ok-product');
-                const elNgRatio = document.getElementById('mr-ng-ratio');
-                const elNgProd = document.getElementById('mr-ng-product');
-                const elProdRate = document.getElementById('mr-product-rate');
-                const elMachRate = document.getElementById('mr-machine-rate');
-                const elProdTime = document.getElementById('mr-product-time');
-                const elRunTime = document.getElementById('mr-run-time');
-                const elWaitLoss = document.getElementById('mr-waiting-loss');
-                const elMachTrouble = document.getElementById('mr-machine-trouble');
-
-                if (elTotProd) elTotProd.innerText = `${totalInput} PCS`;
-                if (elOkProd) elOkProd.innerText = `${totalOutput} PCS`;
-                if (elNgRatio) elNgRatio.innerText = `${ePersen}%`;
-                if (elNgProd) elNgProd.innerText = `${ngProduct} PCS`;
-                if (elProdRate) elProdRate.innerText = `${hPersen}%`;
-                if (elMachRate) elMachRate.innerText = '-%';
-                if (elProdTime) {
-                    elProdTime.innerText = '-';
-                    elProdTime.classList.remove('mr-card-green', 'mr-card-red');
-                    elProdTime.classList.add('mr-card-dark');
-                }
-                if (elRunTime) elRunTime.innerText = '-';
-                if (elWaitLoss) elWaitLoss.innerText = '-';
-                if (elMachTrouble) elMachTrouble.innerText = '-';
-                return;
+            // Ambil nama part aktif dari choose-part dropdown / label jika ada
+            const partPilihan = document.getElementById('select-change-part-dashboard');
+            let partDisplayName = '';
+            if (partPilihan && partPilihan.selectedIndex >= 0) {
+                partDisplayName = partPilihan.options[partPilihan.selectedIndex].text.replace(/\s*\(Sedang Berjalan\)/, '').trim();
+            } else {
+                const namaPart = document.getElementById('perf-part-label')?.innerText || '';
+                if (namaPart && namaPart !== '-') partDisplayName = namaPart;
             }
 
-            const jamSekarang = jamSekarangHHMM();
-            const shift = dapatkanShiftSekarang();
-            const tglSesi = shift.tanggal || (currentTanggal || tanggalLokalYYYYMMDD());
-            const url = `api/kalkulasi_performance_live.php?line=${encodeURIComponent(currentLine)}`
-                + `&tanggal=${encodeURIComponent(tglSesi)}&jam_mulai=${encodeURIComponent(jamMulai)}`
-                + `&jam_selesai=${encodeURIComponent(jamSekarang)}&ct=${encodeURIComponent(ct)}&part=${encodeURIComponent(namaPart)}`;
+            if (partDisplayName && partDisplayName !== '-') {
+                elMrPart.innerText = partDisplayName;
+            }
 
-            try {
-                const res = await fetch(url, { cache: "no-store" });
-                const data = await res.json();
-                if (data.status === 'expired_shift') {
-                    if (typeof resetSesiKarenaGantiShift === 'function') {
-                        await resetSesiKarenaGantiShift();
-                    }
-                    return;
-                }
-                if (data.status !== 'success') return; // biarkan tampilan sebelumnya, coba lagi di polling berikutnya
-
-                kosongEl.style.display = 'none';
-                kontenEl.style.display = '';
-
-                document.getElementById('mr-nama-part').innerText = namaPart;
-                document.getElementById('mr-jam-mulai').innerText = `Mulai ${jamMulai}`;
-
-                // Ambil input, output, dan NG dari hasil kalkulasi sesi aktif
-                const totalInput = typeof data.total_input !== 'undefined' ? data.total_input : (parseInt(document.getElementById('input-value')?.innerText) || 0);
-                const totalOutput = typeof data.F_v2 !== 'undefined' ? data.F_v2 : (parseInt(document.getElementById('output-value')?.innerText) || 0);
-                const ngProduct = typeof data.E_v2 !== 'undefined' ? data.E_v2 : Math.max(totalInput - totalOutput, 0);
-                const hPersen = typeof data.H_v2_persen !== 'undefined' ? data.H_v2_persen : (totalInput > 0 ? Math.round((totalOutput / totalInput) * 1000) / 10 : 0);
-                const ePersen = totalInput > 0 ? Math.round((ngProduct / totalInput) * 1000) / 10 : 0;
-
-                document.getElementById('mr-total-product').innerText = `${totalInput} PCS`;
-                document.getElementById('mr-ok-product').innerText = `${totalOutput} PCS`;
-                document.getElementById('mr-ng-ratio').innerText = `${ePersen}%`;
-                document.getElementById('mr-ng-product').innerText = `${ngProduct} PCS`;
-
-                document.getElementById('mr-product-rate').innerText = `${hPersen}%`;
-
-                // Machine Rate = persentase Working Time Shift -- seberapa besar Product Time
-                // (B_shift, waktu berjalan sesi sejak awal shift) dibanding Working Time standar
-                // shift (waktu_kerja_shift: 535 Pagi / 450 Sore / 455 Malam), BUKAN lagi terhadap
-                // Run Time/waktu minimal (waktu_minimal_shift). Diubah 2026-08-28 supaya konsisten
-                // dengan rumus (K) backend yang juga sudah dibandingkan ke Working Time Shift.
-                // Rumus (L) EFF (H x J x K) sendiri TIDAK dihapus, datanya tetap dikirim backend
-                // (data.L_persen) dan masih dipakai di Riwayat/Detail Shift.
-                const machineRatePersen = data.waktu_kerja_shift > 0
-                    ? Math.round((data.B_shift / data.waktu_kerja_shift) * 1000) / 10
-                    : 0;
-                // Machine Rate (K) murni rasio waktu sesi berjalan (B_shift) terhadap waktu kerja
-                // standar shift -- TIDAK bergantung pada jumlah barang input/output. Jadi tidak boleh
-                // disembunyikan jadi '-%' hanya karena belum ada barang lewat sensor (mis. saat
-                // maintenance/idle padahal sesi part sudah berjalan). '-%' cuma ditampilkan kalau
-                // waktu_kerja_shift sendiri tidak valid (<= 0).
-                document.getElementById('mr-machine-rate').innerText = data.waktu_kerja_shift > 0 ? `${machineRatePersen}%` : '-%';
-
-                // Kartu Product Time berubah HIJAU begitu B_shift (waktu berjalan sesi sejak
-                // awal shift) sudah mencapai/melewati waktu_minimal_shift (target minimal shift
-                // yang sedang berlangsung -- Pagi/Sore/Malam beda-beda, sudah otomatis dari
-                // backend, tidak di-hardcode di sini). Sebelum tercapai, kartu MERAH (mr-card-red)
-                // sebagai penanda waktu kerja masih di bawah standar minimal shift -- konsisten
-                // dengan modal "Waktu Kerja Di Bawah Standar" yang muncul di Machine Control saat
-                // sesi terakhir shift ditutup dengan (B) di bawah waktu_minimal_shift ini juga.
-                const elProductTime = document.getElementById('mr-product-time');
-                elProductTime.innerText = formatMenitJadiMenitDetik(data.B_shift);
-                const sudahPenuhiWaktuMinimal = !data.tidak_ada_data && data.waktu_minimal_shift > 0
-                    && data.B_shift >= data.waktu_minimal_shift;
-                elProductTime.classList.remove('mr-card-green', 'mr-card-red', 'mr-card-dark');
-                if (sudahPenuhiWaktuMinimal) {
-                    elProductTime.classList.add('mr-card-green');
+            if (elMrMulai) {
+                if (jamMulai) {
+                    elMrMulai.innerText = `🟢 Mulai ${jamMulai}`;
                 } else {
-                    elProductTime.classList.add('mr-card-dark');
+                    elMrMulai.innerText = '🟢 Sesi Berjalan';
                 }
-                document.getElementById('mr-run-time').innerText = formatMenitJadiMenitDetik(data.waktu_minimal_shift);
-                document.getElementById('mr-waiting-loss').innerText = formatMenitJadiMenitDetik(data.P_shift);
-                document.getElementById('mr-machine-trouble').innerText = formatMenitJadiMenitDetik(data.I_shift);
-            } catch (err) {
-                // Diamkan -- polling berikutnya (5 detik lagi) akan coba ulang otomatis
+                elMrMulai.style.background = '#dcfce7';
+                elMrMulai.style.color = '#15803d';
             }
         }
 
@@ -4438,7 +4486,7 @@
                     actionEl.innerHTML = `
                         <a href="${APP_BASE_PATH}/riwayat?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="riwayat">&larr; Kembali ke Riwayat</a>
                     `;
-                } else if (view === 'machine-control') {
+                } else if (view === 'machine-control' || view === 'ai-vision') {
                     actionEl.innerHTML = `
                         <a href="${APP_BASE_PATH}/dashboard?line=${encodeURIComponent(line)}" class="btn-nav-action btn-light" data-nav data-line="${line}" data-view="dashboard">&larr; Kembali ke Dashboard</a>
                     `;
@@ -4471,7 +4519,7 @@
                     const elOr = document.getElementById("or-value"); if (elOr) elOr.innerText = "0.0%";
                     const elSIn = document.getElementById("sheet-input-value"); if (elSIn) elSIn.innerText = "0";
                     const elSOut = document.getElementById("sheet-output-value"); if (elSOut) elSOut.innerText = "0";
-                    const elSYd = document.getElementById("sheet-yield-value"); if (elSYd) elSYd.innerText = "0.0%";
+                    const elSYd = document.getElementById("sheet-yield-value"); if (elSYd) elSYd.innerText = "0";
                     lastRenderedLine = line;
                 }
                 updateData();
@@ -4479,6 +4527,10 @@
                 loadMachineRatio();
             } else if (view === 'chart') {
                 updateChartAktif();
+                setTimeout(() => {
+                    if (typeof updateChartAktif === 'function') updateChartAktif();
+                    if (typeof resizeAllProductionCharts === 'function') resizeAllProductionCharts();
+                }, 60);
             } else if (view === 'detail') {
                 loadDetailHarian(line, currentTanggal);
             } else if (view === 'detail-shift') {
@@ -4531,17 +4583,25 @@
             const btnProd = document.getElementById('opsi-produksi');
             const btnMc = document.getElementById('opsi-mc');
             const btnShift = document.getElementById('opsi-shift');
+            const btnHanger = document.getElementById('opsi-hanger');
+            const btnNg = document.getElementById('opsi-ng');
             const tabProd = document.getElementById('riwayat-tab-produksi');
             const tabMc = document.getElementById('riwayat-tab-mc');
             const tabShift = document.getElementById('riwayat-tab-shift');
+            const tabHanger = document.getElementById('riwayat-tab-hanger');
+            const tabNg = document.getElementById('riwayat-tab-ng');
 
             if (btnProd) btnProd.classList.toggle('aktif', tab === 'produksi');
             if (btnMc) btnMc.classList.toggle('aktif', tab === 'mc');
             if (btnShift) btnShift.classList.toggle('aktif', tab === 'shift');
+            if (btnHanger) btnHanger.classList.toggle('aktif', tab === 'hanger');
+            if (btnNg) btnNg.classList.toggle('aktif', tab === 'ng');
 
             if (tabProd) tabProd.style.display = (tab === 'produksi') ? '' : 'none';
             if (tabMc) tabMc.style.display = (tab === 'mc') ? '' : 'none';
             if (tabShift) tabShift.style.display = (tab === 'shift') ? '' : 'none';
+            if (tabHanger) tabHanger.style.display = (tab === 'hanger') ? '' : 'none';
+            if (tabNg) tabNg.style.display = (tab === 'ng') ? '' : 'none';
 
             // Muat data on-demand tiap kali pindah tab, biar selalu up to date
             if (tab === 'produksi') {
@@ -4550,6 +4610,244 @@
                 loadRiwayatPerformance();
             } else if (tab === 'shift') {
                 loadRiwayatShift();
+            } else if (tab === 'hanger') {
+                loadHangerDetectionLogs();
+            } else if (tab === 'ng') {
+                loadRiwayatNg();
+            }
+        }
+
+        // ===== TAB DETAIL PART CACAT (NG DEFECT QUALITY TRACKING) =====
+        let tanggalFilterNgAktif = '';
+
+        function bukaModalCatatNg() {
+            if (typeof bukaModalInputNg === 'function') {
+                bukaModalInputNg();
+            }
+        }
+
+        function bukaRincianNgTanggal(tgl) {
+            pilihTabRiwayat('ng');
+            const inputTgl = document.getElementById('filter-tanggal-ng');
+            if (inputTgl) inputTgl.value = tgl;
+            loadRiwayatNg(tgl);
+        }
+
+        function setTanggalNgCari(mode) {
+            const inputEl = document.getElementById('filter-tanggal-ng');
+            let tglTarget = new Date();
+            if (mode === 'kemarin') {
+                tglTarget.setDate(tglTarget.getDate() - 1);
+            }
+            const yyyy = tglTarget.getFullYear();
+            const mm = String(tglTarget.getMonth() + 1).padStart(2, '0');
+            const dd = String(tglTarget.getDate()).padStart(2, '0');
+            const strTgl = `${yyyy}-${mm}-${dd}`;
+            if (inputEl) inputEl.value = strTgl;
+            loadRiwayatNg(strTgl);
+        }
+
+        function resetTanggalNgCari() {
+            const inputEl = document.getElementById('filter-tanggal-ng');
+            if (inputEl) inputEl.value = '';
+            loadRiwayatNg('');
+        }
+
+        async function loadRiwayatNg(filterTanggal = undefined) {
+            if (filterTanggal !== undefined) {
+                tanggalFilterNgAktif = filterTanggal;
+            }
+            const inputEl = document.getElementById('filter-tanggal-ng');
+            if (tanggalFilterNgAktif && inputEl) {
+                inputEl.value = tanggalFilterNgAktif;
+            }
+
+            const labelAktif = document.getElementById('rw-ng-label-tanggal-aktif');
+            if (labelAktif) {
+                labelAktif.innerText = tanggalFilterNgAktif ? formatTanggalIndo(tanggalFilterNgAktif) : 'Semua Tanggal';
+            }
+
+            const tbody = document.getElementById('tbody-riwayat-ng-logs');
+            const kpiTotalPcs = document.getElementById('rw-ng-kpi-total-pcs');
+            const kpiDefectRate = document.getElementById('rw-ng-kpi-defect-rate');
+            const kpiTopDefect = document.getElementById('rw-ng-kpi-top-defect');
+            const countTypes = document.getElementById('rw-ng-count-types');
+            const paretoContainer = document.getElementById('rw-ng-pareto-chips');
+
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748b;">Memuat log part cacat...</td></tr>`;
+            }
+
+            try {
+                let url = '/api/get-ng-logs';
+                if (tanggalFilterNgAktif) {
+                    url += `?tanggal=${encodeURIComponent(tanggalFilterNgAktif)}`;
+                }
+                const res = await fetch(url, { cache: 'no-store' });
+                const json = await res.json();
+                const logs = json.logs || [];
+                const breakdown = json.breakdown || {};
+                const totalNg = json.total_ng || 0;
+
+                // Hitung Defect Terbanyak (Top Defect)
+                const defectKeys = Object.keys(breakdown);
+                let topDefectName = '-';
+                if (defectKeys.length > 0) {
+                    topDefectName = `${defectKeys[0]} (${breakdown[defectKeys[0]]} pcs)`;
+                }
+
+                // Hitung estimasi defect rate
+                const statsRes = await fetch('/api/get-hanger-stats', { cache: 'no-store' }).catch(() => null);
+                const statsJson = statsRes ? await statsRes.json().catch(() => null) : null;
+                const totalOutPcs = statsJson && statsJson.stats ? (Number(statsJson.stats.total_output_pcs) || 0) : 0;
+                const totalIn = totalOutPcs + totalNg;
+                const defectRatioVal = totalIn > 0 ? ((totalNg / totalIn) * 100).toFixed(1) : '0.0';
+
+                if (kpiTotalPcs) kpiTotalPcs.innerText = totalNg.toLocaleString('id-ID') + ' pcs';
+                if (kpiDefectRate) kpiDefectRate.innerText = defectRatioVal + '%';
+                if (kpiTopDefect) kpiTopDefect.innerText = topDefectName;
+                if (countTypes) countTypes.innerText = `${defectKeys.length} jenis defect`;
+
+                // Render Pareto Chips
+                if (paretoContainer) {
+                    if (defectKeys.length === 0) {
+                        paretoContainer.innerHTML = `<span style="font-size:12px; color:#94a3b8; font-style:italic;">Belum ada catatan cacat pada periode ini.</span>`;
+                    } else {
+                        paretoContainer.innerHTML = defectKeys.map(k => {
+                            const count = breakdown[k];
+                            const pct = totalNg > 0 ? ((count / totalNg) * 100).toFixed(1) : 0;
+                            return `
+                                <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:6px 12px; font-size:12px; display:inline-flex; align-items:center; gap:8px;">
+                                    <span style="font-weight:700; color:#991b1b;">${escapeHtml(k)}:</span>
+                                    <strong style="color:#dc2626; font-size:13px;">${count} pcs</strong>
+                                    <span style="background:#fee2e2; color:#b91c1c; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:4px;">${pct}%</span>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                }
+
+                // Render Table Rows
+                if (!tbody) return;
+                if (logs.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:28px; color:#94a3b8; font-style:italic;">Belum ada riwayat part cacat (Zero Defect / Semua 100% OK).</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = logs.map(item => `
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:10px 12px;">
+                            <div style="font-weight:700; color:#0f172a; font-size:13px;">${escapeHtml(item.time || '')}</div>
+                            <div style="font-size:11px; color:#64748b;">${formatTanggalIndo(item.tanggal || '')}</div>
+                        </td>
+                        <td style="padding:10px 12px;">
+                            <strong style="color:#1e293b;">${escapeHtml(item.part_name || item.part_code || 'Part Painting')}</strong>
+                            <div style="font-size:11px; color:#64748b;">${escapeHtml(item.part_code || '')}</div>
+                        </td>
+                        <td style="padding:10px 12px;">
+                            <span style="display:inline-block; padding:3px 8px; border-radius:6px; background:#fee2e2; color:#991b1b; font-weight:700; font-size:12px; border:1px solid #fecaca;">
+                                ⚠️ ${escapeHtml(item.defect_type || 'Defect')}
+                            </span>
+                        </td>
+                        <td style="padding:10px 12px; text-align:center;">
+                            <strong style="font-size:15px; color:#dc2626;">${item.pcs || 1}</strong> <span style="font-size:11px; color:#64748b;">pcs</span>
+                        </td>
+                        <td style="padding:10px 12px;">
+                            <div style="font-weight:700; color:#0f172a; font-size:12.5px;">👤 ${escapeHtml(item.operator || 'Mukhamad Nawwaf')}</div>
+                            <div style="font-size:11px; color:#2563eb; font-weight:600;">${escapeHtml(item.shift || 'Shift 1')}</div>
+                        </td>
+                        <td style="padding:10px 12px; color:#475569; font-size:12.5px;">
+                            ${escapeHtml(item.notes || '-')}
+                        </td>
+                        <td style="padding:10px 12px; text-align:center;">
+                            <button type="button" onclick="hapusNgLog('${item.id}')" style="background:#ffffff; border:1px solid #fecaca; color:#dc2626; border-radius:6px; padding:4px 9px; font-size:11.5px; font-weight:700; cursor:pointer;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='#ffffff'" title="Hapus catatan defect ini">
+                                🗑️ Hapus
+                            </button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (err) {
+                console.error('Error loadRiwayatNg:', err);
+                if (tbody) {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px; color:#dc2626;">Gagal memuat log part cacat: ${err.message}</td></tr>`;
+                }
+            }
+        }
+
+        async function hapusNgLog(id) {
+            if (!confirm('Apakah Anda yakin ingin membatalkan/menghapus catatan cacat ini?\nTotal NG pada sistem akan otomatis dikurangi.')) {
+                return;
+            }
+            try {
+                const res = await fetch('/api/delete-ng-log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                const json = await res.json();
+                if (json.status === 'ok') {
+                    await loadRiwayatNg(tanggalFilterNgAktif);
+                    if (typeof updateHistoriTable === 'function') {
+                        await updateHistoriTable();
+                    }
+                    if (typeof updateStatsHangerRealtime === 'function') {
+                        await updateStatsHangerRealtime();
+                    }
+                    alert('✓ ' + json.message);
+                } else {
+                    alert('Gagal menghapus log: ' + (json.message || 'Error'));
+                }
+            } catch (err) {
+                alert('Gagal menghubungi server: ' + err.message);
+            }
+        }
+
+        async function loadHangerDetectionLogs() {
+            const tbody = document.getElementById('tbody-hanger-detection-logs');
+            if (!tbody) return;
+            try {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#64748b;">Memuat data log verifikasi hanger AI...</td></tr>`;
+                const res = await fetch('/api/get-hanger-detections');
+                const data = await res.json();
+                const logs = (data && data.logs) ? data.logs : [];
+
+                if (!logs.length) {
+                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:#94a3b8; font-style:italic;">Belum ada riwayat verifikasi hanger AI tercatat. Hanger akan otomatis tercatat saat Photosensor 2 mendeteksi hanger lewat.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = logs.map(item => {
+                    let badgeBg = '#dcfce7';
+                    let badgeColor = '#15803d';
+                    let statusLabel = 'Normal';
+                    if (item.status === 'Kurang') {
+                        badgeBg = '#fef3c7';
+                        badgeColor = '#b45309';
+                        statusLabel = 'Kurang';
+                    } else if (item.status === 'Kosong') {
+                        badgeBg = '#fee2e2';
+                        badgeColor = '#dc2626';
+                        statusLabel = 'Kosong';
+                    }
+
+                    return `
+                        <tr style="border-bottom:1px solid #e2e8f0;">
+                            <td style="padding:10px 12px; font-family:monospace; color:#475569;">${item.timestamp || item.created_at || '-'}</td>
+                            <td style="padding:10px 12px; font-weight:700; color:#0f172a;">#${item.hanger_number || item.hanger_index || 1}</td>
+                            <td style="padding:10px 12px;"><span style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-weight:700; font-family:monospace; color:#0d3b8c;">${item.part_code || '-'}</span></td>
+                            <td style="padding:10px 12px; text-align:center; font-weight:800; color:#0d3b8c; font-size:14px;">${item.detected_pcs ?? 0}</td>
+                            <td style="padding:10px 12px; text-align:center; color:#64748b;">${item.target_pcs ?? '-'}</td>
+                            <td style="padding:10px 12px; text-align:center;">
+                                <span style="background:${badgeBg}; color:${badgeColor}; padding:3px 8px; border-radius:12px; font-weight:700; font-size:11.5px;">${statusLabel}</span>
+                            </td>
+                            <td style="padding:10px 12px; font-weight:600; color:#334155;">👤 ${item.operator_name || '-'}</td>
+                            <td style="padding:10px 12px; color:#475569;"><span style="background:#e0e7ff; color:#3730a3; padding:2px 7px; border-radius:4px; font-size:11.5px; font-weight:600;">${item.shift_name || item.shift || 'Shift 1'}</span></td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error('Gagal mengambil log hanger:', err);
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#dc2626;">Gagal memuat log verifikasi hanger. Periksa koneksi backend.</td></tr>`;
             }
         }
 
@@ -4737,8 +5035,15 @@
                             Sesi #${r.nomor_sesi} — ${escapeHtml(r.part)}
                             <span class="riwayat-ph-card-id">${r.jam_mulai} - ${r.jam_selesai}</span>
                         </div>
-                        <div class="riwayat-ph-card-sub">
+                        <div class="riwayat-ph-card-sub" style="margin-bottom:6px;">
                             Output: <strong>${r.F} pcs</strong> | NG: <strong>${r.E_persen}%</strong> | Waktu Kerja (B): <strong>${r.B}m</strong> | Stop: <strong>${r.A}m</strong>
+                        </div>
+                        <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#475569; background:#f8fafc; padding:3px 9px; border-radius:6px; border:1px solid #e2e8f0; width:fit-content;">
+                            <span>👤 PIC: <strong style="color:#0f172a;">${escapeHtml(r.operator_name || 'Mukhamad Nawwaf')}</strong></span>
+                            <span style="color:#cbd5e1;">&bull;</span>
+                            <span style="color:#2563eb; font-weight:600;">${escapeHtml(r.shift || 'Shift 1')}</span>
+                            <span style="color:#cbd5e1;">&bull;</span>
+                            <span style="color:#166534; font-weight:600;">${r.total_manpower || 6} MP</span>
                         </div>
                     </div>
                     <div class="riwayat-ph-card-eff">
@@ -4860,11 +5165,103 @@
             document.getElementById('dp-part-label').innerText = r.part;
             document.getElementById('dp-id').innerText = r.nomor_sesi;
             document.getElementById('dp-jam').innerText = `${r.jam_mulai} - ${r.jam_selesai}`;
-            document.getElementById('dp-disimpan').innerText = r.jam_disimpan;
+            document.getElementById('dp-disimpan').innerText = r.jam_disimpan || r.jam_selesai || '-';
+
+            // Penanggung Jawab Sesi & Manpower
+            const elOp = document.getElementById('dp-operator');
+            const elShift = document.getElementById('dp-shift');
+            const elMp = document.getElementById('dp-total-mp');
+            const elPosList = document.getElementById('dp-posisi-list');
+            const elPosSummary = document.getElementById('dp-posisi-summary');
+
+            if (elOp) elOp.innerText = r.operator_name || 'Mukhamad Nawwaf';
+            if (elShift) elShift.innerText = r.shift || 'Shift 1';
+            if (elMp) elMp.innerText = `${r.total_manpower || 6} Orang`;
+            if (elPosSummary) elPosSummary.innerText = `${r.shift || 'Shift 1'} · ${r.total_manpower || 6} Personil`;
+
+            if (elPosList) {
+                const positions = Array.isArray(r.positions) && r.positions.length > 0 ? r.positions : [
+                    { name: 'Loading / Hanging', count: 2, status: 'tetap', operators: '' },
+                    { name: 'Sprayer / Painter', count: 1, status: 'tetap', operators: r.operator_name || 'Mukhamad Nawwaf' },
+                    { name: 'Unloading', count: 2, status: 'kwt', operators: '' },
+                    { name: 'QC & Packing', count: 1, status: 'tetap', operators: '' }
+                ];
+
+                elPosList.innerHTML = positions.map(p => {
+                    const st = (p.status || 'tetap').toLowerCase();
+                    const statusBadge = st === 'tetap' ? '<span style="font-size:9.5px; padding:1px 5px; background:#dbeafe; color:#1e40af; border-radius:4px; font-weight:700;">TETAP</span>' :
+                                       (st === 'kwt' ? '<span style="font-size:9.5px; padding:1px 5px; background:#fef3c7; color:#92400e; border-radius:4px; font-weight:700;">KWT</span>' :
+                                       '<span style="font-size:9.5px; padding:1px 5px; background:#f1f5f9; color:#475569; border-radius:4px; font-weight:700;">DAILY</span>');
+                    const opText = p.operators ? `<span style="color:#0f172a; font-weight:600;">: ${escapeHtml(p.operators)}</span>` : '';
+                    return `
+                        <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11px; display:inline-flex; align-items:center; gap:5px;">
+                            <strong style="color:#1e293b;">${escapeHtml(p.name)}</strong>
+                            <span style="color:#64748b;">(${p.count || 1} org)</span>
+                            ${statusBadge}
+                            ${opText}
+                        </div>
+                    `;
+                }).join('');
+            }
 
             const valC = (r.C_manual !== null && r.C_manual !== undefined) ? r.C_manual : r.C;
             const valF = (r.F_manual !== null && r.F_manual !== undefined) ? r.F_manual : r.F;
             const valE = (r.E_manual !== null && r.E_manual !== undefined) ? r.E_manual : r.E_v2;
+
+            // Rincian Kualitas & Part Cacat (NG) Sesi Ini
+            const totalIn = r.total_input || (valF + valE);
+            const yieldVal = totalIn > 0 ? ((valF / totalIn) * 100).toFixed(1) : '0.0';
+            const ngRatio = totalIn > 0 ? ((valE / totalIn) * 100).toFixed(1) : '0.0';
+
+            const elKpiIn = document.getElementById('dp-kpi-in');
+            const elKpiOk = document.getElementById('dp-kpi-ok');
+            const elKpiNg = document.getElementById('dp-kpi-ng');
+            const elKpiYield = document.getElementById('dp-kpi-yield');
+            const elNgBadge = document.getElementById('dp-ng-summary-badge');
+
+            if (elKpiIn) elKpiIn.innerText = totalIn.toLocaleString('id-ID') + ' pcs';
+            if (elKpiOk) elKpiOk.innerText = valF.toLocaleString('id-ID') + ' pcs';
+            if (elKpiNg) elKpiNg.innerText = valE.toLocaleString('id-ID') + ' pcs';
+            if (elKpiYield) elKpiYield.innerText = yieldVal + '%';
+            if (elNgBadge) elNgBadge.innerText = `${valE} pcs (${ngRatio}% Reject)`;
+
+            const elNgEmpty = document.getElementById('dp-ng-empty');
+            const elNgList = document.getElementById('dp-ng-list');
+            const elNgTbody = document.getElementById('dp-ng-tbody');
+
+            const sesiLogs = Array.isArray(r.ng_logs) ? r.ng_logs : [];
+            if (valE > 0 || sesiLogs.length > 0) {
+                if (elNgEmpty) elNgEmpty.style.display = 'none';
+                if (elNgList) elNgList.style.display = '';
+                if (elNgTbody) {
+                    if (sesiLogs.length > 0) {
+                        elNgTbody.innerHTML = sesiLogs.map(item => `
+                            <tr style="border-bottom:1px solid #f1f5f9;">
+                                <td style="padding:6px 8px; font-weight:700; color:#991b1b;">
+                                    <span style="display:inline-block; padding:1px 6px; background:#fee2e2; border-radius:4px;">⚠️ ${escapeHtml(item.defect_type || 'Defect')}</span>
+                                </td>
+                                <td style="padding:6px 8px; text-align:center; font-weight:800; color:#dc2626;">${item.pcs || 1} pcs</td>
+                                <td style="padding:6px 8px; color:#475569;">${escapeHtml(item.operator || r.operator_name || 'Mukhamad Nawwaf')} (${escapeHtml(item.shift || r.shift || 'Shift 1')})</td>
+                                <td style="padding:6px 8px; color:#64748b;">${escapeHtml(item.notes || '-')}</td>
+                            </tr>
+                        `).join('');
+                    } else {
+                        elNgTbody.innerHTML = `
+                            <tr style="border-bottom:1px solid #f1f5f9;">
+                                <td style="padding:6px 8px; font-weight:700; color:#991b1b;">
+                                    <span style="display:inline-block; padding:1px 6px; background:#fee2e2; border-radius:4px;">⚠️ Reject Part</span>
+                                </td>
+                                <td style="padding:6px 8px; text-align:center; font-weight:800; color:#dc2626;">${valE} pcs</td>
+                                <td style="padding:6px 8px; color:#475569;">${escapeHtml(r.operator_name || 'Mukhamad Nawwaf')} (${escapeHtml(r.shift || 'Shift 1')})</td>
+                                <td style="padding:6px 8px; color:#64748b;">Tercatat dari Machine Control</td>
+                            </tr>
+                        `;
+                    }
+                }
+            } else {
+                if (elNgEmpty) elNgEmpty.style.display = '';
+                if (elNgList) elNgList.style.display = 'none';
+            }
 
             document.getElementById('dp-val-B').innerText = r.B;
             document.getElementById('dp-val-C').innerText = valC;
@@ -5244,7 +5641,7 @@
             if (legendOffpeak) legendOffpeak.innerText = `Luar Beban Puncak (${tglDisplay})`;
 
             try {
-                const res = await fetch(`/api/kwh/data?device=pcb_line_3&tanggal=${encodeURIComponent(tgl)}`, { cache: 'no-store' });
+                const res = await fetch(`/api/kwh/data?device=painting_line_1&tanggal=${encodeURIComponent(tgl)}`, { cache: 'no-store' });
                 const json = await res.json();
 
                 if (json.status === 'success') {
@@ -6313,7 +6710,7 @@
             try {
                 let url = `api/kalkulasi_performance.php?line=${encodeURIComponent(line)}&tanggal=${encodeURIComponent(tanggal)}`
                     + `&jam_mulai=${encodeURIComponent(jamMulai)}&jam_selesai=${encodeURIComponent(jamSelesai)}&ct=${encodeURIComponent(ct)}&part=${encodeURIComponent(part)}`
-                    + (skipModal ? '&skip_keterangan=1' : '')
+                    + '&skip_keterangan=1'
                     + (fManual !== undefined && fManual !== null && fManual !== '' ? `&f_manual=${encodeURIComponent(fManual)}` : '')
                     + (eManual !== undefined && eManual !== null && eManual !== '' ? `&e_manual=${encodeURIComponent(eManual)}` : '')
                     + (cManual !== undefined && cManual !== null && cManual !== '' ? `&c_manual=${encodeURIComponent(cManual)}` : '')
@@ -6321,17 +6718,9 @@
                 let res = await fetch(url, { cache: "no-store" });
                 let data = await res.json();
 
-                // Waktu kerja (B) di bawah standar minimal shift -- server minta keterangan
-                // alasan penyimpangan dulu sebelum sesi ini bisa dihitung & disimpan.
-                // (Kalau skipModal true, server sudah handle otomatis dan status ini tidak akan
-                // muncul -- lihat skip_keterangan di kalkulasi_performance.php.)
+                // Pabrik tidak ada batasan minimal shift: jika server memberikan status perlu_keterangan, langsung bypass otomatis
                 if (data.status === 'perlu_keterangan' || data.status === 'warning_durasi') {
-                    const keterangan = await bukaModalKeteranganDurasi(data.message);
-                    if (!keterangan) {
-                        // Modal dibatalkan (klik X / klik di luar modal / Cancel) -- sesi belum disimpan.
-                        return;
-                    }
-                    url += `&keterangan_durasi=${encodeURIComponent(keterangan)}`;
+                    url += `&keterangan_durasi=Pabrik+bebas+durasi`;
                     res = await fetch(url, { cache: "no-store" });
                     data = await res.json();
                 }
@@ -7119,10 +7508,418 @@
             }
         }
 
+        // ==============================================================
+        // SISTEM KONTROL OPERATOR PIC & SHIFT PRODUKSI (LINE PAINTING)
+        // ==============================================================
+        let activeShiftData = null;
+
+        function getBarisPosisiHTML(name = '', count = 1, status = 'tetap', operators = '') {
+            return `
+            <div class="mp-position-row" style="background:#ffffff; border:1px solid #cbd5e1; border-radius:10px; padding:10px 12px; box-shadow:0 1px 4px rgba(0,0,0,0.03);">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                    <div style="flex:1; min-width:140px;">
+                        <input type="text" class="row-pos-name" list="posisi-suggestions" placeholder="Pilih/Ketik Posisi Stasiun..." value="${name}" style="width:100%; box-sizing:border-box; padding:6px 10px; border-radius:6px; border:1.2px solid #cbd5e1; font-size:12.5px; font-weight:700; color:#0f172a;" oninput="recalcTotalManpower()">
+                    </div>
+                    <div style="display:flex; align-items:center; gap:4px; width:85px; flex-shrink:0;">
+                        <input type="number" class="row-pos-count" min="1" max="20" value="${count}" style="width:100%; box-sizing:border-box; padding:6px 4px; border-radius:6px; border:1.2px solid #cbd5e1; font-size:13px; font-weight:800; text-align:center; color:#0d3b8c;" oninput="recalcTotalManpower()">
+                        <span style="font-size:11px; font-weight:700; color:#64748b;">Org</span>
+                    </div>
+                    <div style="width:115px; flex-shrink:0;">
+                        <select class="row-pos-status" style="width:100%; box-sizing:border-box; padding:6px 6px; border-radius:6px; border:1.2px solid #cbd5e1; font-size:11.5px; font-weight:700; color:#334155; background:#f8fafc;" onchange="recalcTotalManpower()">
+                            <option value="tetap" ${status === 'tetap' ? 'selected' : ''}>Tetap</option>
+                            <option value="kwt" ${status === 'kwt' ? 'selected' : ''}>KWT (Kontrak)</option>
+                            <option value="daily" ${status === 'daily' ? 'selected' : ''}>Daily Worker</option>
+                        </select>
+                    </div>
+                    <button type="button" onclick="hapusBarisPosisi(this)" style="background:transparent; border:none; color:#ef4444; font-size:16px; cursor:pointer; padding:4px 6px; border-radius:6px; opacity:0.7; flex-shrink:0;" onmouseover="this.style.opacity='1'; this.style.background='#fee2e2';" onmouseout="this.style.opacity='0.7'; this.style.background='transparent';" title="Hapus Posisi Ini">
+                        🗑️
+                    </button>
+                </div>
+                <div style="position:relative;">
+                    <input type="text" class="row-pos-operators" placeholder="Nama operator yang bertugas (opsional, mis: Budi, Ika)..." value="${operators}" style="width:100%; box-sizing:border-box; padding:5px 8px 5px 26px; border-radius:6px; border:1px dashed #cbd5e1; font-size:11.5px; color:#475569; background:#fafafa;">
+                    <span style="position:absolute; left:8px; top:50%; transform:translateY(-50%); font-size:11px; opacity:0.6;">👤</span>
+                </div>
+            </div>`;
+        }
+
+        function tambahBarisPosisi(name = '', count = 1, status = 'tetap', operators = '') {
+            const container = document.getElementById('container-posisi-manpower');
+            if (!container) return;
+            const div = document.createElement('div');
+            div.innerHTML = getBarisPosisiHTML(name, count, status, operators).trim();
+            container.appendChild(div.firstChild);
+            recalcTotalManpower();
+        }
+
+        function hapusBarisPosisi(btn) {
+            const row = btn.closest('.mp-position-row');
+            if (row) {
+                const container = document.getElementById('container-posisi-manpower');
+                if (container && container.querySelectorAll('.mp-position-row').length <= 1) {
+                    alert('Minimal harus ada 1 posisi stasiun kerja!');
+                    return;
+                }
+                row.remove();
+                recalcTotalManpower();
+            }
+        }
+
+        function recalcTotalManpower() {
+            const rows = document.querySelectorAll('.mp-position-row');
+            let total = 0;
+            let tetap = 0;
+            let kwt = 0;
+            let daily = 0;
+
+            rows.forEach(row => {
+                const count = parseInt(row.querySelector('.row-pos-count')?.value || 0, 10);
+                const status = row.querySelector('.row-pos-status')?.value || 'tetap';
+                total += count;
+                if (status === 'tetap') tetap += count;
+                else if (status === 'kwt') kwt += count;
+                else if (status === 'daily') daily += count;
+            });
+
+            if (total === 0) total = 1;
+
+            const badgeTotal = document.getElementById('badge-total-manpower');
+            if (badgeTotal) badgeTotal.innerText = `Total: ${total} Orang`;
+
+            const badgeSub = document.getElementById('badge-sub-manpower');
+            if (badgeSub) {
+                let subText = `${tetap} Tetap · ${kwt} KWT`;
+                if (daily > 0) subText += ` · ${daily} Daily`;
+                badgeSub.innerText = subText;
+            }
+
+            const inputTetap = document.getElementById('input-mp-tetap');
+            if (inputTetap) inputTetap.value = tetap;
+            const inputKwt = document.getElementById('input-mp-kwt');
+            if (inputKwt) inputKwt.value = kwt;
+            const inputDaily = document.getElementById('input-mp-daily');
+            if (inputDaily) inputDaily.value = daily;
+
+            return total;
+        }
+
+        function updateShiftSelectionUI() {
+            const cards = document.querySelectorAll('.shift-option-card');
+            cards.forEach(card => {
+                const radio = card.querySelector('input[type="radio"]');
+                if (radio && radio.checked) {
+                    card.style.borderColor = '#4f46e5';
+                    card.style.background = '#eef2ff';
+                } else {
+                    card.style.borderColor = '#cbd5e1';
+                    card.style.background = '#ffffff';
+                }
+            });
+        }
+
+        function bukaModalGantiShift() {
+            const modal = document.getElementById('modal-ganti-shift');
+            if (!modal) return;
+            modal.style.display = 'flex';
+
+            const container = document.getElementById('container-posisi-manpower');
+            if (container) {
+                container.innerHTML = '';
+                const positions = (activeShiftData && activeShiftData.positions && activeShiftData.positions.length > 0)
+                    ? activeShiftData.positions
+                    : [
+                        { name: 'Loading / Hanging (Gantung Part)', count: 2, status: 'tetap', operators: 'Budi, Ika' },
+                        { name: 'Sprayer / Painter (Pengecatan)', count: 1, status: 'tetap', operators: 'Mukhamad Nawwaf' },
+                        { name: 'Unloading (Turun Part)', count: 2, status: 'kwt', operators: 'Ahmad, Yessy' },
+                        { name: 'QC & Packing (Inspeksi)', count: 1, status: 'tetap', operators: 'Iin' }
+                    ];
+
+                positions.forEach(p => {
+                    tambahBarisPosisi(p.name, p.count, p.status, p.operators);
+                });
+            }
+
+            if (activeShiftData) {
+                const inputName = document.getElementById('input-shift-operator-name');
+                if (inputName) inputName.value = activeShiftData.operator_name || '';
+                const inputNotes = document.getElementById('input-shift-notes');
+                if (inputNotes) inputNotes.value = activeShiftData.notes || '';
+
+                const radios = document.querySelectorAll('input[name="radio_shift"]');
+                radios.forEach(r => {
+                    r.checked = (r.value === activeShiftData.shift);
+                });
+                updateShiftSelectionUI();
+            }
+            recalcTotalManpower();
+        }
+
+        function tutupModalGantiShift() {
+            const modal = document.getElementById('modal-ganti-shift');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function simpanSesiShift() {
+            const inputName = document.getElementById('input-shift-operator-name');
+            const operatorName = inputName ? inputName.value.trim() : '';
+            if (!operatorName) {
+                alert('Harap isi Nama Operator / PIC yang bertugas terlebih dahulu!');
+                if (inputName) inputName.focus();
+                return;
+            }
+
+            const selectedShiftRadio = document.querySelector('input[name="radio_shift"]:checked');
+            const shift = selectedShiftRadio ? selectedShiftRadio.value : 'Shift 1';
+            
+            // Kumpulkan alokasi posisi stasiun
+            const positionRows = document.querySelectorAll('.mp-position-row');
+            const positions = [];
+            positionRows.forEach(row => {
+                const name = row.querySelector('.row-pos-name')?.value.trim() || 'Posisi';
+                const count = parseInt(row.querySelector('.row-pos-count')?.value || 1, 10);
+                const status = row.querySelector('.row-pos-status')?.value || 'tetap';
+                const operators = row.querySelector('.row-pos-operators')?.value.trim() || '';
+                positions.push({ name, count, status, operators });
+            });
+
+            const tetap = parseInt(document.getElementById('input-mp-tetap')?.value || 0, 10);
+            const kwt = parseInt(document.getElementById('input-mp-kwt')?.value || 0, 10);
+            const daily = parseInt(document.getElementById('input-mp-daily')?.value || 0, 10);
+            const notes = document.getElementById('input-shift-notes')?.value || '';
+
+            const btnSave = document.getElementById('btn-save-shift');
+            if (btnSave) {
+                btnSave.disabled = true;
+                btnSave.innerText = 'Menyimpan...';
+            }
+
+            try {
+                const res = await fetch('/api/set-active-shift', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        operator_name: operatorName,
+                        shift: shift,
+                        manpower_tetap: tetap,
+                        manpower_kwt: kwt,
+                        manpower_daily: daily,
+                        positions: positions,
+                        notes: notes
+                    })
+                });
+                const data = await res.json();
+                if (data && data.status === 'ok') {
+                    activeShiftData = data.shift;
+                    applyShiftDataToUI(data.shift);
+                    tutupModalGantiShift();
+                    alert(`✅ Sesi Shift Berhasil Disimpan!\n\nPIC Operator: ${data.shift.operator_name}\nShift: ${data.shift.shift_name}\nTotal Manpower: ${data.shift.total_manpower} Orang (${positions.length} Posisi Stasiun)`);
+                }
+            } catch (e) {
+                console.error('Error simpan shift:', e);
+                alert('Gagal menyimpan sesi shift: ' + e.message);
+            } finally {
+                if (btnSave) {
+                    btnSave.disabled = false;
+                    btnSave.innerHTML = '<span>💾</span> Simpan &amp; Mulai Sesi';
+                }
+            }
+        }
+
+        function applyShiftDataToUI(shift) {
+            if (!shift) return;
+
+            // Update kartu Operator di Sidebar
+            const sideOp = document.getElementById('sidebar-operator-name');
+            if (sideOp) sideOp.innerText = shift.operator_name || 'Operator';
+            const sideShift = document.getElementById('sidebar-shift-badge');
+            if (sideShift) sideShift.innerText = shift.shift_name || shift.shift || 'Shift 1 (Pagi)';
+            const sideMp = document.getElementById('sidebar-mp-badge');
+            if (sideMp) sideMp.innerText = `${shift.total_manpower || 6} MP`;
+
+            // Update badge di Topbar jika ada
+            const topbarOp = document.getElementById('topbar-operator-name');
+            if (topbarOp) topbarOp.innerText = shift.operator_name || 'Operator';
+            const topbarShift = document.getElementById('topbar-shift-badge');
+            if (topbarShift) topbarShift.innerText = shift.shift_name || shift.shift || 'Shift 1';
+            const topbarMp = document.getElementById('topbar-mp-badge');
+            if (topbarMp) topbarMp.innerText = `${shift.total_manpower || 6} MP`;
+
+            // Update badge di halaman AI Vision jika ada
+            const aiOpBadge = document.getElementById('label-ai-operator');
+            if (aiOpBadge) aiOpBadge.innerText = shift.operator_name;
+
+            // Update badge di halaman Riwayat jika ada
+            const rwOp = document.getElementById('rw-active-operator-badge');
+            if (rwOp) rwOp.innerText = shift.operator_name || 'Operator';
+            const rwShift = document.getElementById('rw-active-shift-badge');
+            if (rwShift) rwShift.innerText = shift.shift_name || 'Shift 1 (Pagi)';
+        }
+
+        async function loadActiveShiftData() {
+            try {
+                const res = await fetch('/api/get-active-shift');
+                const data = await res.json();
+                if (data && data.status === 'ok') {
+                    activeShiftData = data.shift;
+                    applyShiftDataToUI(data.shift);
+                }
+            } catch (e) {}
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             initDraggableCameraPopup();
+            loadActiveShiftData();
             if (typeof updateTargetBulanan === 'function') {
                 updateTargetBulanan();
             }
         });
+
+        // ================================================================
+        // MODAL INPUT PART CACAT / NG (DEFECT) MANUAL
+        // ================================================================
+        function updateDefectSelectionUI() {
+            document.querySelectorAll('#modal-input-ng .defect-radio-card').forEach(card => {
+                const radio = card.querySelector('input[type="radio"]');
+                const span = card.querySelector('span');
+                if (radio && radio.checked) {
+                    card.style.borderColor = '#ef4444';
+                    card.style.background = '#fef2f2';
+                    if (span) span.style.color = '#991b1b';
+                } else {
+                    card.style.borderColor = '#cbd5e1';
+                    card.style.background = '#ffffff';
+                    if (span) span.style.color = '#334155';
+                }
+            });
+        }
+
+        function setNgPcs(val) {
+            const inp = document.getElementById('input-ng-pcs');
+            if (!inp) return;
+            const current = parseInt(inp.value, 10) || 0;
+            inp.value = Math.max(1, current + val);
+        }
+
+        function bukaModalInputNg() {
+            const modal = document.getElementById('modal-input-ng');
+            if (!modal) return;
+            modal.style.display = 'flex';
+
+            // Ambil part aktif saat ini untuk ditampilkan di banner modal
+            const elPart = document.getElementById('mr-nama-part');
+            const lblModalPart = document.getElementById('modal-ng-part-label');
+            if (elPart && lblModalPart) {
+                lblModalPart.innerText = elPart.innerText || '[PART-001] PART-Tester';
+            }
+
+            const inpPcs = document.getElementById('input-ng-pcs');
+            if (inpPcs) inpPcs.value = 1;
+
+            const inpNotes = document.getElementById('input-ng-notes');
+            if (inpNotes) inpNotes.value = '';
+
+            loadNgLogs();
+        }
+
+        function tutupModalInputNg() {
+            const modal = document.getElementById('modal-input-ng');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function simpanInputNg() {
+            const inpPcs = document.getElementById('input-ng-pcs');
+            const pcs = parseInt(inpPcs ? inpPcs.value : 1, 10) || 1;
+            const selectedDefect = document.querySelector('input[name="radio_defect_type"]:checked')?.value || 'Cat Bintik (Dust/Dirt)';
+            const notes = document.getElementById('input-ng-notes')?.value || '';
+
+            const btnSave = document.getElementById('btn-simpan-ng');
+            if (btnSave) {
+                btnSave.disabled = true;
+                btnSave.innerText = 'Menyimpan...';
+            }
+
+            try {
+                const res = await fetch('/api/add-ng', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        pcs: pcs,
+                        defect_type: selectedDefect,
+                        notes: notes
+                    })
+                });
+                const data = await res.json();
+                if (data && data.status === 'ok') {
+                    // Update tampilan dashboard live
+                    if (typeof updateData === 'function') {
+                        updateData();
+                    }
+                    renderNgLogsTable(data.logs || [], data.total_ng);
+                    alert(`✅ Berhasil mencatat ${pcs} Pcs Part Cacat!\n\nDefect: ${selectedDefect}\nTotal NG Sesi Ini: ${data.total_ng} Pcs\nYield Terkoreksi: ${data.yield_val}%`);
+                    tutupModalInputNg();
+                } else {
+                    alert('Gagal mencatat part NG: ' + ((data && data.message) ? data.message : 'Error'));
+                }
+            } catch (e) {
+                alert('Gagal mencatat part NG: ' + e.message);
+            } finally {
+                if (btnSave) {
+                    btnSave.disabled = false;
+                    btnSave.innerText = '💾 Catat Part NG';
+                }
+            }
+        }
+
+        async function loadNgLogs() {
+            try {
+                const res = await fetch('/api/get-ng-logs');
+                const data = await res.json();
+                if (data && data.status === 'ok') {
+                    renderNgLogsTable(data.logs || [], data.total_ng || 0);
+                }
+            } catch (e) {
+                console.warn('loadNgLogs error:', e);
+            }
+        }
+
+        function renderNgLogsTable(logs, totalNg) {
+            const tbody = document.getElementById('tbody-modal-ng-logs');
+            const summary = document.getElementById('modal-ng-total-summary');
+            if (summary) summary.innerText = `Total: ${totalNg || 0} Pcs`;
+            if (!tbody) return;
+
+            if (!logs || logs.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="padding:16px; text-align:center; color:#94a3b8;">Belum ada catatan NG untuk sesi ini.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = logs.map(log => `
+                <tr style="border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:8px 10px; font-family:monospace; font-weight:700; color:#64748b;">${log.time || '-'}</td>
+                    <td style="padding:8px 10px; font-weight:700; color:#0f172a;">${log.part_code || '-'}</td>
+                    <td style="padding:8px 10px; color:#b91c1c; font-weight:600;">${log.defect_type || '-'}</td>
+                    <td style="padding:8px 10px; text-align:center; font-weight:800; color:#dc2626;">${log.pcs || 1} pcs</td>
+                    <td style="padding:8px 10px; text-align:center;">
+                        <button type="button" onclick="hapusLogNg('${log.id}')" title="Batalkan / Hapus Catatan Ini" style="background:#fee2e2; border:none; border-radius:5px; padding:3px 7px; color:#b91c1c; font-size:12px; cursor:pointer;">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function hapusLogNg(logId) {
+            if (!confirm('Apakah Anda yakin ingin membatalkan/menghapus catatan defect ini? Counter NG akan dikurangi sesuai jumlah pcs.')) return;
+            try {
+                const res = await fetch('/api/delete-ng-log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: logId })
+                });
+                const data = await res.json();
+                if (data && data.status === 'ok') {
+                    if (typeof updateData === 'function') updateData();
+                    renderNgLogsTable(data.logs || [], data.total_ng);
+                }
+            } catch (e) {
+                alert('Gagal menghapus catatan NG: ' + e.message);
+            }
+        }
     </script>

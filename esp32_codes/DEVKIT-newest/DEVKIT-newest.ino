@@ -3,227 +3,98 @@
 #include <HTTPClient.h>
 #include <string.h>
 
+// ================================================================
+// KONFIGURASI JARINGAN & SERVER DASHBOARD
+// ================================================================
 const char* ssid     = "SSID";       // Ganti dengan nama WiFi pabrik/laptop
 const char* password = "12345678";   // Ganti dengan password WiFi
 
-const char* server_ip = "10.171.46.201:8000"; 
+const char* server_ip = "10.71.94.201:8000"; 
 
-// ================================================================
-// KONFIGURASI IP MANUAL / STATIC IP ESP32 DEVKIT
-// ================================================================
-// true  = Menggunakan IP Statis / Manual yang ditentukan di bawah
-// false = Otomatis meminta IP dari router (DHCP)
+// Konfigurasi Static IP ESP32
 const bool USE_STATIC_IP = true;
-
-IPAddress devkit_static_ip(10, 171, 46, 102);  // Ganti dengan IP DevKit yang Anda inginkan
-IPAddress devkit_gateway(10, 171, 46, 193);    // Gateway router Anda (dari ipconfig)
-IPAddress devkit_subnet(255, 255, 255, 0);     // Subnet mask
-IPAddress devkit_dns(8, 8, 8, 8);              // DNS opsional
+IPAddress devkit_static_ip(10, 71, 94, 102);
+IPAddress devkit_gateway(10, 71, 94, 70);
+IPAddress devkit_subnet(255, 255, 255, 0);
+IPAddress devkit_dns(8, 8, 8, 8);
 
 String dashboard_trigger_url = String("http://") + server_ip + "/api/sensor-trigger";
-String dashboard_confirm_url = String("http://") + server_ip + "/api/confirm-hanger-output";
 
 WebServer server(80);
 
-const int PIN_BTN_ON   = 13; // Push Button HIJAU: NO (Normally Open)   -> Normal=HIGH (pullup), Ditekan=LOW (START Mesin)
-const int PIN_BTN_OFF  = 12; // Push Button MERAH: NC (Normally Closed) -> Normal=LOW (ke GND), Ditekan=HIGH (STOP Mesin)
-const int PIN_SENS_IN  = 25; // Sensor Inlet (Input Hanger)
-const int PIN_SENS_OUT = 27; // Sensor Outlet (Kamera Shutter)
-
 // ================================================================
-// KONFIGURASI TIPE LOGIKA SENSOR (PIN 25 & PIN 27)
+// PIN ASSIGNMENT (ESP32 DEVKIT V1) - KONSEP 1 BOX INSPEKSI KAMERA
 // ================================================================
-// true  = Active-LOW  (Standby = HIGH/1, Saat deteksi/kedip = LOW/0  -> Interrupt FALLING, +1 per barang)
-// false = Active-HIGH (Standby = LOW/0,  Saat deteksi/kedip = HIGH/1 -> Interrupt RISING,  +1 per barang)
+const int PIN_BTN_ON   = 13; // Push Button HIJAU: NO (Normally Open)   -> Normal=HIGH, Tekan=LOW (START Mesin)
+const int PIN_BTN_OFF  = 12; // Push Button MERAH: NC (Normally Closed) -> Normal=LOW, Tekan=HIGH (STOP Mesin)
 
-// PIN 25 (Inlet Sensor melalui Modul Optocoupler PC817):
-// Dengan perkabelan NPN (IN1 ke +24V, GND input ke kabel Hitam sensor):
-// - Standby (LED PC817 mati)   : Output ditarik pullup ke 3.3V (HIGH / 1)
-// - Deteksi (LED PC817 nyala)  : Output ditarik transistor ke 0V (LOW / 0)
-// Sehingga logikanya adalah Active-LOW (true), persis sama dengan Pin 27.
-const bool SENS_IN_ACTIVE_LOW  = true;
+// KEDUA SENSOR DALAM 1 BOX (TIPE NPN LANGSUNG KE GPIO ESP32):
+// - PIN 27: Sensor Masuk ke dalam Box (Inlet Box) -> Pemicu masuk / deteksi awal
+// - PIN 25: Sensor Keluar dari Box (Outlet Box)   -> Pemicu konfirmasi Roboflow & hitung pcs
+const int PIN_SENS_IN  = 27; // Sensor Masuk Box (Inlet)
+const int PIN_SENS_OUT = 25; // Sensor Keluar Box (Outlet)
 
-// PIN 27 (Outlet Sensor - Shutter Kamera):
-// Sensor NPN langsung (Active-LOW: Standby = HIGH, Saat deteksi = LOW).
-const bool SENS_OUT_ACTIVE_LOW = true;
-
-// ================================================================
-// DEBOUNCE / RELEASE SETTLE TIME
-// ================================================================
-// Jeda standby bersih (ms) setelah objek lepas sebelum siap menghitung objek berikutnya (+1 per barang)
-const unsigned long RELEASE_SETTLE_MS = 100;
-
-const int PIN_FLASH    = 26; // Lampu Flash / Penerangan Output (Area Kamera)
-
-// ================================================================
-// KONFIGURASI LAMPU FLASH OUTPUT (AREA KAMERA - PIN 26)
-// ================================================================
-// 1 = SOLID (Nyala Terus / Selalu Menyala Konstan) -> Cahaya stabil tanpa flicker
-// 2 = STROBE (Hanya nyala sejenak saat ada hanger/barang lewat di sensor 2)
-// 0 = MATI (Off)
-int flashOutputMode    = 1;   // Default: 1 (SOLID / Nyala Terus)
-int flashBrightness    = 255; // Kecerahan lampu PWM (0 - 255)
+const int PIN_FLASH    = 26; // Lampu Flash / Penerangan Dalam Box (Area Kamera)
 
 // RS-485 to TTL UART (Serial2)
-#define RS485_RX_PIN 16 // RO Modul RS485 ke Pin 16 ESP32
-#define RS485_TX_PIN 17 // DI Modul RS485 ke Pin 17 ESP32
+#define RS485_RX_PIN 16
+#define RS485_TX_PIN 17
 
-bool isProduksi = false;
+// ================================================================
+// LOGIKA SENSOR MURNI DIGITAL (TEGANGAN HIGH & LOW)
+// ================================================================
+// Sensor NPN Open-Collector (Langsung ke ESP32 dengan INPUT_PULLUP):
+// - Standby (Tidak ada hanger) : Tegangan HIGH (3.3V) ditarik internal pullup
+// - Deteksi (Ada hanger)       : Transistor NPN menarik pin ke 0V (LOW / GND)
+const int SENSOR_STANDBY = HIGH; // 3.3V
+const int SENSOR_DETECT  = LOW;  // 0V (GND)
+
+// ================================================================
+// DELAY ANTI-DOUBLE TRIGGER (LOCKOUT & STABILISASI LEPAS)
+// ================================================================
+// 1. LOCKOUT_MS: Durasi sensor DIKUNCI MATI setelah mendeteksi hanger pertama.
+//    Selama masa ini (misal 1.2 detik), tiang kedua, celah berlubang, atau getaran
+//    pada hanger yang sama TIDAK BISA memicu hitungan ganda (2x).
+const unsigned long LOCKOUT_INLET_MS   = 2500; // 1200 ms (1.2 detik) jeda kunci Pin 27
+const unsigned long LOCKOUT_OUTLET_MS  = 2500; // 1200 ms (1.2 detik) jeda kunci Pin 25
+
+// 2. RELEASE_MS: Setelah masa lockout selesai, sinyal harus stabil KOSONG (HIGH)
+//    terus-menerus selama durasi ini sebelum sensor siap menerima hanger berikutnya.
+const unsigned long RELEASE_INLET_MS   = 200;  // 200 ms sinyal bersih konstan
+const unsigned long RELEASE_OUTLET_MS  = 200;  // 200 ms sinyal bersih konstan
+
+// State Latch Masuk Box (Pin 27)
+bool inletArmed = true;           // true = siap mendeteksi hanger baru masuk
+unsigned long lastInletTriggerMs  = 0;
+unsigned long inletClearSinceMs   = 0;
+
+// State Latch Keluar Box (Pin 25)
+bool outletArmed = true;          // true = siap mendeteksi hanger baru keluar
+unsigned long lastOutletTriggerMs = 0;
+unsigned long outletClearSinceMs  = 0;
+
+// ================================================================
+// VARIABEL STATUS PRODUKSI & COUNTER
+// ================================================================
+bool isProduksi    = true; // DEFAULT: LANGSUNG AKTIF (Langsung siap hitung saat dinyalakan)
 int hangerInCount  = 0;
 int hangerOutCount = 0;
-void printTotalCounterSummary();
-void startProduksi(const char* triggerSource = "TOMBOL FISIK");
-void stopProduksi(const char* triggerSource = "TOMBOL FISIK");
 
-bool lastBtnOnState   = HIGH; // NO (Pin 13 Hijau) default = HIGH (floating, ditarik pullup)
-bool lastBtnOffState  = LOW;  // NC (Pin 12 Merah) default = LOW (tersambung ke GND)
+int flashOutputMode = 1;   // 1 = SOLID (Nyala terus di dalam box), 2 = STROBE, 0 = OFF
+int flashBrightness = 255; // Kecerahan PWM (0 - 255)
+unsigned long flashOffTime = 0;
 
-// State Interrupt & Armed Pemicu Sensor Instan
-volatile bool sensInEdgeFlag   = false;
-volatile bool sensOutEdgeFlag  = false;
-bool sensInArmed               = true;
-unsigned long sensInIdleStart  = 0;
-bool sensOutArmed              = true;
-unsigned long sensOutIdleStart = 0;
+bool lastBtnOnState  = HIGH;
+bool lastBtnOffState = LOW;
 
-// ================================================================
-// DETEKSI & PENGUKUR FREKUENSI NOISE MOTOR INDUSTRI (EMI / RFI)
-// ================================================================
-volatile unsigned long isrCountIn  = 0;
-volatile unsigned long isrCountOut = 0;
-
-unsigned long lastNoiseWindowMs   = 0;
-unsigned long lastSnapIsrIn        = 0;
-unsigned long lastSnapIsrOut       = 0;
-
-float currentNoiseFreqIn           = 0.0;
-float currentNoiseFreqOut          = 0.0;
-float peakNoiseFreqIn              = 0.0;
-float peakNoiseFreqOut             = 0.0;
-String currentNoiseDiagnosis       = "BERSIH (Normal)";
-
-void IRAM_ATTR handleSensInISR() {
-  sensInEdgeFlag = true;
-  isrCountIn = isrCountIn + 1;
-}
-
-void IRAM_ATTR handleSensOutISR() {
-  sensOutEdgeFlag = true;
-  isrCountOut = isrCountOut + 1;
-}
-
-bool isSensorRawActive(int pin, bool activeLow) {
-  int activeLevel = activeLow ? LOW : HIGH;
-  return digitalRead(pin) == activeLevel;
-}
-
-// ================================================================
-// TRIGGER SENSOR INSTAN (0ms LATENCY) DENGAN ANTI-BOUNCE RELEASE
-// ================================================================
-bool checkSensorTrigger(
-  int pin,
-  bool activeLow,
-  volatile bool &edgeFlag,
-  bool &armed,
-  unsigned long &idleStartMs,
-  unsigned long now
-) {
-  bool hasEdge = false;
-  if (edgeFlag) {
-    edgeFlag = false;
-    hasEdge = true;
-  }
-
-  bool rawActive = isSensorRawActive(pin, activeLow);
-  bool isIdle    = !rawActive;
-
-  // Objek menyentuh sensor: trigger instan 0ms!
-  if (armed && (hasEdge || rawActive)) {
-    armed       = false;
-    idleStartMs = 0;
-    return true; // Pemicu instan diterima!
-  }
-
-  // Objek lepas dan kembali standby bersih selama RELEASE_SETTLE_MS
-  if (isIdle) {
-    if (!armed) {
-      if (idleStartMs == 0) {
-        idleStartMs = now;
-      } else if (now - idleStartMs >= RELEASE_SETTLE_MS) {
-        armed       = true; // Siap hitung objek berikutnya
-        idleStartMs = 0;
-      }
-    }
-  } else {
-    idleStartMs = 0;
-  }
-
-  return false;
-}
-
-// ================================================================
-// ENGINE PENGUKUR FREKUENSI NOISE MOTOR INDUSTRI (EMI SPECTRUM)
-// ================================================================
-void updateNoiseFrequencyEngine(unsigned long now) {
-  if (now - lastNoiseWindowMs < 1000) return;
-
-  unsigned long elapsed = now - lastNoiseWindowMs;
-  lastNoiseWindowMs = now;
-
-  unsigned long snapIn  = isrCountIn;
-  unsigned long snapOut = isrCountOut;
-
-  unsigned long diffIn  = (snapIn >= lastSnapIsrIn) ? (snapIn - lastSnapIsrIn) : 0;
-  unsigned long diffOut = (snapOut >= lastSnapIsrOut) ? (snapOut - lastSnapIsrOut) : 0;
-
-  lastSnapIsrIn  = snapIn;
-  lastSnapIsrOut = snapOut;
-
-  currentNoiseFreqIn  = ((float)diffIn * 1000.0f) / (float)elapsed;
-  currentNoiseFreqOut = ((float)diffOut * 1000.0f) / (float)elapsed;
-
-  if (currentNoiseFreqIn > peakNoiseFreqIn)   peakNoiseFreqIn = currentNoiseFreqIn;
-  if (currentNoiseFreqOut > peakNoiseFreqOut) peakNoiseFreqOut = currentNoiseFreqOut;
-
-  float maxFreq = max(currentNoiseFreqIn, currentNoiseFreqOut);
-  if (maxFreq < 1.5f) {
-    currentNoiseDiagnosis = "BERSIH (Normal, Bebas Induksi Motor)";
-  } else if (maxFreq >= 40.0f && maxFreq <= 65.0f) {
-    currentNoiseDiagnosis = "INDUKSI AC 50Hz (Kabel Daya / Grounding Motor)";
-  } else if (maxFreq >= 85.0f && maxFreq <= 130.0f) {
-    currentNoiseDiagnosis = "HARMONISA PENYEARAH 100Hz (Power Supply / DC Motor)";
-  } else if (maxFreq >= 200.0f) {
-    currentNoiseDiagnosis = "SWITCHING INVERTER / VFD MOTOR (PWM High Frequency)";
-  } else {
-    currentNoiseDiagnosis = "INDUKSI TRANSIENT MOTOR (Spark / Getaran)";
-  }
-
-  // Hanya cetak ke Serial Monitor jika status kebisingan berubah (State Change),
-  // agar Serial Monitor tetap bersih dan tidak terbanjiri teks setiap beberapa detik
-  static bool prevNoiseState = false;
-  bool isNoiseState = (maxFreq >= 3.0f);
-  if (isNoiseState != prevNoiseState) {
-    prevNoiseState = isNoiseState;
-    if (isNoiseState) {
-      Serial.printf("\n⚡ [GANGGUAN MOTOR TERDETEKSI] Frekuensi: %.1f Hz | %s (Filter Otomatis Menolak Pulsa Palsu)\n",
-                    maxFreq, currentNoiseDiagnosis.c_str());
-    } else {
-      Serial.println("\n🟢 [JALUR SENSOR BERSIH] Gangguan motor telah reda / hilang (Sinyal Normal).");
-    }
-  }
-}
-
-// Timer non-blocking untuk mematikan lampu flash & reconnect WiFi (tanpa delay)
-unsigned long flashOffTime    = 0;
 unsigned long lastWifiRetryMs = 0;
 
 // ================================================================
-// ANTREAN HTTP ASINKRON (CORE 0) - AGAR LOOP SENSOR TIDAK PERNAH NGE-LAG!
+// ANTREAN HTTP ASINKRON (CORE 0) - AGAR LOOP SENSOR TIDAK PERNAH LAG!
 // ================================================================
 typedef struct {
-  char tipe[16];
-  int val;
-  unsigned long durationMs;
+  char url[256];
+  char label[36];
 } TriggerEventMsg;
 
 QueueHandle_t triggerQueue = NULL;
@@ -234,45 +105,97 @@ void httpWorkerTask(void* pvParameters) {
     if (xQueueReceive(triggerQueue, &msg, portMAX_DELAY) == pdTRUE) {
       if (WiFi.status() == WL_CONNECTED) {
         HTTPClient http;
-        String targetUrl = dashboard_trigger_url + "?type=" + String(msg.tipe) + "&val=" + String(msg.val);
-        if (msg.durationMs > 0) {
-          targetUrl += "&duration_ms=" + String(msg.durationMs);
-        }
-        
-        http.begin(targetUrl);
-        http.setConnectTimeout(800); // Timeout koneksi cepat 800 ms (bukan 5000 ms default)
-        http.setTimeout(1000);       // Timeout baca respons maks 1000 ms
+        http.begin(msg.url);
+        http.setConnectTimeout(1500); // 1.5 detik toleransi koneksi
+        http.setTimeout(2500);        // 2.5 detik toleransi respons server
         http.setReuse(false);
         int httpCode = http.GET();
         
         if (httpCode > 0) {
-          Serial.printf("[WEB-API] Trigger '%s' (val=%d, dur=%lums) berhasil dikirim ke Web Dashboard (HTTP %d)\n",
-                        msg.tipe, msg.val, msg.durationMs, httpCode);
+          Serial.printf("[WEB-API] %s terkirim ke Web Dashboard (HTTP %d)\n", msg.label, httpCode);
         } else {
-          Serial.printf("[WEB-API] Gagal kirim trigger '%s'. Error: %s\n", msg.tipe, http.errorToString(httpCode).c_str());
+          Serial.printf("[WEB-API] %s tertunda. Status: %s\n", msg.label, http.errorToString(httpCode).c_str());
         }
         http.end();
-      } else {
-        Serial.printf("[WEB-API] Trigger '%s' dilewati (WiFi belum terhubung)\n", msg.tipe);
       }
     }
   }
 }
 
-void kirimTriggerKeWeb(String tipe, int val = 1, unsigned long durationMs = 0) {
+void kirimTriggerKeWeb(String tipe, int val = 1) {
   if (triggerQueue == NULL) return;
   TriggerEventMsg msg;
   memset(&msg, 0, sizeof(msg));
-  strncpy(msg.tipe, tipe.c_str(), sizeof(msg.tipe) - 1);
-  msg.val = val;
-  msg.durationMs = durationMs;
-  if (xQueueSend(triggerQueue, &msg, 0) != pdTRUE) {
-    Serial.printf("[WEB-API] Antrean HTTP penuh, trigger '%s' dilewati\n", msg.tipe);
-  }
+  String targetUrl = dashboard_trigger_url + "?type=" + tipe + "&val=" + String(val);
+  strncpy(msg.url, targetUrl.c_str(), sizeof(msg.url) - 1);
+  snprintf(msg.label, sizeof(msg.label), "Trigger '%s'", tipe.c_str());
+  xQueueSend(triggerQueue, &msg, 0);
 }
 
 // ================================================================
-// PENGELOLAAN WEB API LOKAL (REST API)
+// FUNGSI MANAJEMEN STATUS MESIN
+// ================================================================
+void printTotalCounterSummary() {
+  int inBox = hangerInCount - hangerOutCount;
+  if (inBox < 0) inBox = 0;
+
+  Serial.println("\n==================================================");
+  Serial.printf("📊 [TOTAL COUNTER BOX KAMERA (PIN 27 IN & PIN 25 OUT)]\n");
+  Serial.printf("   🟢 TOTAL MASUK BOX  (Pin %d) : %d Hanger\n", PIN_SENS_IN, hangerInCount);
+  Serial.printf("   🔵 TOTAL KELUAR BOX (Pin %d) : %d Hanger\n", PIN_SENS_OUT, hangerOutCount);
+  Serial.printf("   🟡 HANGER DI DALAM BOX       : %d Hanger\n", inBox);
+  Serial.printf("   ⚙️ Status Mesin              : %s\n", isProduksi ? "PRODUKSI (RUNNING)" : "STANDBY (STOP)");
+  Serial.println("==================================================");
+}
+
+void startProduksi(const char* triggerSource) {
+  if (isProduksi) {
+    Serial.printf("ℹ️ [INFO] Mesin sudah dalam status AKTIF (Trigger via %s).\n", triggerSource);
+    return;
+  }
+  isProduksi         = true;
+  hangerInCount      = 0;
+  hangerOutCount     = 0;
+  inletArmed         = true;
+  outletArmed        = true;
+  lastInletTriggerMs = 0;
+  lastOutletTriggerMs= 0;
+  inletClearSinceMs  = 0;
+  outletClearSinceMs = 0;
+
+  if (flashOutputMode == 1) {
+    ledcWrite(PIN_FLASH, flashBrightness);
+  }
+
+  Serial.println("\n==================================================");
+  Serial.printf("🚀 >>> MESIN PRODUKSI DI-START [via %s] <<<\n", triggerSource);
+  Serial.println("🟢 STATUS: AKTIF (ON) - Fotosel Box Siap Hitung!");
+  Serial.println("📊 Counter Direset: TOTAL MASUK = 0 | TOTAL KELUAR = 0 | DALAM BOX = 0");
+  Serial.println("==================================================");
+
+  kirimTriggerKeWeb("btn_on", 1);
+}
+
+void stopProduksi(const char* triggerSource) {
+  if (!isProduksi) {
+    Serial.printf("ℹ️ [INFO] Mesin sudah dalam status STANDBY (Trigger via %s).\n", triggerSource);
+    return;
+  }
+  isProduksi = false;
+
+  ledcWrite(PIN_FLASH, 0); // Matikan penerangan saat standby
+
+  Serial.println("\n==================================================");
+  Serial.printf("🛑 >>> MESIN PRODUKSI DI-STOP [via %s] <<<\n", triggerSource);
+  Serial.println("🔒 STATUS: STANDBY (OFF) - Fotosel Box Dinonaktifkan Sementara.");
+  printTotalCounterSummary();
+  Serial.println("💤 Menunggu tombol START ditekan kembali.\n");
+
+  kirimTriggerKeWeb("btn_off", 0);
+}
+
+// ================================================================
+// WEB SERVER LOCAL ENDPOINTS
 // ================================================================
 void setCORS() {
   server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -280,20 +203,65 @@ void setCORS() {
   server.sendHeader("Access-Control-Allow-Headers", "*");
 }
 
-void handleKabel() {
+void handleOptions() {
   setCORS();
-  if (server.hasArg("tipe") && server.hasArg("val")) {
-    String tipe = server.arg("tipe");
-    String val = server.arg("val");
-    Serial2.print(tipe + ":" + val + "\n");
-    Serial.println("[RS485-TX] Kirim: " + tipe + ":" + val);
-  }
-  server.send(200, "text/plain", "OK");
+  server.send(204);
+}
+
+void handleStatus() {
+  setCORS();
+  int inBox = hangerInCount - hangerOutCount;
+  if (inBox < 0) inBox = 0;
+  String json = "{\"isProduksi\":" + String(isProduksi ? "true" : "false") + 
+                ",\"in\":" + String(hangerInCount) + 
+                ",\"out\":" + String(hangerOutCount) + 
+                ",\"wip\":" + String(inBox) + 
+                ",\"in_pin\":" + String(PIN_SENS_IN) + 
+                ",\"out_pin\":" + String(PIN_SENS_OUT) + 
+                ",\"in_noise_hz\":0.0" + 
+                ",\"out_noise_hz\":0.0" + 
+                ",\"noise_diagnosis\":\"1 Box System (Pin 27 In, Pin 25 Out)\"" + 
+                ",\"flash_mode\":" + String(flashOutputMode) + 
+                ",\"flash_brightness\":" + String(flashBrightness) + "}";
+  server.send(200, "application/json", json);
+}
+
+void handleNoiseMeter() {
+  setCORS();
+  String json = "{\"status\":\"ok\""
+                ",\"in_noise_hz\":0.0"
+                ",\"out_noise_hz\":0.0"
+                ",\"in_peak_hz\":0.0"
+                ",\"out_peak_hz\":0.0"
+                ",\"in_total\":" + String(hangerInCount) + 
+                ",\"out_total\":" + String(hangerOutCount) + 
+                ",\"diagnosis\":\"1 Box System (Pin 27 In, Pin 25 Out Roboflow)\""
+                ",\"is_clean\":true"
+                ",\"recommendation\":\"Sensor NPN langsung terhubung ke ESP32 tanpa optocoupler.\"}";
+  server.send(200, "application/json", json);
+}
+
+void handleResetNoisePeak() {
+  setCORS();
+  server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Reset berhasil\"}");
+}
+
+void handleResetCounter() {
+  setCORS();
+  hangerInCount = 0;
+  hangerOutCount = 0;
+  inletArmed = true;
+  outletArmed = true;
+  lastInletTriggerMs = 0;
+  lastOutletTriggerMs = 0;
+  inletClearSinceMs = 0;
+  outletClearSinceMs = 0;
+  Serial.println("\n🔄 [RESET COUNTER] Counter Masuk & Keluar di-reset ke 0 via Web API.");
+  server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Counter berhasil direset ke 0\"}");
 }
 
 void handleLampu() {
   setCORS();
-  // 1. Ganti mode lampu (?mode=solid / ?mode=strobe / ?mode=off)
   if (server.hasArg("mode")) {
     String mode = server.arg("mode");
     mode.toLowerCase();
@@ -301,21 +269,17 @@ void handleLampu() {
       flashOutputMode = 1;
       if (server.hasArg("val")) flashBrightness = constrain(server.arg("val").toInt(), 0, 255);
       ledcWrite(PIN_FLASH, flashBrightness);
-      Serial.printf("[FLASH] Mode diset ke SOLID (Nyala Terus, Nilai: %d)\n", flashBrightness);
-    } 
-    else if (mode == "strobe" || mode == "2") {
+      Serial.printf("[FLASH] Mode diset ke SOLID (Nilai: %d)\n", flashBrightness);
+    } else if (mode == "strobe" || mode == "2") {
       flashOutputMode = 2;
-      ledcWrite(PIN_FLASH, 0); // Standby mati, hanya flash saat sensor lewat
-      Serial.println("[FLASH] Mode diset ke STROBE (Flash saat ada barang lewat)");
-    } 
-    else if (mode == "off" || mode == "0") {
+      ledcWrite(PIN_FLASH, 0);
+      Serial.println("[FLASH] Mode diset ke STROBE (Flash saat hanger masuk/keluar)");
+    } else if (mode == "off" || mode == "0") {
       flashOutputMode = 0;
       ledcWrite(PIN_FLASH, 0);
-      Serial.println("[FLASH] Lampu Output dimatikan (OFF)");
+      Serial.println("[FLASH] Lampu dimatikan (OFF)");
     }
-  }
-  // 2. Kontrol kecerahan langsung (?val=...)
-  else if (server.hasArg("val")) {
+  } else if (server.hasArg("val")) {
     int val = constrain(server.arg("val").toInt(), 0, 255);
     flashBrightness = val;
     if (val > 0) {
@@ -325,54 +289,19 @@ void handleLampu() {
       flashOutputMode = 0;
       ledcWrite(PIN_FLASH, 0);
     }
-    Serial.printf("[FLASH] Kecerahan diset ke: %d\n", val);
   }
-  
-  String res = "{\"mode\":" + String(flashOutputMode) + ",\"brightness\":" + String(flashBrightness) + "}";
-  server.send(200, "application/json", res);
+  server.send(200, "application/json", "{\"mode\":" + String(flashOutputMode) + ",\"brightness\":" + String(flashBrightness) + "}");
 }
 
-void handleStatus() {
+void handleKabel() {
   setCORS();
-  String json = "{\"isProduksi\":" + String(isProduksi ? "true" : "false") + 
-                ",\"in\":" + String(hangerInCount) + 
-                ",\"out\":" + String(hangerOutCount) + 
-                ",\"in_noise_hz\":" + String(currentNoiseFreqIn, 1) + 
-                ",\"out_noise_hz\":" + String(currentNoiseFreqOut, 1) + 
-                ",\"in_peak_hz\":" + String(peakNoiseFreqIn, 1) + 
-                ",\"out_peak_hz\":" + String(peakNoiseFreqOut, 1) + 
-                ",\"noise_diagnosis\":\"" + currentNoiseDiagnosis + "\"" +
-                ",\"flash_mode\":" + String(flashOutputMode) + 
-                ",\"flash_brightness\":" + String(flashBrightness) + "}";
-  server.send(200, "application/json", json);
-}
-
-void handleNoiseMeter() {
-  setCORS();
-  float maxFreq = max(currentNoiseFreqIn, currentNoiseFreqOut);
-  String json = "{\"status\":\"ok\""
-                ",\"in_noise_hz\":" + String(currentNoiseFreqIn, 1) + 
-                ",\"out_noise_hz\":" + String(currentNoiseFreqOut, 1) + 
-                ",\"in_peak_hz\":" + String(peakNoiseFreqIn, 1) + 
-                ",\"out_peak_hz\":" + String(peakNoiseFreqOut, 1) + 
-                ",\"in_total\":" + String(hangerInCount) + 
-                ",\"out_total\":" + String(hangerOutCount) + 
-                ",\"diagnosis\":\"" + currentNoiseDiagnosis + "\"" +
-                ",\"is_clean\":" + String((maxFreq < 1.5f) ? "true" : "false") + 
-                ",\"recommendation\":\"Jika frekuensi > 50Hz, pasang kapasitor keramik 100nF antara Pin dan GND serta gunakan kabel shielded ber-ground\"}";
-  server.send(200, "application/json", json);
-}
-
-void handleResetNoisePeak() {
-  setCORS();
-  peakNoiseFreqIn  = 0.0;
-  peakNoiseFreqOut = 0.0;
-  server.send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Peak noise reset berhasil\"}");
-}
-
-void handleOptions() {
-  setCORS();
-  server.send(204);
+  if (server.hasArg("tipe") && server.hasArg("val")) {
+    String tipe = server.arg("tipe");
+    String val = server.arg("val");
+    Serial2.print(tipe + ":" + val + "\n");
+    Serial.println("[RS485-TX] " + tipe + ":" + val);
+  }
+  server.send(200, "text/plain", "OK");
 }
 
 void handleStart() {
@@ -393,29 +322,29 @@ void handleStop() {
 void setup() {
   Serial.begin(115200);
   
-  // RS-485 to TTL UART ke ESP32-CAM / Sensor Bus (timeout 10ms agar tidak memblokir loop)
+  // RS-485 UART
   Serial2.begin(115200, SERIAL_8N1, RS485_RX_PIN, RS485_TX_PIN);
   Serial2.setTimeout(10);
 
-  // Pin Tombol Push Button & Sensor
+  // Konfigurasi Pin Digital (Kedua sensor NPN langsung dengan INPUT_PULLUP)
   pinMode(PIN_BTN_ON, INPUT_PULLUP);
   pinMode(PIN_BTN_OFF, INPUT_PULLUP);
-  pinMode(PIN_SENS_IN, SENS_IN_ACTIVE_LOW ? INPUT_PULLUP : INPUT_PULLDOWN);
-  pinMode(PIN_SENS_OUT, SENS_OUT_ACTIVE_LOW ? INPUT_PULLUP : INPUT_PULLDOWN);
+  pinMode(PIN_SENS_IN, INPUT_PULLUP);      // Pin 27: NPN Masuk Box
+  pinMode(PIN_SENS_OUT, INPUT_PULLUP);     // Pin 25: NPN Keluar Box (Konfirmasi Roboflow)
 
-  // Tunggu sejenak agar tegangan pin stabil saat bootup
   delay(100);
   lastBtnOnState  = digitalRead(PIN_BTN_ON);
   lastBtnOffState = digitalRead(PIN_BTN_OFF);
 
+  // Setup Lampu Flash / Penerangan Box PWM Pin 26
   ledcAttach(PIN_FLASH, 5000, 8);
   if (isProduksi && flashOutputMode == 1) {
-    ledcWrite(PIN_FLASH, flashBrightness); // Langsung nyala SOLID konstan jika aktif
-    Serial.printf("[FLASH] Lampu Output Pin 26 aktif SOLID (Kecerahan: %d)\n", flashBrightness);
+    ledcWrite(PIN_FLASH, flashBrightness);
   } else {
-    ledcWrite(PIN_FLASH, 0); // Standby: matikan lampu flash
+    ledcWrite(PIN_FLASH, 0);
   }
 
+  // Koneksi WiFi
   Serial.print("Menghubungkan ke WiFi: ");
   Serial.println(ssid);
   WiFi.mode(WIFI_STA);
@@ -424,59 +353,50 @@ void setup() {
 
   if (USE_STATIC_IP) {
     if (!WiFi.config(devkit_static_ip, devkit_gateway, devkit_subnet, devkit_dns)) {
-      Serial.println("[WIFI] Konfigurasi Static IP Gagal! Menggunakan DHCP router...");
+      Serial.println("[WIFI] Konfigurasi Static IP Gagal! Gunakan DHCP...");
     } else {
-      Serial.print("[WIFI] Mode Static IP Aktif: ");
+      Serial.print("[WIFI] Static IP Aktif: ");
       Serial.println(devkit_static_ip);
     }
   }
 
   WiFi.begin(ssid, password);
   unsigned long wifiStart = millis();
-  while (WiFi.status() != WL_CONNECTED && (millis() - wifiStart < 8000)) { 
-    delay(250); 
+  while (WiFi.status() != WL_CONNECTED && (millis() - wifiStart < 7000)) { 
+    delay(200); 
     Serial.print(".");
   }
   Serial.println();
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("[WIFI] Berhasil terhubung!");
-    // Otomatis sinkronkan IP DevKit ke Dashboard Laragon
     HTTPClient httpSync;
     String setIpUrl = String("http://") + server_ip + "/api/set-devkit-ip?ip=" + WiFi.localIP().toString();
     httpSync.begin(setIpUrl);
-    int syncCode = httpSync.GET();
-    Serial.printf("[DEVKIT-SYNC] Auto-register IP ke Dashboard: %s (Status: %d)\n", setIpUrl.c_str(), syncCode);
+    httpSync.setTimeout(2000);
+    httpSync.GET();
     httpSync.end();
-  } else {
-    Serial.println("[WIFI] Belum terhubung saat boot, lanjutkan sensor & reconnect otomatis di background...");
   }
-  
-  Serial.println("==========================================");
-  Serial.println("  ESP32 DEVKIT (RS-485 + HANGER TRIGGER)  ");
-  Serial.println("==========================================");
-  Serial.print("IP ESP32      : "); Serial.println(WiFi.localIP());
-  Serial.print("Target Server : "); Serial.println(server_ip);
-  Serial.println("==========================================");
 
+  // Setup Task HTTP di Core 0
   triggerQueue = xQueueCreate(16, sizeof(TriggerEventMsg));
   if (triggerQueue != NULL) {
     xTaskCreatePinnedToCore(httpWorkerTask, "HttpWorkerTask", 8192, NULL, 1, NULL, 0);
   }
 
+  // Setup Web Server Routes
   server.on("/kabel", HTTP_GET, handleKabel);
   server.on("/kabel", HTTP_OPTIONS, handleOptions);
-  
   server.on("/lampu", HTTP_GET, handleLampu);
   server.on("/lampu", HTTP_OPTIONS, handleOptions);
-  
   server.on("/status-mesin", HTTP_GET, handleStatus);
   server.on("/status-mesin", HTTP_OPTIONS, handleOptions);
-
   server.on("/noise-meter", HTTP_GET, handleNoiseMeter);
   server.on("/noise-meter", HTTP_OPTIONS, handleOptions);
   server.on("/reset-noise-peak", HTTP_GET, handleResetNoisePeak);
   server.on("/reset-noise-peak", HTTP_OPTIONS, handleOptions);
-
+  server.on("/reset-counter", HTTP_GET, handleResetCounter);
+  server.on("/reset-counter", HTTP_POST, handleResetCounter);
+  server.on("/reset-counter", HTTP_OPTIONS, handleOptions);
   server.on("/start", HTTP_GET, handleStart);
   server.on("/start", HTTP_OPTIONS, handleOptions);
   server.on("/stop", HTTP_GET, handleStop);
@@ -486,10 +406,10 @@ void setup() {
     setCORS(); 
     server.send(200, "text/plain", "OK"); 
     hangerInCount++;
-    int wip = hangerInCount - hangerOutCount;
-    if (wip < 0) wip = 0;
-    Serial.printf("🌐 [WEB TRIGGER IN] TOTAL IN: %d | TOTAL OUT: %d | WIP: %d Hanger\n",
-                  hangerInCount, hangerOutCount, wip);
+    int inBox = hangerInCount - hangerOutCount;
+    if (inBox < 0) inBox = 0;
+    Serial.printf("🌐 [WEB TRIGGER IN - PIN 27] TOTAL MASUK: %d | TOTAL KELUAR: %d | DALAM BOX: %d\n",
+                  hangerInCount, hangerOutCount, inBox);
     kirimTriggerKeWeb("input", hangerInCount);
   });
   
@@ -497,171 +417,44 @@ void setup() {
     setCORS(); 
     server.send(200, "text/plain", "OK"); 
     hangerOutCount++;
-    int wip = hangerInCount - hangerOutCount;
-    if (wip < 0) wip = 0;
-    Serial.printf("🌐 [WEB TRIGGER OUT] TOTAL IN: %d | TOTAL OUT: %d | WIP: %d Hanger\n",
-                  hangerInCount, hangerOutCount, wip);
+    int inBox = hangerInCount - hangerOutCount;
+    if (inBox < 0) inBox = 0;
+    Serial.printf("🌐 [WEB TRIGGER OUT - PIN 25] TOTAL MASUK: %d | TOTAL KELUAR: %d | DALAM BOX: %d\n",
+                  hangerInCount, hangerOutCount, inBox);
     kirimTriggerKeWeb("output", hangerOutCount);
   });
-  
+
   server.begin();
-  delay(200);
-  lastBtnOnState  = digitalRead(PIN_BTN_ON);
-  lastBtnOffState = digitalRead(PIN_BTN_OFF);
 
-  int rawSensIn      = digitalRead(PIN_SENS_IN);
-  int rawSensOut     = digitalRead(PIN_SENS_OUT);
-  bool bootInActive  = isSensorRawActive(PIN_SENS_IN, SENS_IN_ACTIVE_LOW);
-  bool bootOutActive = isSensorRawActive(PIN_SENS_OUT, SENS_OUT_ACTIVE_LOW);
+  // Status awal pin saat boot
+  int raw27 = digitalRead(PIN_SENS_IN);
+  int raw25 = digitalRead(PIN_SENS_OUT);
 
-  sensInEdgeFlag   = false;
-  sensOutEdgeFlag  = false;
-  sensInArmed      = !bootInActive;
-  sensInIdleStart  = 0;
-  sensOutArmed     = !bootOutActive;
-  sensOutIdleStart = 0;
-
-  int interruptModeIn  = SENS_IN_ACTIVE_LOW  ? FALLING : RISING;
-  int interruptModeOut = SENS_OUT_ACTIVE_LOW ? FALLING : RISING;
-  attachInterrupt(digitalPinToInterrupt(PIN_SENS_IN), handleSensInISR, interruptModeIn);
-  attachInterrupt(digitalPinToInterrupt(PIN_SENS_OUT), handleSensOutISR, interruptModeOut);
-
-  Serial.println("------------------------------------------");
-  Serial.printf("[PIN INITIAL STATE]\n");
-  Serial.printf(" - Pin 13 (PB HIJAU ON  - NO) : %s\n", lastBtnOnState == LOW ? "LOW (Tertutup)" : "HIGH (Standby)");
-  Serial.printf(" - Pin 12 (PB MERAH OFF - NC) : %s\n", lastBtnOffState == LOW ? "LOW (Standby)" : "HIGH (Terbuka)");
-  Serial.printf(" - Pin %d (INLET via PC817)   : %s (Raw: %d, Mode: %s, Intr: %s)\n",
-                PIN_SENS_IN, bootInActive ? "AKTIF (Terdeteksi)" : "Standby", rawSensIn,
-                SENS_IN_ACTIVE_LOW ? "Active-LOW" : "Active-HIGH",
-                SENS_IN_ACTIVE_LOW ? "FALLING" : "RISING");
-  Serial.printf(" - Pin %d (OUTLET Kamera)     : %s (Raw: %d, Mode: %s, Intr: %s)\n",
-                PIN_SENS_OUT, bootOutActive ? "AKTIF (Terdeteksi)" : "Standby", rawSensOut,
-                SENS_OUT_ACTIVE_LOW ? "Active-LOW" : "Active-HIGH",
-                SENS_OUT_ACTIVE_LOW ? "FALLING" : "RISING");
-  Serial.printf(" - Anti-Bounce Settle Time    : %lu ms\n", RELEASE_SETTLE_MS);
-  if (bootInActive) {
-    Serial.printf(" [PERINGATAN] Pin %d (PC817) terbaca AKTIF saat standby (Raw: %d)!\n", PIN_SENS_IN, rawSensIn);
-    Serial.printf("             Jika saat standby lampu sensor MATI, ubah SENS_IN_ACTIVE_LOW = %s di baris 44.\n",
-                  SENS_IN_ACTIVE_LOW ? "false" : "true");
-  }
-  if (bootOutActive) {
-    Serial.printf(" [PERINGATAN] Pin %d terbaca AKTIF saat standby (Raw: %d)!\n", PIN_SENS_OUT, rawSensOut);
-    Serial.printf("             Jika saat standby lampu sensor MATI, ubah SENS_OUT_ACTIVE_LOW = %s di baris 48.\n",
-                  SENS_OUT_ACTIVE_LOW ? "false" : "true");
-  }
-  Serial.printf(" - Status Mesin Saat Boot     : %s\n", isProduksi ? "AKTIF (ON)" : "STANDBY (OFF)");
-  Serial.println("------------------------------------------");
-  Serial.println(">> ESP32 SIAP! (MENUNGGU PERINTAH START) <<");
-  Serial.println("💤 Status: STANDBY (Fotosel Dinonaktifkan, Data Dicuekin)");
-  Serial.println("💡 Cara Mulai Produksi:");
-  Serial.println("   - Tekan Push Button HIJAU (Pin 13), ATAU");
-  Serial.println("   - Ketik 'start' di Serial Monitor lalu tekan Enter, ATAU");
-  Serial.println("   - Klik tombol 'Start' di Web Dashboard.\n");
-}
-
-void printTotalCounterSummary() {
-  int wip = hangerInCount - hangerOutCount;
-  if (wip < 0) wip = 0;
-
-  Serial.println("\n==================================================");
-  Serial.printf("📊 [TOTAL COUNTER PHOTOSENSOR]\n");
-  Serial.printf("   🟢 TOTAL INPUT  (Pin %d) : %d Hanger\n", PIN_SENS_IN, hangerInCount);
-  Serial.printf("   🔵 TOTAL OUTPUT (Pin %d) : %d Hanger\n", PIN_SENS_OUT, hangerOutCount);
-  Serial.printf("   🟡 WIP DI DALAM LINE     : %d Hanger\n", wip);
-  Serial.printf("   ⚙️ Status Mesin          : %s\n", isProduksi ? "PRODUKSI (RUNNING)" : "STANDBY (STOP)");
   Serial.println("==================================================");
-}
-
-void startProduksi(const char* triggerSource) {
-  if (isProduksi) {
-    Serial.printf("ℹ️ [INFO] Mesin sudah dalam status AKTIF (Trigger via %s).\n", triggerSource);
-    return;
-  }
-  isProduksi       = true;
-  hangerInCount    = 0;
-  hangerOutCount   = 0;
-  sensInEdgeFlag   = false;
-  sensOutEdgeFlag  = false;
-  sensInArmed      = true;
-  sensOutArmed     = true;
-  sensInIdleStart  = 0;
-  sensOutIdleStart = 0;
-
-  if (flashOutputMode == 1) {
-    ledcWrite(PIN_FLASH, flashBrightness);
-  }
-
-  Serial.println("\n==================================================");
-  Serial.printf("🚀 >>> MESIN PRODUKSI DI-START [via %s] <<<\n", triggerSource);
-  Serial.println("🟢 STATUS: AKTIF (ON) - Fotosel Kini MULAI MENGAMBIL DATA!");
-  Serial.println("📊 Counter Direset: TOTAL INPUT = 0 | TOTAL OUTPUT = 0 | WIP = 0");
+  Serial.println(" ESP32 DEVKIT - 1 BOX SYSTEM (PIN 27 IN, PIN 25 OUT)");
   Serial.println("==================================================");
-
-  kirimTriggerKeWeb("btn_on", 1);
+  Serial.printf(" - Pin 27 (Sensor Masuk Box) : %s (Raw: %d)\n",
+                raw27 == LOW ? "0V / LOW (Objek Ada)" : "3.3V / HIGH (Standby)", raw27);
+  Serial.printf(" - Pin 25 (Sensor Keluar Box): %s (Raw: %d)\n",
+                raw25 == LOW ? "0V / LOW (Objek Ada)" : "3.3V / HIGH (Standby)", raw25);
+  Serial.printf(" - Mode Produksi             : %s\n", isProduksi ? "AKTIF (SIAP HITUNG)" : "STANDBY (OFF)");
+  Serial.println("==================================================\n");
 }
 
-void stopProduksi(const char* triggerSource) {
-  if (!isProduksi) {
-    Serial.printf("ℹ️ [INFO] Mesin sudah dalam status STANDBY (Trigger via %s).\n", triggerSource);
-    return;
-  }
-  isProduksi = false;
-
-  ledcWrite(PIN_FLASH, 0); // Matikan flash saat standby
-
-  Serial.println("\n==================================================");
-  Serial.printf("🛑 >>> MESIN PRODUKSI DI-STOP [via %s] <<<\n", triggerSource);
-  Serial.println("🔒 STATUS: STANDBY (OFF) - Fotosel DINONAKTIFKAN (DATA DICUEKIN)!");
-  printTotalCounterSummary();
-  Serial.println("💤 Serial Monitor Diam & Standby Sampai START Ditekan Kembali.\n");
-
-  kirimTriggerKeWeb("btn_off", 0);
-}
-
-void handleRs485Line(String dataRs485, unsigned long now) {
-  dataRs485.trim();
-  if (dataRs485.length() == 0) return;
-
-  if (!isProduksi) {
-    // Mesin belum distart, abaikan data sensor RS485
-    return;
-  }
-
-  Serial.println("[RS485-RX] Diterima: " + dataRs485);
-
-  if (dataRs485.indexOf("IN") >= 0 || dataRs485 == "1") {
-    hangerInCount++;
-    int wip = hangerInCount - hangerOutCount;
-    if (wip < 0) wip = 0;
-    Serial.printf("📊 [RS485 COUNTER IN] TOTAL IN: %d | TOTAL OUT: %d | WIP: %d Hanger\n",
-                  hangerInCount, hangerOutCount, wip);
-    kirimTriggerKeWeb("input", hangerInCount);
-  } else if (dataRs485.indexOf("OUT") >= 0 || dataRs485 == "2") {
-    hangerOutCount++;
-    int wip = hangerInCount - hangerOutCount;
-    if (wip < 0) wip = 0;
-    Serial.printf("📊 [RS485 COUNTER OUT] TOTAL IN: %d | TOTAL OUT: %d | WIP: %d Hanger\n",
-                  hangerInCount, hangerOutCount, wip);
-    if (flashOutputMode == 2) {
-      ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
-      flashOffTime = now + 150; 
-    }
-    kirimTriggerKeWeb("output", hangerOutCount);
-  }
-}
-
+// ================================================================
+// LOOP UTAMA (CORE 1) - SUPER CEPAT & RESPONS 0 MS
+// ================================================================
 void loop() {
   server.handleClient();
   unsigned long now = millis();
 
-  // Engine Pengukur Frekuensi Noise Motor Industri (EMI Detector)
-  updateNoiseFrequencyEngine(now);
-
-  if (WiFi.status() != WL_CONNECTED && (now - lastWifiRetryMs >= 10000)) {
+  // Reconnect WiFi berkala jika terputus
+  if (WiFi.status() != WL_CONNECTED && (now - lastWifiRetryMs >= 15000)) {
     lastWifiRetryMs = now;
     WiFi.reconnect();
   }
 
+  // Matikan lampu flash strobe setelah durasi selesai
   if (flashOffTime > 0 && (long)(now - flashOffTime) >= 0) {
     ledcWrite(PIN_FLASH, 0);
     flashOffTime = 0;
@@ -681,7 +474,7 @@ void loop() {
   } 
   lastBtnOffState = currentBtnOffState;
 
-  // 3. MONITOR PERINTAH SERIAL MONITOR (start / stop / s)
+  // 3. MONITOR PERINTAH SERIAL MONITOR (start, stop, s, test)
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
@@ -692,6 +485,16 @@ void loop() {
       stopProduksi("SERIAL MONITOR");
     } else if (cmd == "s" || cmd == "status") {
       printTotalCounterSummary();
+    } else if (cmd == "test" || cmd == "raw" || cmd == "pin") {
+      Serial.println("--------------------------------------------------");
+      Serial.printf("🔍 [BACA TEGANGAN SENSOR BOX REAL-TIME]\n");
+      Serial.printf(" - Pin 27 (Sensor Masuk Box) : %s | Armed: %s\n",
+                    digitalRead(PIN_SENS_IN) == LOW ? "0V (LOW - ADA OBJEK)" : "3.3V (HIGH - KOSONG)",
+                    inletArmed ? "SIAP" : "TERKUNCI");
+      Serial.printf(" - Pin 25 (Sensor Keluar Box): %s | Armed: %s\n",
+                    digitalRead(PIN_SENS_OUT) == LOW ? "0V (LOW - ADA OBJEK)" : "3.3V (HIGH - KOSONG)",
+                    outletArmed ? "SIAP" : "TERKUNCI");
+      Serial.println("--------------------------------------------------");
     }
   }
 
@@ -700,75 +503,150 @@ void loop() {
   while (Serial2.available()) {
     char c = (char)Serial2.read();
     if (c == '\n' || c == '\r') {
-      handleRs485Line(rs485Buffer, now);
+      rs485Buffer.trim();
+      if (rs485Buffer.length() > 0 && isProduksi) {
+        if (rs485Buffer.indexOf("IN") >= 0 || rs485Buffer == "1") {
+          hangerInCount++;
+          int inBox = hangerInCount - hangerOutCount;
+          if (inBox < 0) inBox = 0;
+          Serial.printf("📊 [RS485 IN] TOTAL MASUK: %d | TOTAL KELUAR: %d | DALAM BOX: %d\n",
+                        hangerInCount, hangerOutCount, inBox);
+          kirimTriggerKeWeb("input", hangerInCount);
+        } else if (rs485Buffer.indexOf("OUT") >= 0 || rs485Buffer == "2") {
+          hangerOutCount++;
+          int inBox = hangerInCount - hangerOutCount;
+          if (inBox < 0) inBox = 0;
+          Serial.printf("📊 [RS485 OUT] TOTAL MASUK: %d | TOTAL KELUAR: %d | DALAM BOX: %d\n",
+                        hangerInCount, hangerOutCount, inBox);
+          kirimTriggerKeWeb("output", hangerOutCount);
+        }
+      }
       rs485Buffer = "";
     } else if (rs485Buffer.length() < 64) {
       rs485Buffer += c;
     }
   }
 
-  // ================================================================
-  // 5. SIGNAL HEARTBEAT KE WEB SERVER
-  // ================================================================
-  static unsigned long lastWebHeartbeatMs = 0;
+  // 5. HEARTBEAT BERKALA KE DASHBOARD (Setiap 5 detik saat aktif)
+  static unsigned long lastHeartbeatMs = 0;
+  if (now - lastHeartbeatMs >= (isProduksi ? 5000 : 15000)) {
+    lastHeartbeatMs = now;
+    kirimTriggerKeWeb("heartbeat", isProduksi ? 1 : 0);
+  }
 
-  // JIKA MESIN BELUM DI-START: CUEKIN SEMUA SENSOR & JANGAN TAMPILKAN APA-APA!
+  // JIKA MESIN SEDANG STANDBY (STOP): Cuekin sensor fisik
   if (!isProduksi) {
-    if (now - lastWebHeartbeatMs >= 10000) {
-      lastWebHeartbeatMs = now;
-      kirimTriggerKeWeb("heartbeat", 0);
-    }
-    sensInEdgeFlag  = false;
-    sensOutEdgeFlag = false;
-    return; // KELUAR DARI loop()! Sensor fotosel dicuekin total!
-  }
-
-  // JIKA MESIN AKTIF PRODUKSI: Kirim sinyal heartbeat berkala setiap 3 detik
-  // Agar lampu indikator web server tahu sinyal ESP32 tetap tersambung & aktif
-  if (now - lastWebHeartbeatMs >= 3000) {
-    lastWebHeartbeatMs = now;
-    kirimTriggerKeWeb("heartbeat", 1);
+    inletArmed  = true;
+    outletArmed = true;
+    return;
   }
 
   // ================================================================
-  // JIKA SUDAH DI-START: PROSES SENSOR & TAMPILKAN DATA DI SERIAL MONITOR
+  // DETEKSI SENSOR 1: PIN 27 (HANGER MASUK KE DALAM BOX)
   // ================================================================
-  if (checkSensorTrigger(PIN_SENS_IN, SENS_IN_ACTIVE_LOW, sensInEdgeFlag, sensInArmed, sensInIdleStart, now)) {
-    hangerInCount++;
-    int wip = hangerInCount - hangerOutCount;
-    if (wip < 0) wip = 0;
-    Serial.println("\n--------------------------------------------------");
-    Serial.printf("🟢 [PHOTOSENSOR INLET - PIN %d] Hanger Masuk!\n", PIN_SENS_IN);
-    Serial.printf("   📊 HASIL AKUMULASI -> TOTAL INPUT: %d | TOTAL OUTPUT: %d | WIP: %d Hanger\n",
-                  hangerInCount, hangerOutCount, wip);
-    Serial.println("--------------------------------------------------");
-    kirimTriggerKeWeb("input", hangerInCount);
-  }
+  bool inIsActive = (digitalRead(PIN_SENS_IN) == SENSOR_DETECT);
 
-  if (checkSensorTrigger(PIN_SENS_OUT, SENS_OUT_ACTIVE_LOW, sensOutEdgeFlag, sensOutArmed, sensOutIdleStart, now)) {
-    hangerOutCount++;
-    int wip = hangerInCount - hangerOutCount;
-    if (wip < 0) wip = 0;
-    Serial.println("\n--------------------------------------------------");
-    Serial.printf("🔵 [PHOTOSENSOR OUTLET - PIN %d] Hanger Tiba di Kamera!\n", PIN_SENS_OUT);
-    Serial.printf("   📊 HASIL AKUMULASI -> TOTAL INPUT: %d | TOTAL OUTPUT: %d | WIP: %d Hanger\n",
-                  hangerInCount, hangerOutCount, wip);
-    Serial.println("--------------------------------------------------");
-    if (flashOutputMode == 2) {
-      ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
-      flashOffTime = now + 200;
+  if (inIsActive) {
+    inletClearSinceMs = 0; // Sensor sedang terhalang, reset timer bersih
+
+    // Syarat memicu:
+    // 1. Gerbang sedang ARMED (siap)
+    // 2. Sudah melewati masa LOCKOUT sejak trigger terakhir (mencegah double trigger)
+    if (inletArmed && (now - lastInletTriggerMs >= LOCKOUT_INLET_MS)) {
+      inletArmed = false;       // Kunci gerbang rapat!
+      lastInletTriggerMs = now; // Catat waktu trigger awal
+      hangerInCount++;
+      
+      int inBox = hangerInCount - hangerOutCount;
+      if (inBox < 0) inBox = 0;
+
+      Serial.println("\n--------------------------------------------------");
+      Serial.printf("🟢 [HANGER MASUK BOX] Terdeteksi di Pin %d (Tegangan: 0V / LOW)\n", PIN_SENS_IN);
+      Serial.printf("   📊 STATUS -> TOTAL MASUK BOX: %d | TOTAL KELUAR: %d | DALAM BOX: %d Hanger\n",
+                    hangerInCount, hangerOutCount, inBox);
+      Serial.printf("   🔒 Anti-Double Trigger: Sensor Pin %d DIKUNCI selama %lu ms!\n", PIN_SENS_IN, LOCKOUT_INLET_MS);
+      Serial.println("--------------------------------------------------");
+
+      // Jika mode strobe, nyalakan flash saat hanger masuk
+      if (flashOutputMode == 2) {
+        ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
+        flashOffTime = now + 250; 
+      }
+
+      kirimTriggerKeWeb("input", hangerInCount);
     }
-    kirimTriggerKeWeb("output", hangerOutCount);
+  } else {
+    // Sinyal kembali HIGH (3.3V / Standby kosong)
+    if (!inletArmed) {
+      // 1. Pastikan masa lockout telah berlalu
+      if (now - lastInletTriggerMs >= LOCKOUT_INLET_MS) {
+        // 2. Pastikan sensor benar-benar bersih kontinu selama RELEASE_INLET_MS
+        if (inletClearSinceMs == 0) {
+          inletClearSinceMs = now;
+        } else if (now - inletClearSinceMs >= RELEASE_INLET_MS) {
+          inletArmed = true;        // Buka kunci! Siap menerima hanger berikutnya
+          inletClearSinceMs = 0;
+        }
+      }
+    }
   }
 
-  // Heartbeat berkala santai (setiap 30 detik) HANYA saat mesin AKTIF berproduksi
-  static unsigned long lastPeriodicStatusMs = 0;
-  if (now - lastPeriodicStatusMs >= 30000) {
-    lastPeriodicStatusMs = now;
-    int wip = hangerInCount - hangerOutCount;
-    if (wip < 0) wip = 0;
+  // ================================================================
+  // DETEKSI SENSOR 2: PIN 25 (HANGER KELUAR BOX -> KONFIRMASI ROBOFLOW)
+  // ================================================================
+  bool outIsActive = (digitalRead(PIN_SENS_OUT) == SENSOR_DETECT);
 
-    Serial.printf("⏱️ [PRODUKSI AKTIF 30s] TOTAL INPUT: %d | TOTAL OUTPUT: %d | WIP: %d Hanger\n",
-                  hangerInCount, hangerOutCount, wip);
+  if (outIsActive) {
+    outletClearSinceMs = 0; // Sensor sedang terhalang, reset timer bersih
+
+    // Syarat memicu:
+    // 1. Gerbang sedang ARMED (siap)
+    // 2. Sudah melewati masa LOCKOUT sejak trigger terakhir (mencegah double trigger)
+    if (outletArmed && (now - lastOutletTriggerMs >= LOCKOUT_OUTLET_MS)) {
+      outletArmed = false;       // Kunci gerbang rapat!
+      lastOutletTriggerMs = now; // Catat waktu trigger awal
+      hangerOutCount++;
+
+      int inBox = hangerInCount - hangerOutCount;
+      if (inBox < 0) inBox = 0;
+
+      Serial.println("\n--------------------------------------------------");
+      Serial.printf("🔵 [HANGER KELUAR BOX] Terdeteksi di Pin %d (Tegangan: 0V / LOW)\n", PIN_SENS_OUT);
+      Serial.println("   📸 Web Dashboard mengeksekusi Shutter AI & konfirmasi jumlah PCS via Roboflow!");
+      Serial.printf("   📊 STATUS -> TOTAL MASUK BOX: %d | TOTAL KELUAR: %d | DALAM BOX: %d Hanger\n",
+                    hangerInCount, hangerOutCount, inBox);
+      Serial.printf("   🔒 Anti-Double Trigger: Sensor Pin %d DIKUNCI selama %lu ms!\n", PIN_SENS_OUT, LOCKOUT_OUTLET_MS);
+      Serial.println("--------------------------------------------------");
+
+      // Jika mode strobe, nyalakan flash saat hanger keluar
+      if (flashOutputMode == 2) {
+        ledcWrite(PIN_FLASH, flashBrightness > 0 ? flashBrightness : 220);
+        flashOffTime = now + 200; 
+      }
+
+      kirimTriggerKeWeb("output", hangerOutCount);
+    }
+  } else {
+    // Sinyal kembali HIGH (3.3V / Standby kosong)
+    if (!outletArmed) {
+      if (now - lastOutletTriggerMs >= LOCKOUT_OUTLET_MS) {
+        if (outletClearSinceMs == 0) {
+          outletClearSinceMs = now;
+        } else if (now - outletClearSinceMs >= RELEASE_OUTLET_MS) {
+          outletArmed = true;        // Buka kunci! Siap menerima hanger berikutnya
+          outletClearSinceMs = 0;
+        }
+      }
+    }
+  }
+
+  // Ringkasan status berkala santai (setiap 30 detik) saat aktif produksi
+  static unsigned long lastSummaryMs = 0;
+  if (now - lastSummaryMs >= 30000) {
+    lastSummaryMs = now;
+    int inBox = hangerInCount - hangerOutCount;
+    if (inBox < 0) inBox = 0;
+    Serial.printf("⏱️ [PRODUKSI AKTIF 30s] MASUK BOX: %d | KELUAR BOX: %d | DALAM BOX: %d Hanger\n",
+                  hangerInCount, hangerOutCount, inBox);
   }
 }

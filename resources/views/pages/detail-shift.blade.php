@@ -4,10 +4,22 @@
             &larr; Kembali
         </button>
 
-        <div class="ds-nav-shift" style="margin-bottom:0;">
-            <a href="#" id="ds-link-prev" onclick="return false;">&larr; Shift</a>
-            <span class="ds-nav-divider">|</span>
-            <a href="#" id="ds-link-next" onclick="return false;">Shift &rarr;</a>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <!-- Badge Operator PIC & Shift Bertugas -->
+            <div style="background:#eef2ff; border:1px solid #c7d2fe; border-radius:8px; padding:6px 12px; font-size:12.5px; color:#3730a3; display:inline-flex; align-items:center; gap:8px;">
+                <span>👤 PIC:</span>
+                <strong id="ds-active-operator-badge">Mukhamad Nawwaf</strong>
+                <span style="color:#6366f1;">•</span>
+                <span id="ds-active-shift-badge">Shift 1 (Pagi)</span>
+                <span style="color:#6366f1;">•</span>
+                <span id="ds-active-mp-badge" style="color:#166534; font-weight:700;">6 MP</span>
+            </div>
+
+            <div class="ds-nav-shift" style="margin-bottom:0;">
+                <a href="#" id="ds-link-prev" onclick="return false;">&larr; Shift</a>
+                <span class="ds-nav-divider">|</span>
+                <a href="#" id="ds-link-next" onclick="return false;">Shift &rarr;</a>
+            </div>
         </div>
     </div>
 
@@ -46,24 +58,24 @@
 
     <div class="ds-summary-grid" id="ds-summary-grid">
         <div class="ds-summary-card">
-            <div class="ds-label">Input</div>
-            <div class="ds-val" id="ds-val-input">-</div>
-            <div class="ds-unit">pcs masuk</div>
+            <div class="ds-label">Total Barang Masuk (IN)</div>
+            <div class="ds-val" id="ds-val-input" style="color:#1e3a8a;">-</div>
+            <div class="ds-unit">pcs masuk line</div>
         </div>
         <div class="ds-summary-card">
-            <div class="ds-label">Output</div>
-            <div class="ds-val" id="ds-val-output">-</div>
-            <div class="ds-unit">pcs keluar</div>
+            <div class="ds-label">Output Selesai (OK)</div>
+            <div class="ds-val" id="ds-val-output" style="color:#059669;">-</div>
+            <div class="ds-unit">Finished Good (pcs)</div>
         </div>
-        <div class="ds-summary-card">
-            <div class="ds-label">NG / Cacat</div>
-            <div class="ds-val" id="ds-val-ng">-</div>
-            <div class="ds-unit">pcs</div>
+        <div class="ds-summary-card" style="border-left:3px solid #ef4444;">
+            <div class="ds-label" style="color:#991b1b;">Part Cacat (NG)</div>
+            <div class="ds-val" id="ds-val-ng" style="color:#dc2626;">-</div>
+            <div class="ds-unit" id="ds-ng-subtext">pcs reject</div>
         </div>
-        <div class="ds-summary-card">
-            <div class="ds-label">Yield</div>
-            <div class="ds-val" id="ds-val-yield">-</div>
-            <div class="ds-unit">output / input</div>
+        <div class="ds-summary-card highlight">
+            <div class="ds-label" style="color:#0284c7;">Yield Produksi</div>
+            <div class="ds-val" id="ds-val-yield" style="color:#0369a1;">-</div>
+            <div class="ds-unit">(Output OK ÷ Masuk)</div>
         </div>
         <div class="ds-summary-card ds-eff-card" id="ds-eff-card">
             <div class="ds-label">EFF Shift Ini</div>
