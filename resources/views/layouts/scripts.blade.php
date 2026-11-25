@@ -1915,13 +1915,10 @@
         let chartProduksiTipeAktif = null; // bentuk chart yang lagi aktif, buat tahu perlu recreate atau cukup update data
         let chartProduksiLabelsAktif = []; // dipakai callback tooltip scatter biar selalu baca label terbaru
 
-        // ===== 2 CHART PERFORMANCE: Loss Time & Product Time =====
-        // Sumbernya per SESI (dari riwayat_performance lewat api/grafik_performance.php),
-        // bukan per jam seperti chart Produksi -- jadi state-nya dipisah sendiri-sendiri.
-        // Bentuk (bar/line/area/scatter) tetap ikut dropdown "chart-type-select" yang sama
-        // dengan chart Produksi, supaya seragam.
-        const stateLossTime    = { chart: null, tipe: null };
-        const stateProductTime = { chart: null, tipe: null };
+        // ===== 2 SUB-CHART ANALITIK: Komposisi Defect & Efisiensi Lini =====
+        const stateDefectBreakdown = { chart: null, tipe: null };
+        const stateLossTime        = stateDefectBreakdown; // alias kompatibilitas
+        const stateProductTime     = { chart: null, tipe: null };
         let labelSesiPerformanceAktif = []; // label sesi terbaru, dipakai callback tooltip scatter
 
         // Dipanggil dari auto-refresh/navigasi untuk refresh Grafik Produksi
@@ -1932,6 +1929,35 @@
         function simpanBentukGrafik(tipe) {
             localStorage.setItem('chartType', tipe);
             updateChartAktif();
+        }
+
+        function toggleOverlayYield() {
+            const current = localStorage.getItem('showYieldOverlay') === 'true';
+            const next = !current;
+            localStorage.setItem('showYieldOverlay', next ? 'true' : 'false');
+            updateToggleYieldButton();
+            updateChartAktif();
+        }
+
+        function updateToggleYieldButton() {
+            const btn = document.getElementById('btn-toggle-yield-overlay');
+            const txt = document.getElementById('text-toggle-yield');
+            const ico = document.getElementById('icon-toggle-yield');
+            if (!btn || !txt) return;
+            const isShow = localStorage.getItem('showYieldOverlay') === 'true';
+            if (isShow) {
+                btn.style.background = '#fefce8';
+                btn.style.borderColor = '#fde047';
+                btn.style.color = '#854d0e';
+                txt.textContent = 'Garis % Yield: ON';
+                if (ico) ico.textContent = '📈';
+            } else {
+                btn.style.background = '#f8fafc';
+                btn.style.borderColor = '#cbd5e1';
+                btn.style.color = '#64748b';
+                txt.textContent = '+ Garis % Yield';
+                if (ico) ico.textContent = '📊';
+            }
         }
 
         // ===== SHIFT SAAT INI (Pagi/Sore/Malam) =====
@@ -2060,63 +2086,58 @@
         // Dipanggil saat dropdown "Per Jam / Per Hari / ..." diganti.
         // Tampilkan kontrol input yang sesuai dan refresh chart.
         function ubahModePeriode() {
-            const mode = document.getElementById('periode-mode-select').value;
+            const modeSelect = document.getElementById('periode-mode-select');
+            const mode = modeSelect ? modeSelect.value : 'perjam';
 
             // Sembunyikan semua wrapper kontrol dulu
             const wrapTgl = document.getElementById('wrapper-tanggal-perjam'); if (wrapTgl) wrapTgl.style.display = 'none';
-            document.getElementById('wrapper-minggu').style.display           = 'none';
-            document.getElementById('wrapper-bulan').style.display            = 'none';
-            document.getElementById('wrapper-tahun').style.display            = 'none';
+            const wrapMgg = document.getElementById('wrapper-minggu'); if (wrapMgg) wrapMgg.style.display = 'none';
+            const wrapBln = document.getElementById('wrapper-bulan'); if (wrapBln) wrapBln.style.display = 'none';
+            const wrapThn = document.getElementById('wrapper-tahun'); if (wrapThn) wrapThn.style.display = 'none';
 
             // Tampilkan yang relevan
-            if (mode === 'perjam' || mode === 'perhari') document.getElementById('wrapper-tanggal-perjam').style.display = '';
-            if (mode === 'perminggu') document.getElementById('wrapper-minggu').style.display = '';
-            if (mode === 'perbulan')  document.getElementById('wrapper-bulan').style.display  = '';
-            if (mode === 'pertahun' || mode === '5tahun') document.getElementById('wrapper-tahun').style.display = '';
+            if (mode === 'perjam') {
+                if (wrapTgl) wrapTgl.style.display = '';
+            } else if (mode === 'perhari' || mode === 'perbulan') {
+                if (wrapBln) wrapBln.style.display = '';
+            } else if (mode === 'perminggu') {
+                if (wrapMgg) wrapMgg.style.display = '';
+            } else if (mode === 'pertahun' || mode === '5tahun') {
+                if (wrapThn) wrapThn.style.display = 'inline-flex';
+            }
 
             // Reset drill-down bulan saat keluar dari pertahun
             if (mode !== 'pertahun') {
-                document.getElementById('filter-bulan-highlight').value = '';
+                const elDrill = document.getElementById('filter-bulan-highlight');
+                if (elDrill) elDrill.value = '';
                 bulanTerpilihDrilldown = null;
             }
 
             const deskripsiPerjam = {
-                'deskripsi-chart-ng-product': 'Rasio NG (%) dan jumlah Product/Output (pcs) per jam pada tanggal terpilih.',
-                'deskripsi-chart-loss-time': 'Total durasi stop kategori Loss (menit) per jam pada tanggal terpilih.',
-                'deskripsi-chart-product-time': '(D) Actual Cycle Time — waktu rata-rata menghasilkan 1 pcs per jam.',
-                'deskripsi-chart-machine-rate': '(K) Operation Time Ratio — rasio waktu mesin beroperasi per jam.'
+                'deskripsi-chart-defect': 'Proporsi dan sebaran jenis cacat pengecatan (Cat Bintik, Scratch, Cat Meler, dll.) pada tanggal terpilih.',
+                'deskripsi-chart-efficiency': 'Pencapaian % Efisiensi Produksi (EFF) tiap sesi pada tanggal terpilih.'
             };
             const deskripsiPerhari = {
-                'deskripsi-chart-ng-product': 'Rasio NG (%) dan jumlah Product/Output (pcs) per hari pada bulan terpilih.',
-                'deskripsi-chart-loss-time': 'Total durasi stop kategori Loss (menit) per hari pada bulan terpilih.',
-                'deskripsi-chart-product-time': '(D) Actual Cycle Time — waktu rata-rata menghasilkan 1 pcs per hari.',
-                'deskripsi-chart-machine-rate': '(K) Operation Time Ratio — rasio waktu mesin beroperasi per hari.'
+                'deskripsi-chart-defect': 'Proporsi dan sebaran jenis cacat pengecatan tiap hari pada bulan terpilih.',
+                'deskripsi-chart-efficiency': 'Rata-rata % Efisiensi Produksi (EFF) tiap hari pada bulan terpilih.'
             };
             const deskripsiPerminggu = {
-                'deskripsi-chart-ng-product': 'Rasio NG (%) dan jumlah Product/Output (pcs) per hari dalam minggu terpilih.',
-                'deskripsi-chart-loss-time': 'Total durasi stop kategori Loss (menit) per hari dalam minggu terpilih.',
-                'deskripsi-chart-product-time': '(D) Actual Cycle Time — waktu rata-rata menghasilkan 1 pcs per hari.',
-                'deskripsi-chart-machine-rate': '(K) Operation Time Ratio — rasio waktu mesin beroperasi per hari.'
+                'deskripsi-chart-defect': 'Proporsi dan sebaran jenis cacat pengecatan dalam minggu terpilih.',
+                'deskripsi-chart-efficiency': 'Rata-rata % Efisiensi Produksi (EFF) per hari dalam minggu terpilih.'
             };
             const deskripsiPerbulan = {
-                'deskripsi-chart-ng-product': 'Rata-rata Rasio NG (%) dan total Product/Output (pcs) per bulan untuk tahun terpilih.',
-                'deskripsi-chart-loss-time': 'Total durasi stop kategori Loss (menit) per bulan untuk tahun terpilih.',
-                'deskripsi-chart-product-time': '(D) Actual Cycle Time — rata-rata waktu menghasilkan 1 pcs per bulan.',
-                'deskripsi-chart-machine-rate': '(K) Operation Time Ratio — rata-rata rasio waktu mesin beroperasi per bulan.'
+                'deskripsi-chart-defect': 'Proporsi dan sebaran jenis cacat pengecatan pada bulan terpilih.',
+                'deskripsi-chart-efficiency': 'Rata-rata % Efisiensi Produksi (EFF) harian pada bulan terpilih.'
             };
             const deskripsiPertahun = {
-                'deskripsi-chart-ng-product': 'Rata-rata Rasio NG (%) dan total Product/Output (pcs) per tahun.',
-                'deskripsi-chart-loss-time': 'Total durasi stop kategori Loss (menit) per tahun.',
-                'deskripsi-chart-product-time': '(D) Actual Cycle Time — rata-rata waktu menghasilkan 1 pcs per tahun.',
-                'deskripsi-chart-machine-rate': '(K) Operation Time Ratio — rata-rata rasio waktu mesin beroperasi per tahun.'
+                'deskripsi-chart-defect': 'Proporsi dan sebaran jenis cacat pengecatan per bulan untuk tahun terpilih.',
+                'deskripsi-chart-efficiency': 'Rata-rata % Efisiensi Produksi (EFF) per bulan untuk tahun terpilih.'
             };
             const deskripsi5Tahun = {
-                'deskripsi-chart-ng-product': 'Rata-rata Rasio NG (%) dan total Product/Output (pcs) per bulan, 5 tahun terakhir.',
-                'deskripsi-chart-loss-time': 'Total durasi stop kategori Loss (menit) per bulan, 5 tahun terakhir.',
-                'deskripsi-chart-product-time': '(D) Actual Cycle Time — rata-rata waktu menghasilkan 1 pcs per bulan, 5 tahun terakhir.',
-                'deskripsi-chart-machine-rate': '(K) Operation Time Ratio — rata-rata rasio waktu mesin beroperasi per bulan, 5 tahun terakhir.'
+                'deskripsi-chart-defect': 'Proporsi dan sebaran jenis cacat pengecatan, 5 tahun terakhir.',
+                'deskripsi-chart-efficiency': 'Rata-rata % Efisiensi Produksi (EFF) per tahun, 5 tahun terakhir.'
             };
-        const peta = { perjam: deskripsiPerjam, perhari: deskripsiPerhari, perminggu: deskripsiPerminggu,
+            const peta = { perjam: deskripsiPerjam, perhari: deskripsiPerhari, perminggu: deskripsiPerminggu,
                            perbulan: deskripsiPerbulan, pertahun: deskripsiPertahun, '5tahun': deskripsi5Tahun };
             const sumber = peta[mode] || deskripsiPerjam;
             for (const id in sumber) {
@@ -2125,6 +2146,134 @@
             }
 
             updateChart();
+        }
+
+        function updateChartKpiSummary(hasil) {
+            if (!hasil) return;
+            const elIn = document.getElementById('chart-kpi-input');
+            const elOut = document.getElementById('chart-kpi-output');
+            const elNg = document.getElementById('chart-kpi-ng');
+            const elYield = document.getElementById('chart-kpi-yield');
+            const elEff = document.getElementById('chart-kpi-eff');
+
+            const totIn = hasil.total_input !== undefined ? Number(hasil.total_input) : 0;
+            const totOut = hasil.total_output !== undefined ? Number(hasil.total_output) : 0;
+            const totNg = hasil.total_ng !== undefined ? Number(hasil.total_ng) : 0;
+            const yld = hasil.yield_persen !== undefined ? Number(hasil.yield_persen) : (totIn > 0 ? (totOut / totIn) * 100 : 0);
+            const eff = hasil.avg_eff !== undefined ? Number(hasil.avg_eff) : 0;
+
+            if (elIn) elIn.textContent = totIn.toLocaleString('id-ID') + ' pcs';
+            if (elOut) elOut.textContent = totOut.toLocaleString('id-ID') + ' pcs';
+            if (elNg) elNg.textContent = totNg.toLocaleString('id-ID') + ' pcs';
+            if (elYield) elYield.textContent = yld.toFixed(1) + '%';
+            if (elEff) elEff.textContent = eff.toFixed(1) + '%';
+        }
+
+        function renderDefectBreakdownChart(defectBreakdown, totalNg) {
+            pastikanPluginTerdaftar();
+            const canvas = document.getElementById('chartDefect');
+            const elEmpty = document.getElementById('empty-chartDefect');
+            const elWrapper = document.getElementById('wrapper-canvas-defect');
+            const badgeEl = document.getElementById('badge-total-defect-chart');
+
+            const ngCount = Number(totalNg || 0);
+            if (badgeEl) {
+                badgeEl.textContent = ngCount > 0 ? `${ngCount} Pcs NG` : '0 Pcs NG (100% OK)';
+                badgeEl.style.background = ngCount > 0 ? '#fef2f2' : '#f0fdf4';
+                badgeEl.style.color = ngCount > 0 ? '#b91c1c' : '#15803d';
+                badgeEl.style.borderColor = ngCount > 0 ? '#fecaca' : '#bbf7d0';
+            }
+
+            if (!defectBreakdown || ngCount === 0 || Object.keys(defectBreakdown).length === 0) {
+                if (elEmpty) elEmpty.style.display = 'block';
+                if (elWrapper) elWrapper.style.display = 'none';
+                if (stateDefectBreakdown.chart) {
+                    stateDefectBreakdown.chart.destroy();
+                    stateDefectBreakdown.chart = null;
+                }
+                return;
+            }
+
+            if (elEmpty) elEmpty.style.display = 'none';
+            if (elWrapper) elWrapper.style.display = 'block';
+            if (!canvas) return;
+
+            const labels = Object.keys(defectBreakdown);
+            const dataCounts = Object.values(defectBreakdown);
+
+            const WARNA_DEFECT_MAP = {
+                'Cat Bintik (Dust/Dirt)': '#f59e0b',
+                'Cat Meler (Run/Sag)': '#f97316',
+                'Scratch / Gores / Dent': '#ef4444',
+                'Cat Belang / Tipis': '#8b5cf6',
+                'Cat Mengelupas (Peeling)': '#3b82f6',
+                'Defect Lainnya': '#64748b'
+            };
+            const barColors = labels.map(l => WARNA_DEFECT_MAP[l] || '#ec4899');
+
+            if (stateDefectBreakdown.chart !== null) {
+                stateDefectBreakdown.chart.data.labels = labels;
+                stateDefectBreakdown.chart.data.datasets[0].data = dataCounts;
+                stateDefectBreakdown.chart.data.datasets[0].backgroundColor = barColors;
+                stateDefectBreakdown.chart.data.datasets[0].borderColor = barColors;
+                stateDefectBreakdown.chart.update('none');
+                return;
+            }
+
+            const ctx = canvas.getContext('2d');
+            stateDefectBreakdown.chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Part Cacat (NG)',
+                        data: dataCounts,
+                        backgroundColor: barColors,
+                        borderColor: barColors,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                        maxBarThickness: 24
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 6, left: 4, right: 16, bottom: 4 } },
+                    animation: { duration: 350 },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            ...TOOLTIP_STYLE,
+                            callbacks: {
+                                label: function(ctx) {
+                                    const val = Number(ctx.raw || 0);
+                                    const pct = ngCount > 0 ? ((val / ngCount) * 100).toFixed(1) : '0.0';
+                                    return ` Jumlah: ${val.toLocaleString('id-ID')} pcs (${pct}%)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#9a9ab0',
+                                font: { family: 'Inter', size: 11 },
+                                precision: 0
+                            },
+                            grid: { color: '#f0f1f7' }
+                        },
+                        y: {
+                            ticks: {
+                                color: '#1e293b',
+                                font: { family: 'Inter', size: 11.5, weight: '600' }
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
         }
 
         async function updateChart() {
@@ -2141,23 +2290,29 @@
 
             const modeSelect = document.getElementById('periode-mode-select');
             const mode = modeSelect ? modeSelect.value : 'perjam';
-            const tipeChart = document.getElementById('chart-type-select')?.value || localStorage.getItem('chartType') || 'bar';
+            const tipeChartSelect = document.getElementById('chart-type-select');
+            const savedTipe = localStorage.getItem('chartType') || 'bar';
+            if (tipeChartSelect && !tipeChartSelect.value) {
+                tipeChartSelect.value = savedTipe;
+            }
+            const tipeChart = tipeChartSelect ? tipeChartSelect.value : savedTipe;
             const labelPart = document.getElementById('label-part-produksi');
             if (labelPart) labelPart.style.display = 'none';
 
             if (mode === '5tahun') {
                 const response = await fetch(`api/grafik_harian.php?line=${encodeURIComponent(currentLine)}&mode=5tahun`, { cache: "no-store" });
                 const hasil = await response.json();
-                const titik = hasil.data;
-                renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
+                const titik = hasil.data || [];
+                renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output, titik.map(p => p.ng || 0), titik.map(p => p.yield || 0), hasil.total_ng, hasil.yield_persen);
                 await updatePerformanceCharts(null, tipeChart, null, '5tahun', null, scrollPos);
+                renderDefectBreakdownChart(hasil.defect_breakdown, hasil.total_ng);
+                updateChartKpiSummary(hasil);
                 document.getElementById('judul-chart-produksi').textContent = 'Produksi (5 Tahun Terakhir)';
                 requestAnimationFrame(() => window.scrollTo(0, scrollPos));
                 return;
             }
 
             if (mode === 'pertahun') {
-                // Agregat per bulan untuk tahun terpilih (sama dengan mode tahunan lama)
                 isiDropdownTahun();
                 const tahun = parseInt(document.getElementById('filter-tahun').value) || new Date().getFullYear();
 
@@ -2166,16 +2321,20 @@
                     const bulanFormat = `${tahun}-${String(bulanTerpilihDrilldown).padStart(2,'0')}`;
                     const response = await fetch(`api/grafik_harian.php?line=${encodeURIComponent(currentLine)}&mode=bulanan&bulan=${bulanFormat}`, { cache: "no-store" });
                     const hasil = await response.json();
-                    const titik = hasil.data;
-                    renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
+                    const titik = hasil.data || [];
+                    renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output, titik.map(p => p.ng || 0), titik.map(p => p.yield || 0), hasil.total_ng, hasil.yield_persen);
                     await updatePerformanceCharts(null, tipeChart, tahun, 'bulanan', bulanFormat, scrollPos);
+                    renderDefectBreakdownChart(hasil.defect_breakdown, hasil.total_ng);
+                    updateChartKpiSummary(hasil);
                     document.getElementById('judul-chart-produksi').textContent = `Produksi (${NAMA_BULAN[bulanTerpilihDrilldown-1]} ${tahun})`;
                 } else {
                     const response = await fetch(`api/grafik_harian.php?line=${encodeURIComponent(currentLine)}&mode=tahunan&tahun=${tahun}`, { cache: "no-store" });
                     const hasil = await response.json();
-                    const titik = hasil.data;
-                    renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
+                    const titik = hasil.data || [];
+                    renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output, titik.map(p => p.ng || 0), titik.map(p => p.yield || 0), hasil.total_ng, hasil.yield_persen);
                     await updatePerformanceCharts(null, tipeChart, tahun, null, null, scrollPos);
+                    renderDefectBreakdownChart(hasil.defect_breakdown, hasil.total_ng);
+                    updateChartKpiSummary(hasil);
                     document.getElementById('judul-chart-produksi').textContent = `Produksi Tahun ${tahun}`;
                 }
                 requestAnimationFrame(() => window.scrollTo(0, scrollPos));
@@ -2183,45 +2342,46 @@
             }
 
             if (mode === 'perminggu') {
-                // Per hari dalam 1 minggu ISO
                 const inputMinggu = document.getElementById('filter-minggu');
                 if (!inputMinggu.value) {
-                    // Set ke minggu sekarang sebagai default
                     const now = new Date();
                     const tahunIso = now.getFullYear();
                     const noMinggu = String(getISOWeek(now)).padStart(2,'0');
                     inputMinggu.value = `${tahunIso}-W${noMinggu}`;
                 }
-                const minggu = inputMinggu.value; // format: "2026-W35"
+                const minggu = inputMinggu.value;
                 const response = await fetch(`api/grafik_harian.php?line=${encodeURIComponent(currentLine)}&mode=mingguan&minggu=${encodeURIComponent(minggu)}`, { cache: "no-store" });
                 const hasil = await response.json();
-                const titik = hasil.data;
-                renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
+                const titik = hasil.data || [];
+                renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output, titik.map(p => p.ng || 0), titik.map(p => p.yield || 0), hasil.total_ng, hasil.yield_persen);
                 await updatePerformanceCharts(null, tipeChart, null, 'mingguan', minggu, scrollPos);
+                renderDefectBreakdownChart(hasil.defect_breakdown, hasil.total_ng);
+                updateChartKpiSummary(hasil);
                 document.getElementById('judul-chart-produksi').textContent = `Produksi Minggu ${minggu}`;
                 requestAnimationFrame(() => window.scrollTo(0, scrollPos));
                 return;
             }
 
-            if (mode === 'perbulan') {
-                // Per hari dalam 1 bulan
+            if (mode === 'perbulan' || mode === 'perhari') {
                 const inputBulan = document.getElementById('filter-bulan-input');
                 if (!inputBulan.value) {
-                    inputBulan.value = new Date().toISOString().slice(0,7); // YYYY-MM
+                    inputBulan.value = new Date().toISOString().slice(0,7);
                 }
                 const bulanFormat = inputBulan.value;
                 const response = await fetch(`api/grafik_harian.php?line=${encodeURIComponent(currentLine)}&mode=bulanan&bulan=${encodeURIComponent(bulanFormat)}`, { cache: "no-store" });
                 const hasil = await response.json();
-                const titik = hasil.data;
-                renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
+                const titik = hasil.data || [];
+                renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output, titik.map(p => p.ng || 0), titik.map(p => p.yield || 0), hasil.total_ng, hasil.yield_persen);
                 await updatePerformanceCharts(null, tipeChart, null, 'bulanan', bulanFormat, scrollPos);
+                renderDefectBreakdownChart(hasil.defect_breakdown, hasil.total_ng);
+                updateChartKpiSummary(hasil);
                 const [thn, bln] = bulanFormat.split('-');
-                document.getElementById('judul-chart-produksi').textContent = `Produksi ${NAMA_BULAN[parseInt(bln)-1]} ${thn}`;
+                document.getElementById('judul-chart-produksi').textContent = `Produksi Harian ${NAMA_BULAN[parseInt(bln)-1]} ${thn}`;
                 requestAnimationFrame(() => window.scrollTo(0, scrollPos));
                 return;
             }
 
-            // mode 'perjam' atau 'perhari': tampilkan per-jam untuk tanggal terpilih
+            // mode 'perjam': tampilkan per-jam untuk tanggal terpilih
             const tanggalInput = document.getElementById('filter-tanggal');
             if (tanggalInput && !tanggalInput.value) {
                 tanggalInput.value = tanggalLokalYYYYMMDD();
@@ -2233,11 +2393,13 @@
                 updateData(tanggal);
             }
 
-            const response = await fetch(`api/grafik_harian.php?line=${encodeURIComponent(currentLine)}&tanggal=${tanggal}`, { cache: "no-store" });
+            const response = await fetch(`api/grafik_harian.php?line=${encodeURIComponent(currentLine)}&mode=perjam&tanggal=${tanggal}`, { cache: "no-store" });
             const hasil = await response.json();
-            const titik = hasil.data;
-            renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output);
+            const titik = hasil.data || [];
+            renderChart(tipeChart, titik.map(p => p.waktu), titik.map(p => p.input), titik.map(p => p.output), hasil.total_input, hasil.total_output, titik.map(p => p.ng || 0), titik.map(p => p.yield || 0), hasil.total_ng, hasil.yield_persen);
             await updatePerformanceCharts(tanggal, tipeChart, null, null, null, scrollPos);
+            renderDefectBreakdownChart(hasil.defect_breakdown, hasil.total_ng);
+            updateChartKpiSummary(hasil);
             ambilPartAktif();
             document.getElementById('judul-chart-produksi').textContent = `Produksi ${formatTanggalIndo(tanggal)}`;
             requestAnimationFrame(() => window.scrollTo(0, scrollPos));
@@ -2280,35 +2442,43 @@
                 const labels = titik.map(p => p.label);
                 labelSesiPerformanceAktif = labels;
 
-                const elEmptyLoss = document.getElementById('empty-chartLossTime');
-                const elCanvasLoss = document.getElementById('chartLossTime');
                 const elEmptyProd = document.getElementById('empty-chartProductTime');
                 const elCanvasProd = document.getElementById('chartProductTime');
+                const badgeEffEl = document.getElementById('badge-avg-eff-chart');
+                const badgeYieldEl = document.getElementById('badge-avg-yield-chart');
 
                 if (titik.length === 0) {
-                    if (elEmptyLoss) elEmptyLoss.style.display = 'block';
-                    if (elCanvasLoss) elCanvasLoss.style.display = 'none';
                     if (elEmptyProd) elEmptyProd.style.display = 'block';
                     if (elCanvasProd) elCanvasProd.style.display = 'none';
-
-                    if (stateLossTime.chart) {
-                        stateLossTime.chart.destroy();
-                        stateLossTime.chart = null;
-                    }
                     if (stateProductTime.chart) {
                         stateProductTime.chart.destroy();
                         stateProductTime.chart = null;
                     }
+                    if (badgeEffEl) badgeEffEl.textContent = 'EFF: ≥95%';
+                    if (badgeYieldEl) badgeYieldEl.textContent = 'Yield: ≥95%';
                     return;
                 }
 
-                if (elEmptyLoss) elEmptyLoss.style.display = 'none';
-                if (elCanvasLoss) elCanvasLoss.style.display = 'block';
                 if (elEmptyProd) elEmptyProd.style.display = 'none';
                 if (elCanvasProd) elCanvasProd.style.display = 'block';
 
-                renderSingleMetricChart(stateLossTime, 'chartLossTime', tipeChart, labels, titik.map(p => p.I), WARNA_LOSS, 'Loss Time (menit)');
-                renderSingleMetricChart(stateProductTime, 'chartProductTime', tipeChart, labels, titik.map(p => p.D), WARNA_PRODUCT_TIME, 'Product Time (menit/pcs)');
+                const effValues = titik.map(p => Number(p.eff || 0));
+                const yieldValues = titik.map(p => Number(p.yield !== undefined ? p.yield : 0));
+
+                const avgEff = (effValues.reduce((a, b) => a + b, 0) / effValues.length).toFixed(1);
+                const avgYield = (yieldValues.reduce((a, b) => a + b, 0) / yieldValues.length).toFixed(1);
+
+                if (badgeEffEl) badgeEffEl.textContent = `EFF: ${avgEff}%`;
+                if (badgeYieldEl) badgeYieldEl.textContent = `Yield: ${avgYield}%`;
+
+                performanceCacheData = {
+                    labels: labels,
+                    yields: yieldValues,
+                    effs: effValues,
+                    tipe: tipeChart
+                };
+
+                renderCachedPerformanceChart();
 
                 if (typeof scrollPos === 'number') {
                     requestAnimationFrame(() => window.scrollTo(0, scrollPos));
@@ -2316,6 +2486,121 @@
             } catch (err) {
                 console.error('updatePerformanceCharts: gagal memuat grafik', err);
             }
+        }
+
+        let performanceCacheData = { labels: [], yields: [], effs: [], tipe: 'bar' };
+        let subTabPerformaAktif = 'all';
+
+        function setSubTabPerforma(tab) {
+            subTabPerformaAktif = tab;
+            ['all', 'yield', 'eff'].forEach(t => {
+                const el = document.getElementById(`tab-perf-${t}`);
+                if (el) {
+                    if (t === tab) {
+                        el.style.background = '#ffffff';
+                        el.style.color = (t === 'yield') ? '#854d0e' : (t === 'eff' ? '#6d28d9' : '#1e293b');
+                        el.style.boxShadow = '0 1px 2px rgba(0,0,0,0.06)';
+                    } else {
+                        el.style.background = 'transparent';
+                        el.style.color = (t === 'yield') ? '#854d0e' : (t === 'eff' ? '#6d28d9' : '#64748b');
+                        el.style.boxShadow = 'none';
+                    }
+                }
+            });
+            renderCachedPerformanceChart();
+        }
+
+        function renderCachedPerformanceChart() {
+            pastikanPluginTerdaftar();
+            const canvas = document.getElementById('chartProductTime');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const { labels, yields, effs, tipe } = performanceCacheData;
+            if (!labels || labels.length === 0) return;
+
+            const isLineFamily = (tipe === 'line' || tipe === 'area');
+            const isScatter = (tipe === 'scatter');
+
+            let datasets = [];
+            if (subTabPerformaAktif === 'all' || subTabPerformaAktif === 'yield') {
+                datasets.push({
+                    label: '% Yield Produksi',
+                    data: yields,
+                    backgroundColor: isLineFamily ? (tipe === 'area' ? 'rgba(234, 179, 8, 0.2)' : 'rgba(234, 179, 8, 0.85)') : 'rgba(234, 179, 8, 0.85)',
+                    borderColor: '#ca8a04',
+                    borderWidth: isLineFamily ? 2.5 : 0,
+                    borderRadius: isLineFamily ? 0 : 5,
+                    borderSkipped: false,
+                    maxBarThickness: 24,
+                    tension: 0.35,
+                    fill: (tipe === 'area'),
+                    pointRadius: isLineFamily ? 4 : 0,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#ca8a04'
+                });
+            }
+
+            if (subTabPerformaAktif === 'all' || subTabPerformaAktif === 'eff') {
+                datasets.push({
+                    label: '% Efisiensi Lini (EFF)',
+                    data: effs,
+                    backgroundColor: isLineFamily ? (tipe === 'area' ? 'rgba(124, 58, 237, 0.2)' : 'rgba(124, 58, 237, 0.85)') : 'rgba(124, 58, 237, 0.85)',
+                    borderColor: '#7c3aed',
+                    borderWidth: isLineFamily ? 2.5 : 0,
+                    borderRadius: isLineFamily ? 0 : 5,
+                    borderSkipped: false,
+                    maxBarThickness: 24,
+                    tension: 0.35,
+                    fill: (tipe === 'area'),
+                    pointRadius: isLineFamily ? 4 : 0,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#7c3aed'
+                });
+            }
+
+            if (stateProductTime.chart !== null) {
+                stateProductTime.chart.destroy();
+                stateProductTime.chart = null;
+            }
+
+            stateProductTime.chart = new Chart(ctx, {
+                type: isLineFamily ? 'line' : (isScatter ? 'scatter' : 'bar'),
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 20, left: 6, right: 8, bottom: 4 } },
+                    animation: { duration: 350 },
+                    plugins: {
+                        legend: LEGEND_STYLE,
+                        tooltip: {
+                            ...TOOLTIP_STYLE,
+                            callbacks: {
+                                label: (ctx) => ` ${ctx.dataset.label}: ${Number(ctx.raw || 0).toFixed(1)}%`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 11 }, maxRotation: 0, autoSkip: true },
+                            grid: { display: false }
+                        },
+                        y: {
+                            min: 0,
+                            max: 100,
+                            ticks: {
+                                color: '#9a9ab0',
+                                font: { family: 'Inter', size: 11 },
+                                callback: (v) => v + '%'
+                            },
+                            grid: { color: '#f0f1f7' }
+                        }
+                    }
+                }
+            });
         }
 
         // Ambil nama part yang lagi aktif/dipilih di Machine Control, disimpan ke variabel
@@ -2411,9 +2696,13 @@
                         const num = Number(val);
                         let text = '';
                         if (chart.canvas && chart.canvas.id === 'chartProductTime') {
-                            text = num < 1 ? (Math.round(num * 1000) / 1000).toString() : (Math.round(num * 100) / 100).toString();
+                            text = `${Math.round(num * 10) / 10}%`;
+                        } else if (chart.canvas && chart.canvas.id === 'chartDefect') {
+                            text = `${num} pcs`;
                         } else if (chart.canvas && chart.canvas.id === 'chartLossTime') {
                             text = Number.isInteger(num) ? `${num}m` : `${Math.round(num * 10) / 10}m`;
+                        } else if (dataset.yAxisID === 'y1' || (dataset.label && dataset.label.includes('Yield'))) {
+                            text = `${num.toFixed(1)}%`;
                         } else if (chart.canvas && chart.canvas.id && chart.canvas.id.includes('cost')) {
                             // Format mata uang kompak untuk grafik biaya (misal: 755 rb, 87 rb, 1.2 jt)
                             text = num >= 1000000
@@ -2459,10 +2748,14 @@
 
                         // Warna teks yang kontras & serasi dengan dataset
                         let textColor = '#1e293b';
-                        if (dataset.label === 'Input') {
+                        if (dataset.yAxisID === 'y1' || (dataset.label && dataset.label.includes('Yield'))) {
+                            textColor = '#ca8a04'; // Kuning emas solid Yield
+                        } else if (dataset.label === 'Input' || (dataset.label && dataset.label.includes('Input'))) {
                             textColor = '#1d4ed8'; // Biru solid Input
-                        } else if (dataset.label === 'Output') {
+                        } else if (dataset.label === 'Output' || (dataset.label && dataset.label.includes('Output'))) {
                             textColor = '#047857'; // Hijau solid Output
+                        } else if (dataset.label && dataset.label.includes('NG')) {
+                            textColor = '#dc2626'; // Merah solid NG
                         } else if (dataset.label && dataset.label.includes('Beban Puncak')) {
                             textColor = '#d97706'; // Oranye Beban Puncak
                         } else if (dataset.label && dataset.label.includes('Luar Beban Puncak')) {
@@ -2548,32 +2841,49 @@
         const LEGEND_STYLE = { position: 'top', align: 'end', labels: { color: '#6b6b80', usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 16, font: { family: 'Inter', size: 12 } } };
         const TOOLTIP_STYLE = { backgroundColor: '#ffffff', titleColor: '#2b2b3a', bodyColor: '#2b2b3a', borderColor: '#eaeaf2', borderWidth: 1, padding: 12, cornerRadius: 10, titleFont: { family: 'Inter', weight: '600' }, bodyFont: { family: 'Inter' }, boxPadding: 6 };
 
-        function renderChart(tipe, labels, inputData, outputData, totalInput, totalOutput) {
+        function renderChart(tipe, labels, inputData, outputData, totalInput, totalOutput, ngData = [], yieldData = [], totalNg = 0, avgYield = 0) {
             pastikanPluginTerdaftar();
-            const ctx = document.getElementById('chartProduksi').getContext('2d');
+            const canvasEl = document.getElementById('chartProduksi');
+            if (!canvasEl) return;
+            const ctx = canvasEl.getContext('2d');
             chartProduksiLabelsAktif = labels;
 
-            // Kalau chart sudah ada & bentuknya sama seperti sebelumnya, cukup ganti datanya
-            // saja tanpa hancurkan & bikin ulang chart-nya -- ini yang bikin refresh tiap 5 detik
-            // gak lagi "berkedip". Chart cuma dihancurkan & dibuat ulang kalau bentuknya beneran ga
-            if (chartProduksi !== null && chartProduksiTipeAktif === tipe) {
-                if (tipe === 'pie') {
-                    chartProduksi.data.datasets[0].data = [totalInput, totalOutput];
-                } else if (tipe === 'scatter') {
+            const isPie = (tipe === 'pie');
+            const isScatter = (tipe === 'scatter');
+            const isLineFamily = (tipe === 'line' || tipe === 'area');
+            const effectiveNgData = Array.isArray(ngData) && ngData.length === labels.length ? ngData : labels.map(() => 0);
+            const effectiveYieldData = Array.isArray(yieldData) && yieldData.length === labels.length ? yieldData : [];
+            const effectiveTotalNg = totalNg || effectiveNgData.reduce((a, b) => a + Number(b || 0), 0);
+
+            // Kalau chart sudah ada & bentuknya sama seperti sebelumnya, update data in-place tanpa flicker
+            const showYieldOverlay = localStorage.getItem('showYieldOverlay') === 'true';
+            const expectedDatasets = (isPie || isScatter) ? null : (showYieldOverlay && effectiveYieldData.length > 0 ? 4 : 3);
+            if (chartProduksi !== null && chartProduksiTipeAktif === tipe && (!expectedDatasets || chartProduksi.data.datasets.length === expectedDatasets)) {
+                if (isPie) {
+                    chartProduksi.data.labels = ['Output Selesai (OK)', 'Part Cacat (NG)'];
+                    chartProduksi.data.datasets[0].data = [totalOutput, effectiveTotalNg];
+                } else if (isScatter) {
                     chartProduksi.data.datasets[0].data = inputData.map((v, i) => ({ x: i, y: v }));
                     chartProduksi.data.datasets[1].data = outputData.map((v, i) => ({ x: i, y: v }));
+                    if (chartProduksi.data.datasets[2]) {
+                        chartProduksi.data.datasets[2].data = effectiveNgData.map((v, i) => ({ x: i, y: v }));
+                    }
                 } else {
                     chartProduksi.data.labels = labels;
                     chartProduksi.data.datasets[0].data = inputData;
                     chartProduksi.data.datasets[1].data = outputData;
+                    if (chartProduksi.data.datasets[2]) {
+                        chartProduksi.data.datasets[2].data = effectiveNgData;
+                    }
+                    if (chartProduksi.data.datasets[3] && effectiveYieldData.length > 0) {
+                        chartProduksi.data.datasets[3].data = effectiveYieldData;
+                    }
                 }
                 if (typeof chartProduksi.resize === 'function') chartProduksi.resize();
-                chartProduksi.update('none'); // 'none' = tanpa animasi transisi, biar mulus
+                chartProduksi.update('none');
                 return;
             }
 
-            // Chart.js tidak bisa "update" antar tipe berbeda (mis. bar -> pie),
-            // jadi grafik lama dihancurkan dulu lalu dibuat ulang cuma kalau bentuknya berubah.
             if (chartProduksi !== null) {
                 chartProduksi.destroy();
                 chartProduksi = null;
@@ -2582,41 +2892,63 @@
 
             let config;
 
-            if (tipe === 'pie') {
-                // Pie tidak cocok untuk 24 titik per jam, jadi ditampilkan total Input vs Output harian
+            if (isPie) {
                 config = {
                     type: 'pie',
                     data: {
-                        labels: ['Input', 'Output'],
+                        labels: ['Output Selesai (OK)', 'Part Cacat (NG)'],
                         datasets: [{
-                            data: [totalInput, totalOutput],
-                            backgroundColor: ['#2563eb', '#10b981'],
-                            hoverBackgroundColor: ['#1d4ed8', '#059669'],
+                            data: [totalOutput, effectiveTotalNg],
+                            backgroundColor: ['#10b981', '#ef4444'],
+                            hoverBackgroundColor: ['#059669', '#dc2626'],
                             borderWidth: 2,
                             borderColor: '#ffffff'
                         }]
                     },
                     options: {
                         responsive: true,
+                        maintainAspectRatio: false,
                         layout: { padding: 12 },
-                        plugins: { legend: LEGEND_STYLE, tooltip: TOOLTIP_STYLE }
+                        plugins: {
+                            legend: LEGEND_STYLE,
+                            tooltip: {
+                                ...TOOLTIP_STYLE,
+                                callbacks: {
+                                    label: function(ctx) {
+                                        const label = ctx.label || '';
+                                        const val = Number(ctx.raw || 0);
+                                        const total = totalOutput + effectiveTotalNg;
+                                        const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
+                                        return ` ${label}: ${val.toLocaleString('id-ID')} pcs (${pct}%)`;
+                                    }
+                                }
+                            }
+                        }
                     }
                 };
-            } else if (tipe === 'scatter') {
+            } else if (isScatter) {
                 config = {
                     type: 'scatter',
                     data: {
                         datasets: [
                             { label: 'Input', data: inputData.map((v, i) => ({ x: i, y: v })), backgroundColor: WARNA_INPUT.soft, pointRadius: 5, pointHoverRadius: 7 },
-                            { label: 'Output', data: outputData.map((v, i) => ({ x: i, y: v })), backgroundColor: WARNA_OUTPUT.soft, pointRadius: 5, pointHoverRadius: 7 }
+                            { label: 'Output (OK)', data: outputData.map((v, i) => ({ x: i, y: v })), backgroundColor: WARNA_OUTPUT.soft, pointRadius: 5, pointHoverRadius: 7 },
+                            { label: 'Part Cacat (NG)', data: effectiveNgData.map((v, i) => ({ x: i, y: v })), backgroundColor: WARNA_NG.soft, pointRadius: 5, pointHoverRadius: 7 }
                         ]
                     },
                     options: {
                         responsive: true,
+                        maintainAspectRatio: false,
                         layout: { padding: { top: 24, left: 6, right: 8, bottom: 4 } },
                         plugins: {
                             legend: LEGEND_STYLE,
-                            tooltip: { ...TOOLTIP_STYLE, callbacks: { title: (items) => chartProduksiLabelsAktif[items[0].raw.x] || '' } }
+                            tooltip: {
+                                ...TOOLTIP_STYLE,
+                                callbacks: {
+                                    title: (items) => chartProduksiLabelsAktif[items[0].raw.x] || '',
+                                    label: (ctx) => ` ${ctx.dataset.label}: ${Number(ctx.raw.y).toLocaleString('id-ID')} pcs`
+                                }
+                            }
                         },
                         scales: {
                             x: { type: 'linear', ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 11 }, stepSize: 1, callback: (val) => chartProduksiLabelsAktif[val] || '' }, grid: { display: false } },
@@ -2625,9 +2957,7 @@
                     }
                 };
             } else {
-                // Bar, Line, dan Area memakai bentuk data yang sama (per jam), beda di styling saja
-                const isLineFamily = (tipe === 'line' || tipe === 'area');
-                const buatDataset = (label, data, warna) => ({
+                const buatDataset = (label, data, warna, yAxisID = 'y') => ({
                     label: label,
                     data: data,
                     backgroundColor: tipe === 'area' ? warna.fill : warna.soft,
@@ -2635,22 +2965,46 @@
                     hoverBackgroundColor: warna.solid,
                     borderRadius: isLineFamily ? 0 : 5,
                     borderSkipped: false,
-                    maxBarThickness: 28,
+                    maxBarThickness: 24,
                     fill: tipe === 'area',
                     tension: 0.35,
                     pointRadius: isLineFamily ? 4 : 0,
                     pointHoverRadius: 6,
-                    borderWidth: isLineFamily ? 2.5 : 0
+                    borderWidth: isLineFamily ? 2.5 : 0,
+                    yAxisID: yAxisID
                 });
+
+                const datasets = [
+                    buatDataset('Input (Masuk)', inputData, WARNA_INPUT),
+                    buatDataset('Output (OK)', outputData, WARNA_OUTPUT),
+                    buatDataset('Part Cacat (NG)', effectiveNgData, WARNA_NG)
+                ];
+
+                const hasYield = effectiveYieldData && effectiveYieldData.some(y => Number(y) > 0);
+                const showYieldOverlay = localStorage.getItem('showYieldOverlay') === 'true';
+                if (hasYield && showYieldOverlay) {
+                    datasets.push({
+                        label: '% Yield',
+                        type: 'line',
+                        data: effectiveYieldData,
+                        borderColor: '#ca8a04',
+                        backgroundColor: 'rgba(234, 179, 8, 0.12)',
+                        pointBackgroundColor: '#ca8a04',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        borderWidth: 2.5,
+                        tension: 0.35,
+                        pointRadius: 4.5,
+                        pointHoverRadius: 7,
+                        yAxisID: 'y1'
+                    });
+                }
 
                 config = {
                     type: isLineFamily ? 'line' : 'bar',
                     data: {
                         labels: labels,
-                        datasets: [
-                            buatDataset('Input', inputData, WARNA_INPUT),
-                            buatDataset('Output', outputData, WARNA_OUTPUT)
-                        ]
+                        datasets: datasets
                     },
                     options: {
                         responsive: true,
@@ -2658,15 +3012,59 @@
                         layout: { padding: { top: 24, left: 6, right: 8, bottom: 4 } },
                         animation: { duration: 400 },
                         interaction: { mode: 'index', intersect: false },
-                        plugins: { legend: LEGEND_STYLE, tooltip: TOOLTIP_STYLE },
+                        plugins: {
+                            legend: LEGEND_STYLE,
+                            tooltip: {
+                                ...TOOLTIP_STYLE,
+                                callbacks: {
+                                    label: function(ctx) {
+                                        const label = ctx.dataset.label || '';
+                                        const val = Number(ctx.raw || 0);
+                                        if (ctx.dataset.yAxisID === 'y1' || label.includes('Yield')) {
+                                            return ` ${label}: ${val.toFixed(1)}% (Output OK ÷ Masuk)`;
+                                        }
+                                        return ` ${label}: ${val.toLocaleString('id-ID')} pcs`;
+                                    }
+                                }
+                            }
+                        },
                         onClick: (evt, elements) => {
                             if (elements.length > 0) {
                                 tampilkanPartSaatDiklik(elements[0].index);
                             }
                         },
                         scales: {
-                            x: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { display: false } },
-                            y: { ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } }, grid: { color: '#f0f1f7' }, beginAtZero: true, grace: '18%' }
+                            x: {
+                                ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 11 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 },
+                                grid: { display: false }
+                            },
+                            y: {
+                                ticks: { color: '#9a9ab0', font: { family: 'Inter', size: 12 } },
+                                grid: { color: '#f0f1f7' },
+                                beginAtZero: true,
+                                grace: '15%'
+                            },
+                            ...(hasYield && showYieldOverlay ? {
+                                y1: {
+                                    type: 'linear',
+                                    display: true,
+                                    position: 'right',
+                                    min: 0,
+                                    max: 100,
+                                    title: {
+                                        display: true,
+                                        text: '% Yield',
+                                        color: '#ca8a04',
+                                        font: { family: 'Inter', size: 11, weight: '700' }
+                                    },
+                                    ticks: {
+                                        color: '#ca8a04',
+                                        font: { family: 'Inter', size: 11 },
+                                        callback: (v) => v + '%'
+                                    },
+                                    grid: { drawOnChartArea: false }
+                                }
+                            } : {})
                         }
                     }
                 };
@@ -2687,7 +3085,7 @@
             const isBarFamily = (tipe === 'bar' || !tipe || tipe === 'default');
 
             // Palet variasi warna per bar agar visual grafik lebih hidup dan bervariasi
-            const paletKoleksi = canvasId === 'chartLossTime' ? PALET_LOSS_VARIASI
+            const paletKoleksi = (canvasId === 'chartDefect' || canvasId === 'chartLossTime') ? PALET_LOSS_VARIASI
                                 : (canvasId === 'chartProductTime' ? PALET_PROD_VARIASI : PALET_WARNA_VARIASI);
 
             const barBgColors = labels.map((l, i) => {
@@ -2819,11 +3217,14 @@
                 container.innerHTML = shifts.map(s => {
                     const entry = window.historiDataPerTanggal ? window.historiDataPerTanggal.get(tgl) : null;
                     const sd = entry && entry.shifts ? entry.shifts[s.nama] : null;
-                    const adaData = sd && (sd.input > 0 || sd.output > 0);
-                    const info = adaData ? `Input: ${sd.input} · Output: ${sd.output} · EFF: ${sd.eff_persen}%` : 'Belum ada data';
+                    const adaData = sd && (sd.input > 0 || sd.output > 0 || sd.ng > 0);
+                    const isLive = sd && sd.status === 'Ongoing';
+                    const info = adaData
+                        ? `IN: ${sd.input} · OUT: ${sd.output} · NG: ${sd.ng} · Yield: ${sd.yield || '100%'} · EFF: ${sd.eff_persen}% ${isLive ? '<strong style="color:#15803d; font-size:10.5px; background:#dcfce7; padding:1px 5px; border-radius:4px; margin-left:4px;">● Shift Aktif (Live Auto-Save)</strong>' : ''}`
+                        : 'Belum ada catatan produksi pada shift ini';
 
                     return `
-                        <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border:1px solid ${adaData ? '#dbe4f3' : '#e8e8ee'}; border-radius:10px; background:${adaData ? '#fafbff' : '#fafafa'}; cursor:pointer; transition:background .15s;" onclick="bukaDetailShiftDariModal('${tgl}', '${s.nama}')">
+                        <div style="display:flex; align-items:center; gap:10px; padding:10px 14px; border:1px solid ${isLive ? '#86efac' : (adaData ? '#dbe4f3' : '#e8e8ee')}; border-radius:10px; background:${isLive ? '#f0fdf4' : (adaData ? '#fafbff' : '#fafafa')}; cursor:pointer; transition:background .15s;" onclick="bukaDetailShiftDariModal('${tgl}', '${s.nama}')">
                             <span class="badge-shift ${s.badgeClass}">${s.nama}</span>
                             <div style="flex:1;">
                                 <div style="font-size:12.5px; font-weight:600; color:#1e293b;">${s.jam}</div>
@@ -3074,6 +3475,12 @@
                         if (baris.ng_logs && baris.ng_logs.length > 0) {
                             entry.ng_logs = baris.ng_logs;
                         }
+                        if (baris.shifts) {
+                            entry.shifts = baris.shifts;
+                        }
+                        if (baris.status) {
+                            entry.status = baris.status;
+                        }
 
                         if (bEff > 0) {
                             entry.effList.push(bEff);
@@ -3095,7 +3502,10 @@
                             <td class="td-toggle"><a class="btn-toggle-detail" href="index.php?line=${encodeURIComponent(currentLine)}&view=detail&tanggal=${tgl}" data-nav data-line="${currentLine}" data-view="detail" data-tanggal="${tgl}" title="Lihat detail per jam">&#9656;</a></td>
                             <td class="td-tanggal-klik" onclick="cariSesiProduksiTanggal('${tgl}');" title="Klik untuk menampilkan sesi produksi tanggal ini">
                                 <div style="font-weight:700; color:#0d3b8c; font-size:13px;">${formatTanggalIndo(tgl)}</div>
-                                <div style="font-size:11px; color:#64748b; margin-top:2px;">${entry.sesi_count || 1} sesi kontrol</div>
+                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:2px;">
+                                    <span style="font-size:11px; color:#64748b;">${entry.sesi_count || 1} sesi kontrol</span>
+                                    ${entry.status === 'Ongoing' ? '<span style="font-size:10px; font-weight:700; color:#15803d; background:#dcfce7; border:1px solid #bbf7d0; border-radius:4px; padding:1px 5px;">● Shift Aktif</span>' : ''}
+                                </div>
                             </td>
                             <td>
                                 <div style="display:flex; align-items:center; gap:5px; font-weight:700; color:#1e293b; font-size:12.5px;">
@@ -4526,6 +4936,7 @@
                 updateStatusMesin();
                 loadMachineRatio();
             } else if (view === 'chart') {
+                if (typeof updateToggleYieldButton === 'function') updateToggleYieldButton();
                 updateChartAktif();
                 setTimeout(() => {
                     if (typeof updateChartAktif === 'function') updateChartAktif();
@@ -7768,6 +8179,9 @@
         document.addEventListener('DOMContentLoaded', () => {
             initDraggableCameraPopup();
             loadActiveShiftData();
+            if (typeof updateToggleYieldButton === 'function') {
+                updateToggleYieldButton();
+            }
             if (typeof updateTargetBulanan === 'function') {
                 updateTargetBulanan();
             }

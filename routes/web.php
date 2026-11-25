@@ -1,5 +1,7 @@
 <?php
 
+date_default_timezone_set('Asia/Jakarta');
+
 use App\Http\Controllers\DashboardController;
 use App\Models\HangerInput;
 use App\Models\HangerOutput;
@@ -562,9 +564,14 @@ Route::match(['get', 'options'], '/api/get-hanger-stats', function () {
 });
 
 /**
- * 5. Reset statistik sesi hanger
+ * 5. Reset statistik sesi hanger (Otomatis simpan ke Riwayat & Excel sebelum reset)
  */
 Route::match(['post', 'get', 'options'], '/api/reset-hanger-stats', function () {
+    // Pastikan seluruh data shift & produksi saat ini terarsipkan secara permanen ke Riwayat & Excel sebelum direset
+    if (function_exists('autoSyncAndCheckShiftRollover')) {
+        autoSyncAndCheckShiftRollover(true);
+    }
+
     $stats = [
         'total_input_hangers' => 0,
         'total_output_hangers' => 0,
@@ -673,6 +680,11 @@ $catatNgHandler = function (Request $request) {
     $totalNg = $stats['total_ng_pcs'];
     $outputOk = max(0, $outputPcs - $totalNg);
     $yieldVal = ($outputPcs > 0) ? round(($outputOk / $outputPcs) * 100, 1) : 0.0;
+
+    // Otomatis sinkronisasi ke Riwayat & file Excel
+    if (function_exists('autoSyncAndCheckShiftRollover')) {
+        autoSyncAndCheckShiftRollover();
+    }
 
     return response()->json([
         'status' => 'ok',
@@ -873,24 +885,24 @@ Route::match(['get', 'options'], '/api/data.php', function (Request $request) {
     $tanggal = $request->query('tanggal', date('Y-m-d'));
     $mode = $request->query('mode', 'shift');
 
+    // Deteksi otomatis pergantian shift (rollover) & auto-sync ke Riwayat dan Excel
+    if (function_exists('autoSyncAndCheckShiftRollover')) {
+        autoSyncAndCheckShiftRollover();
+    }
+
     $statsFile = storage_path('app/hanger_stats.json');
     $stats = file_exists($statsFile) ? (@json_decode(file_get_contents($statsFile), true) ?: []) : [];
 
-    // Tentukan shift saat ini
-    $nowHour = (int) date('H');
-    $nowMin = (int) date('i');
-    $curMin = $nowHour * 60 + $nowMin;
-
-    if ($curMin >= (6 * 60 + 55) && $curMin < (15 * 60 + 50)) {
-        $shiftNama = 'Pagi';
-        $rentangShift = '06:55 - 15:50';
-    } elseif ($curMin >= (15 * 60 + 50) && $curMin < (23 * 60 + 20)) {
-        $shiftNama = 'Sore';
-        $rentangShift = '15:50 - 23:20';
-    } else {
-        $shiftNama = 'Malam';
-        $rentangShift = '23:20 - 06:55';
-    }
+    // Tentukan shift saat ini berdasarkan jadwal pabrik
+    $shiftInfo = function_exists('getCurrentShiftInfo') ? getCurrentShiftInfo() : [
+        'shift_key' => 'Shift 1',
+        'shift_name' => 'Shift 1 (Pagi)',
+        'shift_simple' => 'Pagi',
+        'jam_mulai' => '06:55',
+        'jam_selesai' => '15:50',
+    ];
+    $shiftNama = $shiftInfo['shift_simple'];
+    $rentangShift = "{$shiftInfo['jam_mulai']} - {$shiftInfo['jam_selesai']}";
 
     $activePart = function_exists('getActivePart') ? getActivePart() : null;
     $pcsPerHanger = max(1, (int) ($activePart['pcs'] ?? 1));
@@ -899,6 +911,33 @@ Route::match(['get', 'options'], '/api/data.php', function (Request $request) {
     $totalOutputHangers = (int) ($stats['total_output_hangers'] ?? 0);
     $totalOutputPcs = (int) ($stats['total_output_pcs'] ?? 0);
     $emptyHangers = (int) ($stats['empty_hangers'] ?? 0);
+    $totalNgPcs = (int) ($stats['total_ng_pcs'] ?? 0);
+
+    // Jika mode adalah 'harian' (Total 1 Hari), akumulasikan seluruh sesi shift hari ini
+    if ($mode === 'harian') {
+        $dailyHistory = array_filter(getProductionHistoryList(), function($h) use ($tanggal) {
+            return ($h['tanggal'] ?? '') === $tanggal;
+        });
+        if (!empty($dailyHistory)) {
+            $sumOut = 0;
+            $sumNg = 0;
+            $sumInHgr = 0;
+            $sumOutHgr = 0;
+            $sumEmptyHgr = 0;
+            foreach ($dailyHistory as $dh) {
+                $sumOut += (int) ($dh['nilai_f'] ?? 0);
+                $sumNg += (int) ($dh['nilai_e'] ?? 0);
+                $sumInHgr += (int) ($dh['total_input_hangers'] ?? 0);
+                $sumOutHgr += (int) ($dh['total_output_hangers'] ?? 0);
+                $sumEmptyHgr += (int) ($dh['empty_hangers'] ?? 0);
+            }
+            $totalOutputPcs = max($totalOutputPcs, $sumOut);
+            $totalNgPcs = max($totalNgPcs, $sumNg);
+            $totalInputHangers = max($totalInputHangers, $sumInHgr);
+            $totalOutputHangers = max($totalOutputHangers, $sumOutHgr);
+            $emptyHangers = max($emptyHangers, $sumEmptyHgr);
+        }
+    }
 
     // Sinkronisasi dengan database jika ada
     try {
@@ -925,13 +964,14 @@ Route::match(['get', 'options'], '/api/data.php', function (Request $request) {
     $inputPcs = $totalInputHangers * $pcsPerHanger;
     // Keluaran Total Produksi (PCS) bertambah saat part dideteksi & dikonfirmasi oleh Kamera Vision AI
     $outputPcs = $totalOutputPcs;
+    $outputOkPcs = $outputPcs;
     $totalNgPcs = (int) ($stats['total_ng_pcs'] ?? 0);
     $totalProcessedPcs = $outputPcs + $totalNgPcs;
 
     // Yield Produksi dihitung dari Output OK terhadap Total Part Masuk/Diproses (Output OK + NG)
     // Yield = (Output OK / Total Part) * 100%
     if ($totalProcessedPcs > 0) {
-        $yieldPcs = round(($outputPcs / $totalProcessedPcs) * 100, 1);
+        $yieldPcs = round(($outputOkPcs / $totalProcessedPcs) * 100, 1);
     } elseif ($outputPcs > 0) {
         $yieldPcs = 100.0;
     } else {
@@ -981,37 +1021,375 @@ Route::match(['get', 'options'], '/api/data', function (Request $request) {
  * 7d. API Grafik Harian / Bulanan untuk Chart & Target Bulanan
  */
 Route::match(['get', 'options'], '/api/grafik_harian.php', function (Request $request) {
+    if (function_exists('autoSyncAndCheckShiftRollover')) {
+        autoSyncAndCheckShiftRollover();
+    }
+
+    $history = function_exists('getProductionHistoryList') ? getProductionHistoryList() : [];
+    $ngLogFile = storage_path('app/ng_logs.json');
+    $ngLogs = file_exists($ngLogFile) ? (@json_decode(file_get_contents($ngLogFile), true) ?: []) : [];
     $statsFile = storage_path('app/hanger_stats.json');
     $stats = file_exists($statsFile) ? (@json_decode(file_get_contents($statsFile), true) ?: []) : [];
 
     $activePart = function_exists('getActivePart') ? getActivePart() : null;
     $pcsPerHanger = max(1, (int) ($activePart['pcs'] ?? 1));
 
-    $totalInput = (int) ($stats['total_input_hangers'] ?? 0) * $pcsPerHanger;
-    $totalOutput = (int) ($stats['total_output_pcs'] ?? 0);
-
-    // Saw  xddddmpel titik data jam kerja (07:00 s.d 16:00)
-    $jamList = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00'];
-    $titik = [];
-    $accumIn = 0;
-    $accumOut = 0;
-    $stepIn = count($jamList) > 0 ? (int) ceil($totalInput / count($jamList)) : 0;
-    $stepOut = count($jamList) > 0 ? (int) ceil($totalOutput / count($jamList)) : 0;
-
-    foreach ($jamList as $idx => $jam) {
-        $accumIn = min($totalInput, $accumIn + $stepIn);
-        $accumOut = min($totalOutput, $accumOut + $stepOut);
-        $titik[] = [
-            'waktu' => $jam,
-            'input' => $accumIn,
-            'output' => $accumOut,
-        ];
+    $mode = $request->query('mode', 'perjam');
+    $today = date('Y-m-d');
+    $liveOutput = (int) ($stats['total_output_pcs'] ?? 0);
+    $liveNg = (int) ($stats['total_ng_pcs'] ?? 0);
+    $liveInput = (int) ($stats['total_input_hangers'] ?? 0) * $pcsPerHanger;
+    if ($liveInput < ($liveOutput + $liveNg)) {
+        $liveInput = $liveOutput + $liveNg;
     }
+
+    $titik = [];
+    $totalInput = 0;
+    $totalOutput = 0;
+    $totalNg = 0;
+    $sumEff = 0;
+    $effCount = 0;
+
+    if ($mode === '5tahun') {
+        $currYear = (int) date('Y');
+        $years = [$currYear - 4, $currYear - 3, $currYear - 2, $currYear - 1, $currYear];
+        foreach ($years as $yr) {
+            $yrStr = (string) $yr;
+            $yrIn = 0;
+            $yrOut = 0;
+            $yrNg = 0;
+            $yrEffSum = 0;
+            $yrEffCount = 0;
+            foreach ($history as $h) {
+                if (substr($h['tanggal'] ?? '', 0, 4) === $yrStr) {
+                    $out = (int) ($h['nilai_f'] ?? 0);
+                    $ng = (int) ($h['nilai_e'] ?? 0);
+                    $in = (int) ($h['total_input'] ?? ($out + $ng));
+                    $yrOut += $out;
+                    $yrNg += $ng;
+                    $yrIn += $in;
+                    if (isset($h['eff'])) {
+                        $yrEffSum += (float) $h['eff'];
+                        $yrEffCount++;
+                    }
+                }
+            }
+            $yrProc = $yrOut + $yrNg;
+            $yrYield = $yrProc > 0 ? round(($yrOut / $yrProc) * 100, 1) : ($yrIn > 0 ? round(($yrOut / $yrIn) * 100, 1) : 0.0);
+            $yrEff = $yrEffCount > 0 ? round($yrEffSum / $yrEffCount, 1) : 0.0;
+
+            $titik[] = [
+                'waktu' => $yrStr,
+                'input' => $yrIn,
+                'output' => $yrOut,
+                'ng' => $yrNg,
+                'yield' => $yrYield,
+                'eff' => $yrEff
+            ];
+            $totalInput += $yrIn;
+            $totalOutput += $yrOut;
+            $totalNg += $yrNg;
+            if ($yrEffCount > 0) {
+                $sumEff += $yrEffSum;
+                $effCount += $yrEffCount;
+            }
+        }
+    } elseif ($mode === 'tahunan') {
+        $tahun = (int) ($request->query('tahun') ?: date('Y'));
+        $namaBulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        for ($m = 1; $m <= 12; $m++) {
+            $prefix = sprintf('%04d-%02d', $tahun, $m);
+            $mIn = 0;
+            $mOut = 0;
+            $mNg = 0;
+            $mEffSum = 0;
+            $mEffCount = 0;
+            foreach ($history as $h) {
+                if (substr($h['tanggal'] ?? '', 0, 7) === $prefix) {
+                    $out = (int) ($h['nilai_f'] ?? 0);
+                    $ng = (int) ($h['nilai_e'] ?? 0);
+                    $in = (int) ($h['total_input'] ?? ($out + $ng));
+                    $mOut += $out;
+                    $mNg += $ng;
+                    $mIn += $in;
+                    if (isset($h['eff'])) {
+                        $mEffSum += (float) $h['eff'];
+                        $mEffCount++;
+                    }
+                }
+            }
+            $mProc = $mOut + $mNg;
+            $mYield = $mProc > 0 ? round(($mOut / $mProc) * 100, 1) : ($mIn > 0 ? round(($mOut / $mIn) * 100, 1) : 0.0);
+            $mEff = $mEffCount > 0 ? round($mEffSum / $mEffCount, 1) : 0.0;
+
+            $titik[] = [
+                'waktu' => $namaBulan[$m - 1],
+                'bulan' => $prefix,
+                'input' => $mIn,
+                'output' => $mOut,
+                'ng' => $mNg,
+                'yield' => $mYield,
+                'eff' => $mEff
+            ];
+            $totalInput += $mIn;
+            $totalOutput += $mOut;
+            $totalNg += $mNg;
+            if ($mEffCount > 0) {
+                $sumEff += $mEffSum;
+                $effCount += $mEffCount;
+            }
+        }
+    } elseif ($mode === 'bulanan' || $mode === 'perbulan') {
+        $bulanFormat = $request->query('bulan') ?: date('Y-m');
+        $parts = explode('-', $bulanFormat);
+        $thn = (int) ($parts[0] ?? date('Y'));
+        $bln = (int) ($parts[1] ?? date('m'));
+        $daysInMonth = (int) date('t', strtotime(sprintf('%04d-%02d-01', $thn, $bln)));
+
+        for ($d = 1; $d <= $daysInMonth; $d++) {
+            $dateStr = sprintf('%04d-%02d-%02d', $thn, $bln, $d);
+            $dIn = 0;
+            $dOut = 0;
+            $dNg = 0;
+            $dEffSum = 0;
+            $dEffCount = 0;
+
+            foreach ($history as $h) {
+                if (($h['tanggal'] ?? '') === $dateStr) {
+                    $out = (int) ($h['nilai_f'] ?? 0);
+                    $ng = (int) ($h['nilai_e'] ?? 0);
+                    $in = (int) ($h['total_input'] ?? ($out + $ng));
+                    $dOut += $out;
+                    $dNg += $ng;
+                    $dIn += $in;
+                    if (isset($h['eff'])) {
+                        $dEffSum += (float) $h['eff'];
+                        $dEffCount++;
+                    }
+                }
+            }
+
+            $dProc = $dOut + $dNg;
+            $dYield = $dProc > 0 ? round(($dOut / $dProc) * 100, 1) : ($dIn > 0 ? round(($dOut / $dIn) * 100, 1) : 0.0);
+            $dEff = $dEffCount > 0 ? round($dEffSum / $dEffCount, 1) : 0.0;
+
+            $titik[] = [
+                'waktu' => sprintf('%02d', $d),
+                'tanggal' => $dateStr,
+                'input' => $dIn,
+                'output' => $dOut,
+                'ng' => $dNg,
+                'yield' => $dYield,
+                'eff' => $dEff
+            ];
+            $totalInput += $dIn;
+            $totalOutput += $dOut;
+            $totalNg += $dNg;
+            if ($dEffCount > 0) {
+                $sumEff += $dEffSum;
+                $effCount += $dEffCount;
+            }
+        }
+    } elseif ($mode === 'mingguan' || $mode === 'perminggu') {
+        $minggu = $request->query('minggu');
+        if ($minggu && preg_match('/^(\d{4})-W(\d{2})$/', $minggu, $mMatches)) {
+            $isoYear = (int) $mMatches[1];
+            $isoWeek = (int) $mMatches[2];
+        } else {
+            $isoYear = (int) date('o');
+            $isoWeek = (int) date('W');
+        }
+        $dto = new DateTime();
+        $dto->setISODate($isoYear, $isoWeek);
+        $namaHari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+
+        for ($i = 0; $i < 7; $i++) {
+            $dateStr = $dto->format('Y-m-d');
+            $label = $namaHari[$i] . ' (' . $dto->format('d/m') . ')';
+
+            $wIn = 0;
+            $wOut = 0;
+            $wNg = 0;
+            $wEffSum = 0;
+            $wEffCount = 0;
+
+            foreach ($history as $h) {
+                if (($h['tanggal'] ?? '') === $dateStr) {
+                    $out = (int) ($h['nilai_f'] ?? 0);
+                    $ng = (int) ($h['nilai_e'] ?? 0);
+                    $in = (int) ($h['total_input'] ?? ($out + $ng));
+                    $wOut += $out;
+                    $wNg += $ng;
+                    $wIn += $in;
+                    if (isset($h['eff'])) {
+                        $wEffSum += (float) $h['eff'];
+                        $wEffCount++;
+                    }
+                }
+            }
+
+            $wProc = $wOut + $wNg;
+            $wYield = $wProc > 0 ? round(($wOut / $wProc) * 100, 1) : ($wIn > 0 ? round(($wOut / $wIn) * 100, 1) : 0.0);
+            $wEff = $wEffCount > 0 ? round($wEffSum / $wEffCount, 1) : 0.0;
+
+            $titik[] = [
+                'waktu' => $label,
+                'tanggal' => $dateStr,
+                'input' => $wIn,
+                'output' => $wOut,
+                'ng' => $wNg,
+                'yield' => $wYield,
+                'eff' => $wEff
+            ];
+            $totalInput += $wIn;
+            $totalOutput += $wOut;
+            $totalNg += $wNg;
+            if ($wEffCount > 0) {
+                $sumEff += $wEffSum;
+                $effCount += $wEffCount;
+            }
+            $dto->modify('+1 day');
+        }
+    } else {
+        // Mode 'perjam' atau 'perhari' (detail jam kerja untuk tanggal tertentu)
+        $tgl = $request->query('tanggal') ?: date('Y-m-d');
+        $jamList = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'];
+
+        $dayOut = 0;
+        $dayNg = 0;
+        $dayIn = 0;
+        $effSum = 0;
+        $effC = 0;
+
+        foreach ($history as $h) {
+            if (($h['tanggal'] ?? '') === $tgl) {
+                $out = (int) ($h['nilai_f'] ?? 0);
+                $ng = (int) ($h['nilai_e'] ?? 0);
+                $in = (int) ($h['total_input'] ?? ($out + $ng));
+                $dayOut += $out;
+                $dayNg += $ng;
+                $dayIn += $in;
+                if (isset($h['eff'])) {
+                    $effSum += (float) $h['eff'];
+                    $effC++;
+                }
+            }
+        }
+
+        if ($tgl === $today) {
+            $dayOut = max($dayOut, $liveOutput);
+            $dayNg = max($dayNg, $liveNg);
+            $dayIn = max($dayIn, $liveInput, $dayOut + $dayNg);
+        }
+
+        $totalOutput = $dayOut;
+        $totalNg = $dayNg;
+        $totalInput = $dayIn;
+        $sumEff = $effSum;
+        $effCount = $effC;
+
+        // Distribusikan jam kerja:
+        // Jika tanggal adalah hari ini, sesuaikan akumulasi sampai jam berjalan
+        $currentHour = (int) date('H');
+        $activeJamCount = 0;
+        foreach ($jamList as $idx => $jam) {
+            $hNum = (int) substr($jam, 0, 2);
+            if ($tgl !== $today || $hNum <= $currentHour || $idx === 0) {
+                $activeJamCount++;
+            }
+        }
+        $activeJamCount = max(1, $activeJamCount);
+
+        $accumIn = 0;
+        $accumOut = 0;
+        $accumNg = 0;
+        $stepIn = (int) ceil($dayIn / $activeJamCount);
+        $stepOut = (int) ceil($dayOut / $activeJamCount);
+        $stepNg = (int) ceil($dayNg / $activeJamCount);
+
+        foreach ($jamList as $idx => $jam) {
+            $hNum = (int) substr($jam, 0, 2);
+            if ($tgl === $today && $hNum > $currentHour && $idx > 0) {
+                // Jam mendatang hari ini belum ada produksi
+                $jamProcessed = $accumOut + $accumNg;
+                $titik[] = [
+                    'waktu' => $jam,
+                    'input' => $accumIn,
+                    'output' => $accumOut,
+                    'ng' => $accumNg,
+                    'yield' => $jamProcessed > 0 ? round(($accumOut / $jamProcessed) * 100, 1) : 0.0
+                ];
+            } else {
+                $accumIn = min($dayIn, $accumIn + $stepIn);
+                $accumOut = min($dayOut, $accumOut + $stepOut);
+                $accumNg = min($dayNg, $accumNg + $stepNg);
+                $jamProcessed = $accumOut + $accumNg;
+                $titik[] = [
+                    'waktu' => $jam,
+                    'input' => $accumIn,
+                    'output' => $accumOut,
+                    'ng' => $accumNg,
+                    'yield' => $jamProcessed > 0 ? round(($accumOut / $jamProcessed) * 100, 1) : 0.0
+                ];
+            }
+        }
+    }
+
+    $totalProcessed = $totalOutput + $totalNg;
+    $yieldPersen = $totalProcessed > 0 ? round(($totalOutput / $totalProcessed) * 100, 1) : ($totalInput > 0 ? round(($totalOutput / $totalInput) * 100, 1) : 0.0);
+    $avgEff = $effCount > 0 ? round($sumEff / $effCount, 1) : 0.0;
+
+    // Hitung breakdown defect untuk periode terpilih
+    $defectBreakdown = [
+        'Cat Bintik (Dust/Dirt)' => 0,
+        'Cat Meler (Run/Sag)' => 0,
+        'Scratch / Gores / Dent' => 0,
+        'Cat Belang / Tipis' => 0,
+        'Cat Mengelupas (Peeling)' => 0,
+        'Defect Lainnya' => 0
+    ];
+
+    foreach ($ngLogs as $nl) {
+        $logTgl = $nl['tanggal'] ?? '';
+        $cocok = false;
+
+        if ($mode === '5tahun') {
+            $logYear = (int) substr($logTgl, 0, 4);
+            $cocok = ($logYear >= (int) date('Y') - 4);
+        } elseif ($mode === 'tahunan') {
+            $thnTarget = $request->query('tahun') ?: date('Y');
+            $cocok = (substr($logTgl, 0, 4) === (string) $thnTarget);
+        } elseif ($mode === 'bulanan' || $mode === 'perbulan' || $mode === 'perhari') {
+            $blnTarget = $request->query('bulan') ?: date('Y-m');
+            $cocok = (substr($logTgl, 0, 7) === (string) $blnTarget);
+        } elseif ($mode === 'mingguan' || $mode === 'perminggu') {
+            $weekDates = array_filter(array_column($titik, 'tanggal'));
+            $cocok = !empty($weekDates) ? in_array($logTgl, $weekDates, true) : true;
+        } else {
+            $tglTarget = $request->query('tanggal') ?: date('Y-m-d');
+            $cocok = ($logTgl === $tglTarget);
+        }
+
+        if ($cocok) {
+            $type = $nl['defect_type'] ?? 'Defect Lainnya';
+            $pcs = (int) ($nl['pcs'] ?? 1);
+            if (!isset($defectBreakdown[$type])) {
+                $defectBreakdown[$type] = 0;
+            }
+            $defectBreakdown[$type] += $pcs;
+        }
+    }
+    arsort($defectBreakdown);
 
     return response()->json([
         'status' => 'success',
+        'mode' => $mode,
         'total_input' => $totalInput,
         'total_output' => $totalOutput,
+        'total_ng' => $totalNg,
+        'yield_persen' => $yieldPersen,
+        'avg_eff' => $avgEff,
+        'defect_breakdown' => $defectBreakdown,
         'data' => $titik,
     ])
         ->header('Access-Control-Allow-Origin', '*')
@@ -1025,27 +1403,196 @@ Route::match(['get', 'options'], '/api/grafik-harian', function (Request $reques
 
 Route::match(['get', 'options'], '/api/grafik_performance.php', function (Request $request) {
     $history = function_exists('getProductionHistoryList') ? getProductionHistoryList() : [];
+    $mode = $request->query('mode');
+    $tahun = $request->query('tahun');
+    $bulan = $request->query('bulan');
+    $minggu = $request->query('minggu');
     $tgl = $request->query('tanggal');
-    if ($tgl) {
-        $history = array_values(array_filter($history, function ($item) use ($tgl) {
-            return ($item['tanggal'] ?? '') === $tgl;
-        }));
-    }
 
     $titik = [];
-    foreach ($history as $idx => $h) {
-        $sesiNo = $h['nomor_sesi'] ?? ($idx + 1);
-        $part = $h['part_code'] ?? $h['part'] ?? 'Part';
-        $titik[] = [
-            'label' => "Sesi {$sesiNo} ({$part})",
-            'I' => (float) ($h['nilai_i'] ?? 0),
-            'D' => (float) ($h['nilai_d'] ?? 1.0),
-            'eff' => (float) ($h['eff'] ?? 95.0),
-        ];
+
+    if ($mode === '5tahun') {
+        $currYear = (int) date('Y');
+        $years = [$currYear - 4, $currYear - 3, $currYear - 2, $currYear - 1, $currYear];
+        foreach ($years as $yr) {
+            $yrStr = (string) $yr;
+            $lossSum = 0;
+            $cycleSum = 0;
+            $effSum = 0;
+            $outSum = 0;
+            $ngSum = 0;
+            $cnt = 0;
+            foreach ($history as $h) {
+                if (substr($h['tanggal'] ?? '', 0, 4) === $yrStr) {
+                    $lossSum += (float) ($h['nilai_i'] ?? 0);
+                    $cycleSum += (float) ($h['nilai_d'] ?? 1.0);
+                    $effSum += (float) ($h['eff'] ?? 95.0);
+                    $outSum += (int) ($h['nilai_f'] ?? 0);
+                    $ngSum += (int) ($h['nilai_e'] ?? 0);
+                    $cnt++;
+                }
+            }
+            $proc = $outSum + $ngSum;
+            $titik[] = [
+                'label' => $yrStr,
+                'I' => $cnt > 0 ? round($lossSum / $cnt, 1) : 0.0,
+                'D' => $cnt > 0 ? round($cycleSum / $cnt, 2) : 0.0,
+                'eff' => $cnt > 0 ? round($effSum / $cnt, 1) : 0.0,
+                'yield' => $proc > 0 ? round(($outSum / $proc) * 100, 1) : 0.0,
+            ];
+        }
+    } elseif ($mode === 'tahunan' || $tahun) {
+        $thn = (int) ($tahun ?: date('Y'));
+        $namaBulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        for ($m = 1; $m <= 12; $m++) {
+            $prefix = sprintf('%04d-%02d', $thn, $m);
+            $lossSum = 0;
+            $cycleSum = 0;
+            $effSum = 0;
+            $outSum = 0;
+            $ngSum = 0;
+            $cnt = 0;
+            foreach ($history as $h) {
+                if (substr($h['tanggal'] ?? '', 0, 7) === $prefix) {
+                    $lossSum += (float) ($h['nilai_i'] ?? 0);
+                    $cycleSum += (float) ($h['nilai_d'] ?? 1.0);
+                    $effSum += (float) ($h['eff'] ?? 95.0);
+                    $outSum += (int) ($h['nilai_f'] ?? 0);
+                    $ngSum += (int) ($h['nilai_e'] ?? 0);
+                    $cnt++;
+                }
+            }
+            $proc = $outSum + $ngSum;
+            $titik[] = [
+                'label' => $namaBulan[$m - 1],
+                'I' => $cnt > 0 ? round($lossSum / $cnt, 1) : 0.0,
+                'D' => $cnt > 0 ? round($cycleSum / $cnt, 2) : 0.0,
+                'eff' => $cnt > 0 ? round($effSum / $cnt, 1) : 0.0,
+                'yield' => $proc > 0 ? round(($outSum / $proc) * 100, 1) : 0.0,
+            ];
+        }
+    } elseif ($mode === 'bulanan' || $bulan) {
+        $bulanFormat = $bulan ?: date('Y-m');
+        $parts = explode('-', $bulanFormat);
+        $thn = (int) ($parts[0] ?? date('Y'));
+        $bln = (int) ($parts[1] ?? date('m'));
+        $daysInMonth = (int) date('t', strtotime(sprintf('%04d-%02d-01', $thn, $bln)));
+
+        for ($d = 1; $d <= $daysInMonth; $d++) {
+            $dateStr = sprintf('%04d-%02d-%02d', $thn, $bln, $d);
+            $lossSum = 0;
+            $cycleSum = 0;
+            $effSum = 0;
+            $outSum = 0;
+            $ngSum = 0;
+            $cnt = 0;
+            foreach ($history as $h) {
+                if (($h['tanggal'] ?? '') === $dateStr) {
+                    $lossSum += (float) ($h['nilai_i'] ?? 0);
+                    $cycleSum += (float) ($h['nilai_d'] ?? 1.0);
+                    $effSum += (float) ($h['eff'] ?? 95.0);
+                    $outSum += (int) ($h['nilai_f'] ?? 0);
+                    $ngSum += (int) ($h['nilai_e'] ?? 0);
+                    $cnt++;
+                }
+            }
+            if ($cnt > 0 || $d <= (int) date('d')) {
+                $proc = $outSum + $ngSum;
+                $titik[] = [
+                    'label' => 'Tgl ' . sprintf('%02d', $d),
+                    'I' => $cnt > 0 ? round($lossSum / $cnt, 1) : 0.0,
+                    'D' => $cnt > 0 ? round($cycleSum / $cnt, 2) : 0.0,
+                    'eff' => $cnt > 0 ? round($effSum / $cnt, 1) : 0.0,
+                    'yield' => $proc > 0 ? round(($outSum / $proc) * 100, 1) : 0.0,
+                ];
+            }
+        }
+    } elseif ($mode === 'mingguan' || $minggu) {
+        if ($minggu && preg_match('/^(\d{4})-W(\d{2})$/', $minggu, $mMatches)) {
+            $isoYear = (int) $mMatches[1];
+            $isoWeek = (int) $mMatches[2];
+        } else {
+            $isoYear = (int) date('o');
+            $isoWeek = (int) date('W');
+        }
+        $dto = new DateTime();
+        $dto->setISODate($isoYear, $isoWeek);
+        $namaHari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+
+        for ($i = 0; $i < 7; $i++) {
+            $dateStr = $dto->format('Y-m-d');
+            $label = $namaHari[$i] . ' (' . $dto->format('d/m') . ')';
+            $lossSum = 0;
+            $cycleSum = 0;
+            $effSum = 0;
+            $outSum = 0;
+            $ngSum = 0;
+            $cnt = 0;
+            foreach ($history as $h) {
+                if (($h['tanggal'] ?? '') === $dateStr) {
+                    $lossSum += (float) ($h['nilai_i'] ?? 0);
+                    $cycleSum += (float) ($h['nilai_d'] ?? 1.0);
+                    $effSum += (float) ($h['eff'] ?? 95.0);
+                    $outSum += (int) ($h['nilai_f'] ?? 0);
+                    $ngSum += (int) ($h['nilai_e'] ?? 0);
+                    $cnt++;
+                }
+            }
+            $proc = $outSum + $ngSum;
+            $titik[] = [
+                'label' => $label,
+                'I' => $cnt > 0 ? round($lossSum / $cnt, 1) : 0.0,
+                'D' => $cnt > 0 ? round($cycleSum / $cnt, 2) : 0.0,
+                'eff' => $cnt > 0 ? round($effSum / $cnt, 1) : 0.0,
+                'yield' => $proc > 0 ? round(($outSum / $proc) * 100, 1) : 0.0,
+            ];
+            $dto->modify('+1 day');
+        }
+    } else {
+        // Mode per sesi harian untuk $tgl
+        $tanggalTerpilih = $tgl ?: date('Y-m-d');
+        $filtered = array_values(array_filter($history, function ($item) use ($tanggalTerpilih) {
+            return ($item['tanggal'] ?? '') === $tanggalTerpilih;
+        }));
+
+        foreach ($filtered as $idx => $h) {
+            $sesiNo = $h['nomor_sesi'] ?? ($idx + 1);
+            $part = $h['part_code'] ?? $h['part'] ?? 'Part';
+            $isLive = (($h['status'] ?? '') === 'Ongoing') ? ' [LIVE]' : '';
+            $out = (int) ($h['nilai_f'] ?? 0);
+            $ng = (int) ($h['nilai_e'] ?? 0);
+            $proc = $out + $ng;
+            $titik[] = [
+                'label' => "Sesi {$sesiNo} ({$part}){$isLive}",
+                'I' => (float) ($h['nilai_i'] ?? 0),
+                'D' => (float) ($h['nilai_d'] ?? 1.0),
+                'eff' => (float) ($h['eff'] ?? 95.0),
+                'yield' => $proc > 0 ? round(($out / $proc) * 100, 1) : 100.0,
+            ];
+        }
+
+        if (empty($titik) && $tanggalTerpilih === date('Y-m-d')) {
+            $statsFile = storage_path('app/hanger_stats.json');
+            $stats = file_exists($statsFile) ? (@json_decode(file_get_contents($statsFile), true) ?: []) : [];
+            $liveOut = (int) ($stats['total_output_pcs'] ?? 0);
+            $liveNg = (int) ($stats['total_ng_pcs'] ?? 0);
+            $liveProc = $liveOut + $liveNg;
+            $liveYld = $liveProc > 0 ? round(($liveOut / $liveProc) * 100, 1) : 100.0;
+            $activePart = function_exists('getActivePart') ? getActivePart() : null;
+            $partCode = $activePart['code'] ?? 'Active';
+            $titik[] = [
+                'label' => "Sesi 1 ({$partCode}) [LIVE]",
+                'I' => 0.0,
+                'D' => 1.0,
+                'eff' => 95.0,
+                'yield' => $liveYld,
+            ];
+        }
     }
 
     return response()->json([
         'status' => 'success',
+        'mode' => $mode ?: 'perjam',
         'data' => $titik,
     ])
         ->header('Access-Control-Allow-Origin', '*')
@@ -1104,6 +1651,346 @@ function getPartsCatalog()
         $p['model_size_mb'] = $hasLocal ? round(filesize($fullPath) / (1024 * 1024), 1) : 0;
     }
     return $catalog;
+}
+
+if (!function_exists('getProductionHistoryList')) {
+    function getProductionHistoryList()
+    {
+        $file = storage_path('app/production_history.json');
+        if (!file_exists($file))
+            return [];
+        return @json_decode(file_get_contents($file), true) ?: [];
+    }
+}
+
+if (!function_exists('saveProductionHistoryList')) {
+    function saveProductionHistoryList(array $history)
+    {
+        file_put_contents(storage_path('app/production_history.json'), json_encode($history, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    }
+}
+
+if (!function_exists('getCurrentShiftInfo')) {
+    function getCurrentShiftInfo($timestamp = null)
+    {
+        $timestamp = $timestamp ?: time();
+        $hour = (int) date('H', $timestamp);
+        $min = (int) date('i', $timestamp);
+        $minutesOfDay = $hour * 60 + $min;
+
+        // Shift 1 (Pagi): 06:55 (415 m) s/d 15:50 (950 m)
+        // Shift 2 (Sore): 15:50 (950 m) s/d 23:20 (1400 m)
+        // Shift 3 (Malam): 23:20 (1400 m) s/d 06:55 (415 m keesokan paginya)
+        if ($minutesOfDay >= 415 && $minutesOfDay < 950) {
+            return [
+                'shift_key' => 'Shift 1',
+                'shift_name' => 'Shift 1 (Pagi)',
+                'shift_simple' => 'Pagi',
+                'jam_mulai' => '06:55',
+                'jam_selesai' => '15:50',
+                'production_date' => date('Y-m-d', $timestamp),
+            ];
+        } elseif ($minutesOfDay >= 950 && $minutesOfDay < 1400) {
+            return [
+                'shift_key' => 'Shift 2',
+                'shift_name' => 'Shift 2 (Sore)',
+                'shift_simple' => 'Sore',
+                'jam_mulai' => '15:50',
+                'jam_selesai' => '23:20',
+                'production_date' => date('Y-m-d', $timestamp),
+            ];
+        } else {
+            $productionDate = ($minutesOfDay < 415)
+                ? date('Y-m-d', strtotime('-1 day', $timestamp))
+                : date('Y-m-d', $timestamp);
+            return [
+                'shift_key' => 'Shift 3',
+                'shift_name' => 'Shift 3 (Malam)',
+                'shift_simple' => 'Malam',
+                'jam_mulai' => '23:20',
+                'jam_selesai' => '06:55',
+                'production_date' => $productionDate,
+            ];
+        }
+    }
+}
+
+if (!function_exists('getPythonBinaryPath')) {
+    function getPythonBinaryPath()
+    {
+        $candidates = [
+            'C:\\Python314\\python.exe',
+            'C:\\Python313\\python.exe',
+            'C:\\Python312\\python.exe',
+            'C:\\Python311\\python.exe',
+            'C:\\Python310\\python.exe',
+        ];
+        foreach ($candidates as $cand) {
+            if (file_exists($cand)) return $cand;
+        }
+        return 'python';
+    }
+}
+
+if (!function_exists('triggerExcelSync')) {
+    function triggerExcelSync()
+    {
+        $pyPath = getPythonBinaryPath();
+        $script = base_path('app/Services/excel_sync_service.py');
+        if (file_exists($pyPath) && file_exists($script)) {
+            try {
+                if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                    @pclose(@popen("start /B {$pyPath} \"{$script}\"", "r"));
+                } else {
+                    @exec("{$pyPath} \"{$script}\" > /dev/null 2>&1 &");
+                }
+            } catch (\Throwable $e) {}
+        }
+    }
+}
+
+if (!function_exists('autoSyncAndCheckShiftRollover')) {
+    function autoSyncAndCheckShiftRollover($forceFinalize = false)
+    {
+        $now = time();
+        $currentShift = getCurrentShiftInfo($now);
+        $shiftStateFile = storage_path('app/shift_state.json');
+        $statsFile = storage_path('app/hanger_stats.json');
+        $activeShiftFile = storage_path('app/active_shift.json');
+        $ngLogFile = storage_path('app/ng_logs.json');
+
+        $shiftState = file_exists($shiftStateFile) ? (@json_decode(file_get_contents($shiftStateFile), true) ?: []) : [];
+        $stats = file_exists($statsFile) ? (@json_decode(file_get_contents($statsFile), true) ?: []) : [];
+        $activeShift = getActiveShift();
+        $activePart = function_exists('getActivePart') ? getActivePart() : null;
+        $history = getProductionHistoryList();
+        $ngLogs = file_exists($ngLogFile) ? (@json_decode(file_get_contents($ngLogFile), true) ?: []) : [];
+
+        $lastShiftKey = $shiftState['current_shift_key'] ?? $currentShift['shift_key'];
+        $lastProductionDate = $shiftState['production_date'] ?? $currentShift['production_date'];
+
+        $isShiftChanged = ($currentShift['shift_key'] !== $lastShiftKey || $currentShift['production_date'] !== $lastProductionDate);
+
+        // 1. KASUS ROLLOVER SHIFT / PERGANTIAN HARI (WAKTU BERGANTI ATAU MANUAL HANDOVER/RESET):
+        if ($isShiftChanged || $forceFinalize) {
+            $outPcs = (int) ($stats['total_output_pcs'] ?? 0);
+            $ngPcs = (int) ($stats['total_ng_pcs'] ?? 0);
+            $inHanger = (int) ($stats['total_input_hangers'] ?? 0);
+            $outHanger = (int) ($stats['total_output_hangers'] ?? 0);
+            $emptyHanger = (int) ($stats['empty_hangers'] ?? 0);
+
+            if ($outPcs > 0 || $ngPcs > 0 || $inHanger > 0) {
+                $pCode = $activePart['code'] ?? 'PART-001';
+                $cVal = (float) ($activePart['sut'] ?? 1.0);
+                $bMenit = (date('w', strtotime($lastProductionDate)) == 5) ? 440 : 485;
+                $lossReg = 120;
+                $netTime = max(1, $bMenit - $lossReg);
+                $stdTime = round($cVal * max(1, $outPcs), 2);
+                $eff = $outPcs > 0 ? min(100.0, round(($stdTime / $netTime) * 100, 1)) : 95.0;
+
+                $recordFound = false;
+                foreach ($history as &$h) {
+                    if (($h['tanggal'] ?? '') === $lastProductionDate && stripos(($h['shift'] ?? ''), $lastShiftKey) !== false) {
+                        $h['nilai_f'] = max((int) ($h['nilai_f'] ?? 0), $outPcs);
+                        $h['nilai_e'] = max((int) ($h['nilai_e'] ?? 0), $ngPcs);
+                        $h['status'] = 'Final';
+                        $h['jam_selesai'] = date('H:i');
+                        $h['eff'] = $eff;
+                        $h['std_process_time'] = $stdTime;
+                        $h['total_input_hangers'] = $inHanger;
+                        $h['total_output_hangers'] = $outHanger;
+                        $h['empty_hangers'] = $emptyHanger;
+                        $recordFound = true;
+                        break;
+                    }
+                }
+                unset($h);
+
+                if (!$recordFound) {
+                    array_unshift($history, [
+                        'id' => count($history) + 1,
+                        'line_name' => 'Painting',
+                        'shift' => $activeShift['shift_name'] ?? $lastShiftKey,
+                        'operator_name' => $activeShift['operator_name'] ?? 'Mukhamad Nawwaf',
+                        'operator_id' => $activeShift['operator_id'] ?? 'OP-01',
+                        'total_manpower' => (int) ($activeShift['total_manpower'] ?? 6),
+                        'positions' => $activeShift['positions'] ?? [],
+                        'nomor_sesi' => count($history) + 1,
+                        'part_code' => $pCode,
+                        'part_name' => $activePart['name'] ?? "Part {$pCode}",
+                        'nilai_c' => $cVal,
+                        'jam_mulai' => $currentShift['jam_mulai'],
+                        'jam_selesai' => date('H:i'),
+                        'tanggal' => $lastProductionDate,
+                        'nilai_b' => $bMenit,
+                        'total_working_time' => $bMenit * 6,
+                        'loss_regulated' => $lossReg,
+                        'actual_net_time' => $netTime,
+                        'loss_unregulated' => 0,
+                        'net_operating_time' => $netTime,
+                        'nilai_f' => $outPcs,
+                        'nilai_e' => $ngPcs,
+                        'total_input_hangers' => $inHanger,
+                        'total_output_hangers' => $outHanger,
+                        'empty_hangers' => $emptyHanger,
+                        'std_time_output' => $stdTime,
+                        'eff' => $eff,
+                        'status' => 'Final',
+                        'dibuat_pada' => date('Y-m-d H:i:s'),
+                    ]);
+                }
+                saveProductionHistoryList($history);
+
+                // Catat log handover shift
+                $logFile = storage_path('app/shift_handover_logs.json');
+                $handoverLogs = file_exists($logFile) ? (@json_decode(file_get_contents($logFile), true) ?: []) : [];
+                array_unshift($handoverLogs, [
+                    'event' => 'Auto-Archive & Shift Rollover',
+                    'previous_shift' => $lastShiftKey,
+                    'new_shift' => $currentShift['shift_key'],
+                    'date' => $lastProductionDate,
+                    'total_output_pcs' => $outPcs,
+                    'total_ng_pcs' => $ngPcs,
+                    'timestamp' => date('Y-m-d H:i:s')
+                ]);
+                @file_put_contents($logFile, json_encode(array_slice($handoverLogs, 0, 50), JSON_PRETTY_PRINT));
+            }
+
+            // RESET COUNTER OPERASIONAL BERSIH UNTUK SHIFT BARU
+            $stats['total_input_hangers'] = 0;
+            $stats['total_output_hangers'] = 0;
+            $stats['total_output_pcs'] = 0;
+            $stats['total_ng_pcs'] = 0;
+            $stats['empty_hangers'] = 0;
+            $stats['wip_hangers'] = 0;
+            $stats['last_updated'] = now()->toIso8601String();
+            file_put_contents($statsFile, json_encode($stats, JSON_PRETTY_PRINT));
+
+            // Update shift state ke shift baru
+            $shiftState = [
+                'current_shift_key' => $currentShift['shift_key'],
+                'current_shift_name' => $currentShift['shift_name'],
+                'production_date' => $currentShift['production_date'],
+                'last_rollover_at' => date('Y-m-d H:i:s'),
+            ];
+            file_put_contents($shiftStateFile, json_encode($shiftState, JSON_PRETTY_PRINT));
+
+            // Update active_shift.json
+            $activeShift['shift'] = $currentShift['shift_key'];
+            $activeShift['shift_name'] = $currentShift['shift_name'];
+            $activeShift['started_at'] = date('Y-m-d H:i:s');
+            file_put_contents($activeShiftFile, json_encode($activeShift, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+            triggerExcelSync();
+
+            return [
+                'status' => 'rolled_over',
+                'from' => $lastShiftKey,
+                'to' => $currentShift['shift_key'],
+                'date' => $currentShift['production_date']
+            ];
+        }
+
+        // 2. KASUS DALAM SHIFT YANG SEDANG BERJALAN (REAL-TIME CONTINUOUS SYNC):
+        $outPcs = (int) ($stats['total_output_pcs'] ?? 0);
+        $ngPcs = (int) ($stats['total_ng_pcs'] ?? 0);
+        $inHanger = (int) ($stats['total_input_hangers'] ?? 0);
+        $outHanger = (int) ($stats['total_output_hangers'] ?? 0);
+        $emptyHanger = (int) ($stats['empty_hangers'] ?? 0);
+
+        $todayLogs = array_filter($ngLogs, function ($nl) use ($currentShift) {
+            return ($nl['tanggal'] ?? '') === $currentShift['production_date'];
+        });
+        $logNgSum = 0;
+        foreach ($todayLogs as $tl) {
+            $logNgSum += (int) ($tl['pcs'] ?? 1);
+        }
+        $effectiveNg = max($ngPcs, $logNgSum);
+
+        $pCode = $activePart['code'] ?? 'PART-001';
+        $cVal = (float) ($activePart['sut'] ?? 1.0);
+        $bMenit = (date('w', strtotime($currentShift['production_date'])) == 5) ? 440 : 485;
+        $lossReg = 120;
+        $netTime = max(1, $bMenit - $lossReg);
+        $stdTime = round($cVal * max(1, $outPcs), 2);
+        $eff = $outPcs > 0 ? min(100.0, round(($stdTime / $netTime) * 100, 1)) : 95.0;
+
+        $recordFound = false;
+        foreach ($history as &$h) {
+            if (($h['tanggal'] ?? '') === $currentShift['production_date'] && stripos(($h['shift'] ?? ''), $currentShift['shift_key']) !== false) {
+                $h['nilai_f'] = $outPcs;
+                $h['nilai_e'] = $effectiveNg;
+                $h['total_input_hangers'] = $inHanger;
+                $h['total_output_hangers'] = $outHanger;
+                $h['empty_hangers'] = $emptyHanger;
+                $h['part_code'] = $pCode;
+                $h['part_name'] = $activePart['name'] ?? "Part {$pCode}";
+                $h['operator_name'] = $activeShift['operator_name'] ?? 'Mukhamad Nawwaf';
+                $h['operator_id'] = $activeShift['operator_id'] ?? 'OP-01';
+                $h['total_manpower'] = (int) ($activeShift['total_manpower'] ?? 6);
+                $h['jam_selesai'] = date('H:i');
+                $h['eff'] = $eff;
+                $h['std_process_time'] = $stdTime;
+                $h['status'] = 'Ongoing';
+                $recordFound = true;
+                break;
+            }
+        }
+        unset($h);
+
+        if (!$recordFound) {
+            array_unshift($history, [
+                'id' => count($history) + 1,
+                'line_name' => 'Painting',
+                'shift' => $activeShift['shift_name'] ?? $currentShift['shift_name'],
+                'operator_name' => $activeShift['operator_name'] ?? 'Mukhamad Nawwaf',
+                'operator_id' => $activeShift['operator_id'] ?? 'OP-01',
+                'total_manpower' => (int) ($activeShift['total_manpower'] ?? 6),
+                'positions' => $activeShift['positions'] ?? [],
+                'nomor_sesi' => count($history) + 1,
+                'part_code' => $pCode,
+                'part_name' => $activePart['name'] ?? "Part {$pCode}",
+                'nilai_c' => $cVal,
+                'jam_mulai' => $currentShift['jam_mulai'],
+                'jam_selesai' => date('H:i'),
+                'tanggal' => $currentShift['production_date'],
+                'nilai_b' => $bMenit,
+                'total_working_time' => $bMenit * 6,
+                'loss_regulated' => $lossReg,
+                'actual_net_time' => $netTime,
+                'loss_unregulated' => 0,
+                'net_operating_time' => $netTime,
+                'nilai_f' => $outPcs,
+                'nilai_e' => $effectiveNg,
+                'total_input_hangers' => $inHanger,
+                'total_output_hangers' => $outHanger,
+                'empty_hangers' => $emptyHanger,
+                'std_time_output' => $stdTime,
+                'eff' => $eff,
+                'status' => 'Ongoing',
+                'dibuat_pada' => date('Y-m-d H:i:s'),
+            ]);
+        }
+        saveProductionHistoryList($history);
+
+        if (empty($shiftState)) {
+            $shiftState = [
+                'current_shift_key' => $currentShift['shift_key'],
+                'current_shift_name' => $currentShift['shift_name'],
+                'production_date' => $currentShift['production_date'],
+                'last_rollover_at' => date('Y-m-d H:i:s'),
+            ];
+            file_put_contents($shiftStateFile, json_encode($shiftState, JSON_PRETTY_PRINT));
+        }
+
+        return [
+            'status' => 'synced',
+            'shift' => $currentShift['shift_name'],
+            'date' => $currentShift['production_date'],
+            'out_pcs' => $outPcs,
+            'ng_pcs' => $effectiveNg
+        ];
+    }
 }
 
 function getActiveShift()
@@ -1193,6 +2080,11 @@ Route::match(['post', 'options'], '/api/set-active-shift', function (Request $re
         'notes' => $notes
     ];
 
+    // Finalisasi shift sebelumnya ke Riwayat & Excel jika ada perubahan shift
+    if (function_exists('autoSyncAndCheckShiftRollover')) {
+        autoSyncAndCheckShiftRollover(true);
+    }
+
     $file = storage_path('app/active_shift.json');
     file_put_contents($file, json_encode($shiftData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
@@ -1203,6 +2095,10 @@ Route::match(['post', 'options'], '/api/set-active-shift', function (Request $re
     if (count($logs) > 50)
         $logs = array_slice($logs, 0, 50);
     @file_put_contents($logFile, json_encode($logs, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+    if (function_exists('triggerExcelSync')) {
+        triggerExcelSync();
+    }
 
     return response()->json([
         'status' => 'ok',
@@ -1608,17 +2504,18 @@ Route::match(['post', 'options'], '/api/detect-local', function (Request $reques
     $conf = (float) $request->input('conf', 0.35);
 
     // 1. Coba panggil background daemon lokal (port 5001) jika sedang aktif
-    $daemonUrl = 'http://127.0.0.1:5001/';
+    $daemonUrl = 'http://127.0.0.1:5001/detect';
     $ch = curl_init($daemonUrl);
     curl_setopt_array($ch, [
         CURLOPT_POST => true,
         CURLOPT_POSTFIELDS => json_encode([
             'model_path' => $modelPath,
             'image_base64' => $imageBase64,
-            'conf' => $conf
+            'conf' => $conf,
+            'use_tracker' => true
         ]),
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT_MS => 1500,
+        CURLOPT_TIMEOUT_MS => 3500,
         CURLOPT_HTTPHEADER => ['Content-Type: application/json']
     ]);
     $resp = curl_exec($ch);
@@ -1681,22 +2578,50 @@ Route::match(['post', 'options'], '/api/detect-local', function (Request $reques
     ]));
 
     $pyScript = base_path('app/Services/local_ai_service.py');
-    $cmd = 'python ' . escapeshellarg($pyScript) . ' --model ' . escapeshellarg($modelPath) . ' < ' . escapeshellarg($tempInput) . ' 2>&1';
+    $pyBin = getPythonBinaryPath();
+    $cmd = escapeshellarg($pyBin) . ' ' . escapeshellarg($pyScript) . ' --model ' . escapeshellarg($modelPath) . ' < ' . escapeshellarg($tempInput) . ' 2>&1';
 
     $output = shell_exec($cmd);
     @unlink($tempInput);
 
     $result = @json_decode($output, true);
     if (!$result || !isset($result['status'])) {
+        $msg = 'Gagal menjalankan deteksi AI lokal';
+        if (str_contains($output, 'references types outside the supported Ultralytics checkpoint format')) {
+            $msg = 'Format weights model (' . basename($modelPath) . ') tidak kompatibel dengan Ultralytics YOLO lokal (terdeteksi format weights Roboflow RT-DETR). Silakan unduh/ekspor dari Roboflow dalam format "YOLOv8 PyTorch" atau "YOLOv11 PyTorch" (.pt) atau ONNX.';
+        } elseif (str_contains($output, 'ModuleNotFoundError')) {
+            $msg = 'Modul Python AI belum lengkap: ' . trim($output);
+        }
         return response()->json([
             'status' => 'error',
-            'message' => 'Gagal menjalankan deteksi AI lokal',
+            'message' => $msg,
             'raw_output' => $output
-        ], 500)->header('Access-Control-Allow-Origin', '*');
+        ], 200)->header('Access-Control-Allow-Origin', '*');
     }
 
     $syncActivePartAI($result);
     return response()->json($result)->header('Access-Control-Allow-Origin', '*');
+});
+
+/**
+ * 11b. Reset State Tracker ByteTrack AI Daemon (Port 5001)
+ */
+Route::match(['post', 'get', 'options'], '/api/reset-ai-tracker', function () {
+    $ch = curl_init('http://127.0.0.1:5001/reset-tracker');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 2);
+    $resp = curl_exec($ch);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+
+    if (!$curlErr && $resp) {
+        $json = @json_decode($resp, true);
+        if ($json) {
+            return response()->json($json)->header('Access-Control-Allow-Origin', '*');
+        }
+    }
+    return response()->json(['status' => 'ok', 'message' => 'Tracker reset command executed'])->header('Access-Control-Allow-Origin', '*');
 });
 
 
@@ -1945,17 +2870,21 @@ Route::match(['post', 'get', 'options'], '/api/reset-roboflow-samples', function
 // API MAN-TIME PAINTING, SUT PART, DAN EKSPOR EXCEL SESUAI FILE ASLI PABRIK
 // =========================================================================
 
-function getProductionHistoryList()
-{
-    $file = storage_path('app/production_history.json');
-    if (!file_exists($file))
-        return [];
-    return @json_decode(file_get_contents($file), true) ?: [];
+if (!function_exists('getProductionHistoryList')) {
+    function getProductionHistoryList()
+    {
+        $file = storage_path('app/production_history.json');
+        if (!file_exists($file))
+            return [];
+        return @json_decode(file_get_contents($file), true) ?: [];
+    }
 }
 
-function saveProductionHistoryList(array $history)
-{
-    file_put_contents(storage_path('app/production_history.json'), json_encode($history, JSON_PRETTY_PRINT));
+if (!function_exists('saveProductionHistoryList')) {
+    function saveProductionHistoryList(array $history)
+    {
+        file_put_contents(storage_path('app/production_history.json'), json_encode($history, JSON_PRETTY_PRINT));
+    }
 }
 
 /**
@@ -2077,6 +3006,11 @@ Route::match(['get', 'options'], '/api/riwayat_performance.php', function (Reque
  * 18. API Histori Data Produksi (Tabel Tab Riwayat)
  */
 Route::match(['get', 'options'], '/api/histori.php', function (Request $request) {
+    // Sinkronisasi otomatis shift aktif & auto-rollover
+    if (function_exists('autoSyncAndCheckShiftRollover')) {
+        autoSyncAndCheckShiftRollover();
+    }
+
     $history = getProductionHistoryList();
     $ngLogFile = storage_path('app/ng_logs.json');
     $ngLogs = file_exists($ngLogFile) ? (@json_decode(file_get_contents($ngLogFile), true) ?: []) : [];
@@ -2171,6 +3105,40 @@ Route::match(['get', 'options'], '/api/histori.php', function (Request $request)
             $defectBreakdown['Uncategorized NG'] = $totalNgTgl;
         }
 
+        $shiftsMap = [
+            'Pagi' => null,
+            'Sore' => null,
+            'Malam' => null
+        ];
+        $isAnyOngoing = false;
+        foreach ($d['sesi_list'] as $s) {
+            $sName = $s['shift'] ?? 'Shift 1';
+            $sKey = 'Pagi';
+            if (stripos($sName, 'sore') !== false || stripos($sName, '2') !== false) {
+                $sKey = 'Sore';
+            } elseif (stripos($sName, 'malam') !== false || stripos($sName, '3') !== false) {
+                $sKey = 'Malam';
+            }
+            $sOut = (int) ($s['nilai_f'] ?? 0);
+            $sNg = (int) ($s['nilai_e'] ?? 0);
+            $sIn = $sOut + $sNg;
+            $sEff = (float) ($s['eff'] ?? 95);
+            $sYield = $sIn > 0 ? round(($sOut / $sIn) * 100, 1) : 100.0;
+            if (($s['status'] ?? '') === 'Ongoing') {
+                $isAnyOngoing = true;
+            }
+            $shiftsMap[$sKey] = [
+                'input' => $sIn,
+                'output' => $sOut,
+                'ng' => $sNg,
+                'yield' => $sYield . '%',
+                'yield_val' => $sYield,
+                'eff_persen' => $sEff,
+                'operator' => $s['operator_name'] ?? 'Mukhamad Nawwaf',
+                'status' => $s['status'] ?? 'Final'
+            ];
+        }
+
         $result[] = [
             'tanggal' => $tgl,
             'input' => $totalInTgl,
@@ -2187,7 +3155,9 @@ Route::match(['get', 'options'], '/api/histori.php', function (Request $request)
             'total_manpower' => $d['total_manpower'],
             'sesi_count' => $d['count'],
             'defect_breakdown' => $defectBreakdown,
-            'ng_logs' => $ngByDate[$tgl]['logs'] ?? []
+            'ng_logs' => $ngByDate[$tgl]['logs'] ?? [],
+            'status' => $isAnyOngoing ? 'Ongoing' : 'Final',
+            'shifts' => $shiftsMap
         ];
     }
 
@@ -2537,11 +3507,20 @@ Route::match(['get', 'options'], '/api/kalkulasi_performance_live.php', function
 
 /**
  * 21. Unduh Excel Sesuai File Master Template (08_MAN TIME_ PAINTING_AUG_26.xlsx)
+ * Otomatis memperbarui isi Excel dengan sesi produksi & NG terbaru sebelum diunduh
  */
 $exportHandler = function (Request $request) {
-    $templatePath = storage_path('app/templates/MAN_TIME_PAINTING_TEMPLATE.xlsx');
+    if (function_exists('autoSyncAndCheckShiftRollover')) {
+        autoSyncAndCheckShiftRollover();
+    }
+
+    if (function_exists('triggerExcelSync')) {
+        triggerExcelSync();
+    }
+
+    $templatePath = base_path('excel_data.xlsx');
     if (!file_exists($templatePath)) {
-        $templatePath = base_path('excel_data.xlsx');
+        $templatePath = storage_path('app/templates/MAN_TIME_PAINTING_TEMPLATE.xlsx');
     }
 
     if (!file_exists($templatePath)) {
@@ -2550,11 +3529,9 @@ $exportHandler = function (Request $request) {
 
     $tgl = $request->query('tanggal', date('Y-m-d'));
     $id = $request->query('id');
-    $downloadFilename = "08_MAN TIME_ PAINTING_AUG_26.xlsx";
+    $downloadFilename = "MAN_TIME_PAINTING_{$tgl}.xlsx";
     if ($id) {
         $downloadFilename = "MAN_TIME_PAINTING_SESI_{$id}.xlsx";
-    } elseif ($tgl) {
-        $downloadFilename = "MAN_TIME_PAINTING_{$tgl}.xlsx";
     }
 
     $content = file_get_contents($templatePath);

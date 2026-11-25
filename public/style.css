@@ -649,35 +649,104 @@ body {
 .tower-light-visual {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    background: #1c1c26;
-    padding: 14px 12px;
-    border-radius: 14px;
+    align-items: center;
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+    padding: 10px 10px 8px 10px;
+    border-radius: 18px;
+    border: 2px solid #334155;
+    box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.12), 0 4px 16px rgba(15, 23, 42, 0.2);
     flex-shrink: 0;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    position: relative;
+    gap: 8px;
+    box-sizing: border-box;
+    margin: 6px 0;
+}
+
+/* Patlite Top Cap */
+.tower-light-visual::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    width: 24px;
+    height: 6px;
+    background: linear-gradient(90deg, #64748b, #94a3b8, #64748b);
+    border-radius: 4px 4px 0 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Patlite Bottom Mounting Base */
+.tower-light-visual::after {
+    content: '';
+    position: absolute;
+    bottom: -7px;
+    width: 14px;
+    height: 7px;
+    background: linear-gradient(90deg, #475569, #64748b, #475569);
+    border-radius: 0 0 3px 3px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .tower-lamp {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: #33333f;
-    transition: all 0.3s ease;
+    background: #1e293b;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    border: 1.5px solid rgba(0, 0, 0, 0.4);
+    box-sizing: border-box;
 }
 
+/* Fresnel lens reflection highlight */
+.tower-lamp::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    left: 8px;
+    width: 12px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.32);
+    pointer-events: none;
+}
+
+/* RED INACTIVE (Deep Crimson) */
+.tower-lamp.lamp-merah {
+    background: radial-gradient(circle at 35% 35%, #7f1d1d, #450a0a);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* RED ACTIVE (Vivid Neon Red Multi-layer Glow) */
 .tower-lamp.aktif.lamp-merah {
-    background: #ff3b3b;
-    box-shadow: 0 0 16px 5px rgba(255, 59, 59, 0.75);
+    background: radial-gradient(circle at 35% 35%, #ff8080, #ef4444 60%, #b91c1c);
+    box-shadow: 0 0 22px 6px rgba(239, 68, 68, 0.85), inset 0 2px 8px rgba(255, 255, 255, 0.7);
+    border-color: rgba(255, 255, 255, 0.6);
 }
 
+/* YELLOW INACTIVE */
+.tower-lamp.lamp-kuning {
+    background: radial-gradient(circle at 35% 35%, #78350f, #451a03);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* YELLOW ACTIVE */
 .tower-lamp.aktif.lamp-kuning {
-    background: #ffc93b;
-    box-shadow: 0 0 16px 5px rgba(255, 201, 59, 0.75);
+    background: radial-gradient(circle at 35% 35%, #fde68a, #f59e0b 60%, #b45309);
+    box-shadow: 0 0 22px 6px rgba(245, 158, 11, 0.85), inset 0 2px 8px rgba(255, 255, 255, 0.7);
+    border-color: rgba(255, 255, 255, 0.6);
 }
 
+/* GREEN INACTIVE (Deep Forest Green) */
+.tower-lamp.lamp-hijau {
+    background: radial-gradient(circle at 35% 35%, #064e3b, #022c22);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+/* GREEN ACTIVE (Vivid Neon Green Multi-layer Glow) */
 .tower-lamp.aktif.lamp-hijau {
-    background: #3bff6e;
-    box-shadow: 0 0 16px 5px rgba(59, 255, 110, 0.75);
+    background: radial-gradient(circle at 35% 35%, #86efac, #22c55e 60%, #15803d);
+    box-shadow: 0 0 22px 6px rgba(34, 197, 94, 0.85), inset 0 2px 8px rgba(255, 255, 255, 0.7);
+    border-color: rgba(255, 255, 255, 0.6);
 }
 
 /* Status STANDBY_KEDIP: lampu Hijau & Kuning kedap-kedip bersamaan */
@@ -820,9 +889,12 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
+    align-items: stretch !important;
     padding: 18px 20px;
     gap: 0;
     margin-bottom: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .dashboard-top-grid .panel-choose-part,
@@ -1001,26 +1073,35 @@ body {
 }
 
 .metric-card .icon {
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
-    display: flex;
+    width: auto !important;
+    min-width: 36px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 6px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 11.5px;
+    font-weight: 800;
     margin-bottom: 0;
     flex-shrink: 0;
+    white-space: nowrap !important;
+    letter-spacing: 0.5px;
+    box-sizing: border-box;
 }
 
+.metric-card.output .icon,
+.metric-card.ng .icon,
+.metric-card.yield .icon,
 .metric-card.sheet-input .icon,
 .metric-card.sheet-output .icon,
 .metric-card.sheet-yield .icon {
-    width: auto;
-    min-width: 34px;
-    padding: 0 8px;
+    width: auto !important;
+    min-width: 36px;
+    padding: 0 10px;
     font-size: 11.5px;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
+    white-space: nowrap !important;
 }
 
 .metric-card .value {
@@ -1127,37 +1208,64 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
-/* --- PCS: Yield Produksi (Solid Kuning Jelas ala Part Aktif #f5d90a) --- */
+/* --- PCS: Part Cacat / Reject (NG) --- */
+.metric-card.ng {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    border: 1.5px solid #b91c1c;
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.25);
+    color: #ffffff;
+}
+.metric-card.ng:hover {
+    box-shadow: 0 10px 26px rgba(239, 68, 68, 0.35);
+}
+.metric-card.ng .icon {
+    background: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+.metric-card.ng .value {
+    color: #ffffff;
+}
+.metric-card.ng .label {
+    color: #ffffff;
+}
+.metric-card.ng .metric-unit-tag {
+    background: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+/* --- PCS: Yield Produksi (Warm Industrial Amber #f59e0b) --- */
 .metric-card.yield {
-    background: #f5d90a;
-    border: 1.5px solid #d4b800;
-    box-shadow: 0 6px 20px rgba(245, 217, 10, 0.3);
-    color: #111827;
+    background: #f59e0b;
+    border: 1.5px solid #d97706;
+    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.28);
+    color: #0f172a;
 }
 .metric-card.yield:hover {
-    box-shadow: 0 10px 26px rgba(245, 217, 10, 0.4);
+    box-shadow: 0 10px 26px rgba(245, 158, 11, 0.38);
 }
 .metric-card.yield .icon {
     background: rgba(0, 0, 0, 0.12);
-    color: #111827;
-    border: 1.5px solid rgba(0, 0, 0, 0.2);
-    font-weight: 900;
+    color: #0f172a;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    font-weight: 800;
 }
 .metric-card.yield .value {
-    color: #111827;
+    color: #0f172a;
 }
 .metric-card.yield .label {
-    color: #111827;
+    color: #0f172a;
 }
 .metric-card.yield .metric-unit-tag {
     background: rgba(0, 0, 0, 0.12);
-    color: #111827;
+    color: #0f172a;
     border: 1px solid rgba(0, 0, 0, 0.2);
 }
 .metric-card.yield .metric-tanggal-label {
     background: rgba(0, 0, 0, 0.12);
-    color: #111827;
-    border: 1.5px solid rgba(0, 0, 0, 0.2);
+    color: #0f172a;
+    border: 1px solid rgba(0, 0, 0, 0.2);
 }
 
 /* --- SHEET: Sheet In (Solid Biru Langit Jelas) --- */

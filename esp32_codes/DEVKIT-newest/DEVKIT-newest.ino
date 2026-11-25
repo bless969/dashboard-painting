@@ -9,12 +9,12 @@
 const char* ssid     = "SSID";       // Ganti dengan nama WiFi pabrik/laptop
 const char* password = "12345678";   // Ganti dengan password WiFi
 
-const char* server_ip = "10.71.94.201:8000"; 
+const char* server_ip = "10.144.103.201:8000"; 
 
 // Konfigurasi Static IP ESP32
 const bool USE_STATIC_IP = true;
-IPAddress devkit_static_ip(10, 71, 94, 102);
-IPAddress devkit_gateway(10, 71, 94, 70);
+IPAddress devkit_static_ip(10, 144, 103, 102);
+IPAddress devkit_gateway(10, 144, 103, 70);
 IPAddress devkit_subnet(255, 255, 255, 0);
 IPAddress devkit_dns(8, 8, 8, 8);
 

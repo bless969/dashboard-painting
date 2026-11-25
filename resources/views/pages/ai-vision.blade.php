@@ -100,24 +100,19 @@
                         <span style="font-size:13px; font-weight:700; color:#334155;">Sensor Keluar (Pin 25):</span>
                         <span id="status-sensor-output-text" style="font-size:13px; font-weight:800; color:#dc2626; font-family:monospace;">Standby</span>
                     </div>
+
+                    <!-- Tombol Simulasi Sensor Manual (Dev & Uji Coba) -->
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <button type="button" onclick="fetch('/api/sensor-trigger?type=input').catch(()=>{})" title="Simulasi Hanger Masuk Box (Pin 27: Mulai Tracking)" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; font-size:11.5px; font-weight:700; padding:6px 10px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
+                            🚪 Test In (Pin 27)
+                        </button>
+                        <button type="button" onclick="fetch('/api/sensor-trigger?type=output').catch(()=>{})" title="Simulasi Hanger Keluar Box (Pin 25: Finalisasi Hasil)" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; font-size:11.5px; font-weight:700; padding:6px 10px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
+                            📸 Test Out (Pin 25)
+                        </button>
+                    </div>
                 </div>
 
-                <!-- Tombol Simulasi Trigger -->
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                    <span style="font-size:12.5px; font-weight:700; color:#64748b;">Simulasi:</span>
-                    <button type="button" id="btn-sim-on" style="background:#f0fdf4; border:1px solid #86efac; color:#16a34a; padding:6px 11px; border-radius:6px; font-size:12.5px; font-weight:700; cursor:pointer;" title="Simulasikan Tombol START (PB ON) Ditekan (Nilai 1)">
-                        🟢 PB ON
-                    </button>
-                    <button type="button" id="btn-sim-off" style="background:#fef2f2; border:1px solid #fca5a5; color:#dc2626; padding:6px 11px; border-radius:6px; font-size:12.5px; font-weight:700; cursor:pointer;" title="Simulasikan Tombol STOP (PB OFF) Ditekan (Nilai 0)">
-                        🔴 PB OFF
-                    </button>
-                    <button type="button" id="btn-sim-input" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#0f172a; padding:6px 11px; border-radius:6px; font-size:12.5px; font-weight:700; cursor:pointer;" title="Simulasikan Hanger Lewat di Sensor Input">
-                        ⚡ Sensor In
-                    </button>
-                    <button type="button" id="btn-sim-output" style="background:#eff6ff; border:1px solid #93c5fd; color:#1d4ed8; padding:6px 11px; border-radius:6px; font-size:12.5px; font-weight:700; cursor:pointer;" title="Simulasikan Hanger Lewat di Sensor Output & Picu Kamera">
-                        📸 Sensor Out
-                    </button>
-                </div>
+
             </div>
         </div>
 
@@ -146,13 +141,18 @@
                         <canvas id="ai-canvas-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
                         
                         <!-- Badge Indikator Live di Pojok Layar -->
-                        <div style="position:absolute; top:10px; left:10px; display:flex; gap:6px; z-index:5;">
+                        <div style="position:absolute; top:10px; left:10px; display:flex; gap:6px; z-index:5; flex-wrap:wrap;">
                             <span id="ai-stream-badge" style="background:rgba(15,23,42,0.88); color:#4ade80; border:1px solid rgba(74,222,128,0.3); font-size:12px; font-weight:700; padding:5px 11px; border-radius:6px; font-family:ui-monospace, monospace; backdrop-filter:blur(4px); display:flex; align-items:center; gap:6px;">
                                 <span style="width:8px; height:8px; border-radius:50%; background:#22c55e; animation:lampKedip 1.2s infinite;"></span>
                                 LIVE OUTPUT CAM
                             </span>
                             <span id="ai-inference-time-badge" style="background:rgba(15,23,42,0.88); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); font-size:12px; font-weight:700; padding:5px 11px; border-radius:6px; font-family:ui-monospace, monospace; backdrop-filter:blur(4px); display:none;">
                                 0 ms
+                            </span>
+                            <!-- Badge Gated Inspection Window (Pin 27 Start -> Pin 25 Finish) -->
+                            <span id="ai-inspection-badge" style="background:rgba(16,185,129,0.92); color:#ffffff; border:1px solid rgba(255,255,255,0.35); font-size:12px; font-weight:800; padding:5px 12px; border-radius:6px; font-family:ui-monospace, monospace; backdrop-filter:blur(4px); display:none; align-items:center; gap:6px; box-shadow:0 0 12px rgba(16,185,129,0.5);">
+                                <span style="width:8px; height:8px; border-radius:50%; background:#ffffff; animation:lampKedip 0.8s infinite;"></span>
+                                <span id="ai-inspection-badge-text">🔍 INSPEKSI AKTIF: 0 PART</span>
                             </span>
                         </div>
 
@@ -162,69 +162,87 @@
                 </div>
 
                 <!-- 4 KPI Box: Live Conveyor & Hanger Flow -->
-                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px;">
+                <!-- 4 KPI Box: Live Conveyor & Hanger Flow (Selaras, Proporsional & Elegan) -->
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px;">
                     
                     <!-- Kartu 1: WIP Hanger (Sedang di dalam line oven/booth) -->
-                    <div style="background:#ffffff; border:1.5px solid #dbe4f3; border-radius:10px; padding:16px; box-shadow:0 2px 6px rgba(0,0,0,0.03);">
-                        <div style="font-size:12.5px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">
-                            Hanger di Line (WIP)
+                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-top:3.5px solid #f59e0b; border-radius:12px; padding:14px 16px; box-shadow:0 2px 8px rgba(15,23,42,0.04); display:flex; flex-direction:column; justify-content:space-between; min-height:122px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <span style="font-size:11.5px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Hanger di Line (WIP)</span>
+                            <span style="font-size:10.5px; font-weight:700; background:#fef3c7; color:#b45309; padding:2px 7px; border-radius:4px;">In-Line</span>
                         </div>
-                        <div style="display:flex; align-items:baseline; gap:6px;">
-                            <span id="kpi-wip-hangers" style="font-size:34px; font-weight:800; color:#f59e0b; line-height:1;">{{ $initialStatsAi['wip_hangers'] ?? 0 }}</span>
-                            <span style="font-size:14px; font-weight:700; color:#64748b;">Hanger</span>
+                        <div style="display:flex; align-items:baseline; gap:6px; margin:2px 0;">
+                            <span id="kpi-wip-hangers" style="font-size:32px; font-weight:900; color:#f59e0b; line-height:1;">{{ $initialStatsAi['wip_hangers'] ?? 0 }}</span>
+                            <span style="font-size:13px; font-weight:700; color:#64748b;">Hanger</span>
                         </div>
-                        <div style="font-size:12px; color:#d97706; font-weight:700; margin-top:5px;">
-                            Marked oleh Sensor 1
+                        <div>
+                            <span style="font-size:11px; color:#b45309; font-weight:700; display:inline-flex; align-items:center; gap:5px; background:#fffbeb; padding:2px 8px; border-radius:6px; border:1px solid #fde68a;">
+                                <span style="width:6px; height:6px; border-radius:50%; background:#f59e0b;"></span>
+                                Marked Sensor 1
+                            </span>
                         </div>
                     </div>
 
                     <!-- Kartu 2: Part di Hanger Output Saat Ini -->
-                    <div style="background:#ffffff; border:1.5px solid #dbe4f3; border-radius:10px; padding:16px; box-shadow:0 2px 6px rgba(0,0,0,0.03);">
-                        <div style="font-size:12.5px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">
-                            Part di Hanger Ini
+                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-top:3.5px solid #0284c7; border-radius:12px; padding:14px 16px; box-shadow:0 2px 8px rgba(15,23,42,0.04); display:flex; flex-direction:column; justify-content:space-between; min-height:122px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <span style="font-size:11.5px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Part di Hanger Ini</span>
+                            <span style="font-size:10.5px; font-weight:700; background:#e0f2fe; color:#0369a1; padding:2px 7px; border-radius:4px;">Kamera</span>
                         </div>
-                        <div style="display:flex; align-items:baseline; gap:6px;">
-                            <span id="kpi-current-parts" style="font-size:34px; font-weight:800; color:#0d3b8c; line-height:1;">0</span>
-                            <span style="font-size:14px; font-weight:700; color:#64748b;">Pcs</span>
+                        <div style="display:flex; align-items:baseline; gap:6px; margin:2px 0;">
+                            <span id="kpi-current-parts" style="font-size:32px; font-weight:900; color:#0284c7; line-height:1;">0</span>
+                            <span style="font-size:13px; font-weight:700; color:#64748b;">Pcs</span>
                         </div>
-                        <div style="font-size:12px; color:#16a34a; font-weight:700; margin-top:5px;">
-                            Deteksi Kamera Output
+                        <div>
+                            <span style="font-size:11px; color:#0369a1; font-weight:700; display:inline-flex; align-items:center; gap:5px; background:#f0f9ff; padding:2px 8px; border-radius:6px; border:1px solid #bae6fd;">
+                                <span style="width:6px; height:6px; border-radius:50%; background:#0284c7;"></span>
+                                Deteksi Kamera Output
+                            </span>
                         </div>
                     </div>
 
                     <!-- Kartu 3: Total Hanger Selesai (Output) -->
-                    <div style="background:#ffffff; border:1.5px solid #dbe4f3; border-radius:10px; padding:16px; box-shadow:0 2px 6px rgba(0,0,0,0.03);">
-                        <div style="font-size:12.5px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">
-                            Hanger Selesai
+                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-top:3.5px solid #0d9488; border-radius:12px; padding:14px 16px; box-shadow:0 2px 8px rgba(15,23,42,0.04); display:flex; flex-direction:column; justify-content:space-between; min-height:122px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <span style="font-size:11.5px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Hanger Selesai</span>
+                            <span style="font-size:10.5px; font-weight:700; background:#ccfbf1; color:#0f766e; padding:2px 7px; border-radius:4px;">Output</span>
                         </div>
-                        <div style="display:flex; align-items:baseline; gap:6px;">
-                            <span id="kpi-output-hangers" style="font-size:34px; font-weight:800; color:#0f172a; line-height:1;">{{ $initialStatsAi['total_output_hangers'] ?? 0 }}</span>
-                            <span style="font-size:14px; font-weight:700; color:#64748b;">Hanger</span>
+                        <div style="display:flex; align-items:baseline; gap:6px; margin:2px 0;">
+                            <span id="kpi-output-hangers" style="font-size:32px; font-weight:900; color:#0d9488; line-height:1;">{{ $initialStatsAi['total_output_hangers'] ?? 0 }}</span>
+                            <span style="font-size:13px; font-weight:700; color:#64748b;">Hanger</span>
                         </div>
-                        <div style="font-size:12px; color:#64748b; font-weight:600; margin-top:5px;">
-                            Terkonfirmasi Sensor 2
+                        <div>
+                            <span style="font-size:11px; color:#0f766e; font-weight:700; display:inline-flex; align-items:center; gap:5px; background:#f0fdfa; padding:2px 8px; border-radius:6px; border:1px solid #99f6e4;">
+                                <span style="width:6px; height:6px; border-radius:50%; background:#0d9488;"></span>
+                                Terkonfirmasi Sensor 2
+                            </span>
                         </div>
                     </div>
 
                     <!-- Kartu 4: Total Output Aktual Terkonfirmasi (PCS) -->
-                    <div style="background:#ffffff; border:1.5px solid #dbe4f3; border-radius:10px; padding:16px; box-shadow:0 2px 6px rgba(0,0,0,0.03);">
+                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-top:3.5px solid #16a34a; border-radius:12px; padding:14px 16px; box-shadow:0 2px 8px rgba(15,23,42,0.04); display:flex; flex-direction:column; justify-content:space-between; min-height:122px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                            <span style="font-size:12.5px; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:0.5px;">Total Output</span>
-                            <button type="button" id="btn-reset-counter" style="background:none; border:none; color:#ef4444; font-size:12px; cursor:pointer; font-weight:700; text-decoration:underline;">Reset</button>
+                            <span style="font-size:11.5px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Total Output</span>
+                            <button type="button" id="btn-reset-counter" style="background:#fee2e2; border:1px solid #fca5a5; color:#dc2626; font-size:11px; cursor:pointer; font-weight:800; padding:2px 8px; border-radius:5px; transition:all 0.15s; display:inline-flex; align-items:center; gap:3px;" onmouseover="this.style.background='#fecaca'" onmouseout="this.style.background='#fee2e2'">
+                                ↺ Reset
+                            </button>
                         </div>
-                        <div style="display:flex; align-items:baseline; gap:6px;">
-                            <span id="kpi-total-parts" style="font-size:34px; font-weight:800; color:#16a34a; line-height:1;">{{ $initialStatsAi['total_output_pcs'] ?? 0 }}</span>
-                            <span style="font-size:14px; font-weight:700; color:#64748b;">Pcs</span>
+                        <div style="display:flex; align-items:baseline; gap:6px; margin:2px 0;">
+                            <span id="kpi-total-parts" style="font-size:32px; font-weight:900; color:#16a34a; line-height:1;">{{ $initialStatsAi['total_output_pcs'] ?? 0 }}</span>
+                            <span style="font-size:13px; font-weight:700; color:#64748b;">Pcs</span>
                         </div>
-                        <div style="font-size:12px; color:#16a34a; font-weight:700; margin-top:5px;">
-                            Aktual Roboflow AI
+                        <div>
+                            <span style="font-size:11px; color:#15803d; font-weight:700; display:inline-flex; align-items:center; gap:5px; background:#f0fdf4; padding:2px 8px; border-radius:6px; border:1px solid #bbf7d0;">
+                                <span style="width:6px; height:6px; border-radius:50%; background:#16a34a;"></span>
+                                Aktual Roboflow AI
+                            </span>
                         </div>
                     </div>
                 </div>
 
                 <!-- Info Log Alur Kerja Konveyor -->
                 <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:13px 16px; font-size:13.5px; color:#1e40af; line-height:1.5;">
-                    💡 <strong>Alur Sistem RS-485:</strong> Saat Photosensor 1 mendeteksi hanger masuk, antrean <em>WIP Hanger</em> bertambah. Begitu hanger keluar di depan kamera dan memicu Photosensor 2, sistem otomatis mem-freeze frame, menghitung jumlah barang via Roboflow, dan menambahkan jumlah pcs ke <em>Total Output</em>!
+                    💡 <strong>Alur Gated Inspection Window:</strong> Saat <strong>Sensor Masuk (Pin 27)</strong> mendeteksi hanger masuk ke dalam box, sistem membuka sesi inspeksi dan AI ByteTrack otomatis melacak & mengakumulasikan setiap part unik yang terlihat. Begitu hanger memicu <strong>Sensor Keluar (Pin 25)</strong>, sesi inspeksi selesai, total part unik otomatis dikonfirmasi ke <em>Total Output</em>, dan counter di-reset bersih untuk hanger berikutnya!
                 </div>
 
                 <!-- CARD KOLEKTOR DATASET ROBOFLOW (UNLIMITED & CEPAT) -->
@@ -1033,6 +1051,15 @@
     const kpiOutputHangers = document.getElementById('kpi-output-hangers');
     const kpiTotalParts = document.getElementById('kpi-total-parts');
     const badgeLatency = document.getElementById('ai-inference-time-badge');
+
+    // --- Gated Inspection Window (Pin 27 Start -> Pin 25 Finish) ---
+    let isInspectionActive = false;
+    let inspectionTrackedPartIds = new Set();
+    let inspectionMaxFrameParts = 0;
+    let inspectionStartTime = 0;
+    let inspectionDetectedClasses = {};
+    const badgeInspection = document.getElementById('ai-inspection-badge');
+    const badgeInspectionText = document.getElementById('ai-inspection-badge-text');
 
     // Indikator Status Mesin & Sensor RS-485 (Standar 2 Warna: Hijau & Merah)
     const dotMesinStatus = document.getElementById('dot-mesin-status');
@@ -2045,6 +2072,8 @@
                     const tEnd = performance.now();
                     const lat = detData.latency_ms || Math.round(tEnd - tStart);
                     badgeLatency.innerText = `${lat} ms (Offline AI)`;
+                    badgeLatency.style.background = '#0284c7';
+                    badgeLatency.title = 'Inference AI Lokal Berhasil';
 
                     // Auto-sync jika backend mendeteksi part aktif baru dari AI
                     if (detData.active_part && (!activePart || activePart.id !== detData.active_part.id)) {
@@ -2056,6 +2085,16 @@
                         if (cardPartTarget) cardPartTarget.innerText = activePart.target_per_hanger;
                         if (labelKolektorPartName) labelKolektorPartName.innerText = `[${activePart.code}] ${activePart.name}`;
                         appendLog(`🤖 [AI Auto-Switch] Kamera mendeteksi: [${activePart.code}] ${activePart.name}. Part aktif otomatis diganti!`, '#0284c7');
+                    }
+                } else if (detData && detData.status === 'error') {
+                    const errMsg = detData.message || 'Error inferensi AI lokal';
+                    badgeLatency.innerText = `⚠️ Format Model Belum Sesuai`;
+                    badgeLatency.style.background = '#ef4444';
+                    badgeLatency.title = errMsg;
+                    if (!window._lastAiErrToastTime || Date.now() - window._lastAiErrToastTime > 15000) {
+                        window._lastAiErrToastTime = Date.now();
+                        appendLog(`⚠️ [AI Error] ${errMsg}`, '#ef4444');
+                        console.warn('AI Inference Error:', detData);
                     }
                 }
             } else if (rfModel) {
@@ -2084,7 +2123,29 @@
 
             // Jumlah part aktual yang dihitung (tidak menghitung bounding box hanger)
             const countPart = partDetections.length;
-            kpiCurrentParts.innerText = countPart;
+
+            // Logika Gated Inspection Window (Akumulasi Part ID Unik selama Hanger di dalam Box)
+            if (isInspectionActive) {
+                partDetections.forEach(pred => {
+                    if (pred.tracker_id !== undefined && pred.tracker_id !== null) {
+                        inspectionTrackedPartIds.add(pred.tracker_id);
+                    }
+                });
+                inspectionMaxFrameParts = Math.max(inspectionMaxFrameParts, countPart);
+
+                const accumulatedCount = inspectionTrackedPartIds.size > 0 
+                    ? inspectionTrackedPartIds.size 
+                    : inspectionMaxFrameParts;
+                kpiCurrentParts.innerText = accumulatedCount;
+
+                if (badgeInspection && badgeInspectionText) {
+                    badgeInspection.style.display = 'inline-flex';
+                    badgeInspection.style.background = 'rgba(16,185,129,0.92)';
+                    badgeInspectionText.innerText = `🔍 MELACAK: ${accumulatedCount} PART UNIK`;
+                }
+            } else {
+                kpiCurrentParts.innerText = countPart;
+            }
 
             // Gambar setiap bounding box
             let partIndex = 0;
@@ -2114,7 +2175,8 @@
                     labelText = `[Hanger] ${className} ${confScore}%`;
                 } else {
                     partIndex++;
-                    labelText = `#${partIndex} ${className} ${confScore}%`;
+                    const trackStr = pred.tracker_id ? ` (ID:${pred.tracker_id})` : '';
+                    labelText = `#${partIndex}${trackStr} ${className} ${confScore}%`;
                 }
 
                 ctxOverlay.font = 'bold 12px Inter, sans-serif';
@@ -2145,15 +2207,43 @@
                 }
             }
 
-            // Jika dipanggil oleh trigger Photosensor Output, simpan konfirmasi ke backend!
+            // Jika dipanggil oleh trigger Photosensor Output (Sensor Keluar - Pin 25)
             if (isShutterTrigger) {
+                // Tentukan jumlah final part yang terkonfirmasi:
+                // Gunakan akumulasi ID part unik selama di dalam box, atau frame terbesar
+                let finalPcs = 0;
+                if (inspectionTrackedPartIds.size > 0) {
+                    finalPcs = inspectionTrackedPartIds.size;
+                } else if (inspectionMaxFrameParts > 0) {
+                    finalPcs = inspectionMaxFrameParts;
+                } else {
+                    finalPcs = countPart;
+                }
+
+                const durationSec = inspectionStartTime ? Math.round((Date.now() - inspectionStartTime) / 100) / 10 : 0;
+                isInspectionActive = false; // Selesai sesi inspeksi hanger ini
+
+                // Perbarui badge status visual di pojok layar
+                if (badgeInspection && badgeInspectionText) {
+                    badgeInspection.style.display = 'inline-flex';
+                    badgeInspection.style.background = '#0284c7';
+                    badgeInspectionText.innerText = `✅ SELESAI: ${finalPcs} PART (${durationSec}s)`;
+                    setTimeout(() => {
+                        if (!isInspectionActive) {
+                            badgeInspection.style.display = 'none';
+                        }
+                    }, 4000);
+                }
+
                 const res = await fetch('/api/confirm-hanger-output', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        pcs_count: countPart,
+                        pcs_count: finalPcs,
                         detected_part_code: detectedPartCode,
-                        detected_classes: classCounts
+                        detected_classes: classCounts,
+                        tracked_ids_count: inspectionTrackedPartIds.size,
+                        inspection_duration_s: durationSec
                     })
                 });
                 const resData = await res.json();
@@ -2172,11 +2262,15 @@
                     if (labelKolektorPartName) labelKolektorPartName.innerText = `[${activePart.code}] ${activePart.name}`;
                 }
                 const partLabel = detectedPartCode ? ` [Part: ${detectedPartCode}]` : (activePart ? ` [Part: ${activePart.code}]` : '');
-                if (countPart === 0) {
-                    appendLog(`📸 [Sensor Keluar - Pin 25] Hanger KOSONG Lewat (0 Pcs)${partLabel} — Counter part tidak bertambah.`, '#f59e0b');
+                if (finalPcs === 0) {
+                    appendLog(`📸 [Sensor Keluar - Pin 25] Hanger KOSONG Lewat (0 Pcs)${partLabel} (${durationSec}s) — Counter part tidak bertambah.`, '#f59e0b');
                 } else {
-                    appendLog(`📸 [Sensor Keluar - Pin 25] Hanger Selesai: ${countPart} Pcs${partLabel} diverifikasi!`, '#0d3b8c');
+                    appendLog(`📸 [Sensor Keluar - Pin 25] Hanger Selesai: ${finalPcs} Pcs${partLabel} diverifikasi (${durationSec}s)!`, '#0d3b8c');
                 }
+
+                // Reset tracker di background AI Daemon agar hanger berikutnya mulai dari nol
+                inspectionTrackedPartIds.clear();
+                fetch('/api/reset-ai-tracker', { method: 'POST' }).catch(() => {});
 
                 // Tahan bounding box di layar selama 2.5 detik agar terlihat jelas oleh operator
                 if (!isDetecting) {
@@ -3315,7 +3409,7 @@
                     const isRunning = (trig.val == 1);
                     updateMesinUI(isRunning, true);
                 }
-                // Event Photosensor 1 (Inlet / Hanger Masuk) - Standard 2 Warna: Hijau (Trigger) & Merah (Standby)
+                // Event Photosensor 1 (Inlet / Hanger Masuk - Pin 27) - Buka Sesi Inspeksi
                 else if (trig.type === 'input') {
                     updateMesinUI(true, true);
                     dotSensorInput.style.background = '#22c55e';
@@ -3324,8 +3418,25 @@
                     textSensorInput.style.color = '#16a34a';
 
                     const durText = trig.duration_ms ? ` (${trig.duration_ms}ms)` : '';
-                    appendLog(`🚪 [Sensor Masuk Box - Pin 27] Hanger Masuk ke Area Inspeksi${durText}.`, '#16a34a');
+                    appendLog(`🚪 [Sensor Masuk Box - Pin 27] Hanger Masuk${durText} -> Buka Sesi Inspeksi & Mulai Melacak Part...`, '#16a34a');
                     loadHangerStats();
+
+                    // --- BUKA JENDELA INSPEKSI GATED WINDOW (PIN 27: MULAI HITUNG) ---
+                    isInspectionActive = true;
+                    inspectionTrackedPartIds.clear();
+                    inspectionMaxFrameParts = 0;
+                    inspectionStartTime = Date.now();
+                    inspectionDetectedClasses = {};
+
+                    // Reset tracker AI Daemon via Laravel agar ID part baru mulai dari awal
+                    fetch('/api/reset-ai-tracker', { method: 'POST' }).catch(() => {});
+
+                    // Tampilkan badge inspeksi aktif di atas video
+                    if (badgeInspection && badgeInspectionText) {
+                        badgeInspection.style.display = 'inline-flex';
+                        badgeInspection.style.background = 'rgba(16,185,129,0.92)';
+                        badgeInspectionText.innerText = '🔍 INSPEKSI AKTIF: MULAI MELACAK...';
+                    }
 
                     setTimeout(() => {
                         dotSensorInput.style.background = '#ef4444';
@@ -3335,7 +3446,7 @@
                     }, 1200);
 
                 }
-                // Event Photosensor 2 (Outlet / Shutter Kamera) - Standard 2 Warna: Hijau (Trigger) & Merah (Standby)
+                // Event Photosensor 2 (Outlet / Shutter Kamera - Pin 25) - Tutup Sesi & Finalisasi
                 else if (trig.type === 'output' || trig.type === 'output_trigger') {
                     updateMesinUI(true, true);
                     dotSensorOutput.style.background = '#22c55e';
@@ -3344,7 +3455,7 @@
                     textSensorOutput.style.color = '#16a34a';
 
                     const durText = trig.duration_ms ? ` (${trig.duration_ms}ms)` : '';
-                    appendLog(`📸 [Sensor Keluar Box - Pin 25] Hanger Keluar${durText} -> Konfirmasi Deteksi Part via Roboflow!`, '#16a34a');
+                    appendLog(`📸 [Sensor Keluar Box - Pin 25] Hanger Keluar${durText} -> Finalisasi Hasil Inspeksi!`, '#16a34a');
 
                     // Efek Rana / Flash Kamera di Layar (Border Hijau)
                     videoContainer.style.borderColor = '#22c55e';
@@ -3354,13 +3465,12 @@
                         videoContainer.style.borderColor = '#1e293b';
                     }, 200);
 
-                    // 1. Jalankan deteksi konfirmasi otomatis Roboflow (jika model siap)
+                    // Jalankan deteksi konfirmasi otomatis (mode shutter/output)
                     try {
                         await runObjectDetection(true);
                     } catch (errDet) {
                         console.warn('runObjectDetection warning:', errDet);
                     }
-
 
                     setTimeout(() => {
                         dotSensorOutput.style.background = '#ef4444';
@@ -3379,40 +3489,4 @@
     // Jalankan polling trigger sensor setiap 350ms
     triggerPollInterval = setInterval(pollSensorTrigger, 350);
 
-    // 6. EVENT TOMBOL SIMULASI (Testing tanpa conveyor fisik)
-    const btnSimOn = document.getElementById('btn-sim-on');
-    if (btnSimOn) {
-        btnSimOn.addEventListener('click', async () => {
-            try {
-                await fetch('/api/sensor-trigger?type=btn_on&val=1');
-                if (activeDevkitIp) {
-                    fetch(`http://${activeDevkitIp}/start`, { mode: 'no-cors' }).catch(() => {});
-                }
-            } catch (e) {}
-        });
-    }
-
-    const btnSimOff = document.getElementById('btn-sim-off');
-    if (btnSimOff) {
-        btnSimOff.addEventListener('click', async () => {
-            try {
-                await fetch('/api/sensor-trigger?type=btn_off&val=0');
-                if (activeDevkitIp) {
-                    fetch(`http://${activeDevkitIp}/stop`, { mode: 'no-cors' }).catch(() => {});
-                }
-            } catch (e) {}
-        });
-    }
-
-    document.getElementById('btn-sim-input').addEventListener('click', async () => {
-        try {
-            await fetch('/api/sensor-trigger?type=input&val=1');
-        } catch (e) {}
-    });
-
-    document.getElementById('btn-sim-output').addEventListener('click', async () => {
-        try {
-            await fetch('/api/sensor-trigger?type=output&val=1');
-        } catch (e) {}
-    });
 </script>

@@ -94,14 +94,23 @@
 
     @else
         <!-- Tampilan Ketika Belum Ada Part Terdaftar di Katalog -->
-        <div style="padding:22px; background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; text-align:center; flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center;">
-            <div style="font-size:15px; font-weight:800; color:#0f172a; margin-bottom:4px;">Belum Ada Part Aktif Terpilih</div>
-            <div style="font-size:12.5px; color:#64748b; max-width:460px; margin:0 auto 14px; line-height:1.5;">
+        <div style="padding:16px 20px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; text-align:center; flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; margin-bottom:10px;">
+            <div style="font-size:14.5px; font-weight:800; color:#0f172a; margin-bottom:4px;">Belum Ada Part Aktif Terpilih</div>
+            <div style="font-size:12px; color:#64748b; max-width:440px; margin:0 auto; line-height:1.5;">
                 Daftarkan part baru atau pilih part hasil training dari halaman AI Vision untuk memulai pemantauan.
             </div>
-            <a href="{{ url('/ai-vision?line=' . ($line_aktif ?? 'Painting')) }}" onclick="navigateTo(currentLine, 'ai-vision'); return false;" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; padding:8px 18px; background:#0d3b8c; color:white; border-radius:7px; font-weight:700; font-size:12.5px; box-shadow:0 2px 6px rgba(13,59,140,0.25);">
-                ➕ Kelola Part di AI Vision
-            </a>
+        </div>
+
+        <!-- Footer: Bar Symmetrical dengan Card Kiri -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div style="font-size:12px; color:#475569; font-weight:700;">
+                <span>📦 Status Katalog: 0 Part Terdaftar</span>
+            </div>
+            <div>
+                <a href="{{ url('/ai-vision?line=' . ($line_aktif ?? 'Painting')) }}" onclick="navigateTo(currentLine, 'ai-vision'); return false;" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; padding:5px 12px; background:#0d3b8c; color:white; border-radius:6px; font-weight:700; font-size:11.5px; box-shadow:0 2px 4px rgba(13,59,140,0.2);">
+                    ➕ Kelola Part di AI Vision
+                </a>
+            </div>
         </div>
     @endif
 
