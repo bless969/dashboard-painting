@@ -2800,17 +2800,6 @@
         if (!tbody) return;
         tbody.innerHTML = '';
 
-        if (!partsCatalog || partsCatalog.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="5" style="text-align:center; padding:24px; color:#94a3b8; font-style:italic;">
-                        Belum ada part di katalog. Silakan isi form di bawah untuk menambahkan part baru.
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
         partsCatalog.forEach(p => {
             const tr = document.createElement('tr');
             tr.style.borderBottom = '1px solid #e2e8f0';
@@ -3072,19 +3061,11 @@
     const btnOpenChangePart = document.getElementById('btn-open-change-part');
     const btnQuickManageParts = document.getElementById('btn-quick-manage-parts');
     if (btnOpenChangePart) btnOpenChangePart.addEventListener('click', openChangeoverModal);
-    async function openManagePartsModal() {
-        renderPartsTable();
-        if (modalManageParts) modalManageParts.style.display = 'flex';
-        try {
-            await loadPartsCatalog(false);
-            renderPartsTable();
-        } catch (e) {
-            console.warn('openManagePartsModal fetch error:', e);
-        }
-    }
-
     if (btnQuickManageParts) {
-        btnQuickManageParts.addEventListener('click', openManagePartsModal);
+        btnQuickManageParts.addEventListener('click', () => {
+            renderPartsTable();
+            if (modalManageParts) modalManageParts.style.display = 'flex';
+        });
     }
 
     const btnCloseChangeX = document.getElementById('btn-close-modal-change-x');
@@ -3096,7 +3077,8 @@
     if (btnGotoManage) {
         btnGotoManage.addEventListener('click', () => {
             modalChangePart.style.display = 'none';
-            openManagePartsModal();
+            renderPartsTable();
+            if (modalManageParts) modalManageParts.style.display = 'flex';
         });
     }
 
@@ -3135,7 +3117,10 @@
     // Modal Manage Parts Handlers
     const btnOpenManageParts = document.getElementById('btn-open-manage-parts');
     if (btnOpenManageParts) {
-        btnOpenManageParts.addEventListener('click', openManagePartsModal);
+        btnOpenManageParts.addEventListener('click', () => {
+            renderPartsTable();
+            if (modalManageParts) modalManageParts.style.display = 'flex';
+        });
     }
     const btnCloseManagePartsX = document.getElementById('btn-close-manage-parts-x');
     const btnCloseManageParts = document.getElementById('btn-close-manage-parts');
