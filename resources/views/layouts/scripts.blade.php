@@ -54,17 +54,17 @@
         function renderBadgePatlite(warna) {
             const w = (warna || 'Merah').toLowerCase().trim();
             if (w.includes('kedip')) {
-                return `<span class="badge-patlite badge-patlite-kuning-kedip" style="display:inline-flex; align-items:center; gap:5px; background:#fef9c3; color:#854d0e; border:1px solid #fef08a; padding:2px 8px; border-radius:6px; font-weight:600; font-size:11.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ca8a04; animation:lampKedip 1s infinite;"></span> ${escapeHtml(warna || 'Kuning Kedip')}</span>`;
+                return `<span class="badge-patlite badge-patlite-kuning-kedip" style="display:inline-flex; align-items:center; gap:5px; background:#fef9c3; color:#854d0e; border:1px solid #fef08a; padding:2px 8px; border-radius:6px; font-weight:600; font-size:12.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ca8a04; animation:lampKedip 1s infinite;"></span> ${escapeHtml(warna || 'Kuning Kedip')}</span>`;
             } else if (w.includes('kuning')) {
-                return `<span class="badge-patlite badge-patlite-kuning" style="display:inline-flex; align-items:center; gap:5px; background:#fef9c3; color:#854d0e; border:1px solid #fef08a; padding:2px 8px; border-radius:6px; font-weight:600; font-size:11.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#eab308;"></span> ${escapeHtml(warna || 'Kuning')}</span>`;
+                return `<span class="badge-patlite badge-patlite-kuning" style="display:inline-flex; align-items:center; gap:5px; background:#fef9c3; color:#854d0e; border:1px solid #fef08a; padding:2px 8px; border-radius:6px; font-weight:600; font-size:12.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#eab308;"></span> ${escapeHtml(warna || 'Kuning')}</span>`;
             } else if (w.includes('maintenance')) {
-                return `<span class="badge-patlite badge-patlite-maintenance" style="display:inline-flex; align-items:center; gap:5px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:2px 8px; border-radius:6px; font-weight:600; font-size:11.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#dc2626;"></span> ${escapeHtml(warna || 'Merah (Maintenance)')}</span>`;
+                return `<span class="badge-patlite badge-patlite-maintenance" style="display:inline-flex; align-items:center; gap:5px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:2px 8px; border-radius:6px; font-weight:600; font-size:12.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#dc2626;"></span> ${escapeHtml(warna || 'Merah (Maintenance)')}</span>`;
             } else if (w.includes('mati') || w.includes('off')) {
-                return `<span class="badge-patlite badge-patlite-mati" style="display:inline-flex; align-items:center; gap:5px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; padding:2px 8px; border-radius:6px; font-weight:600; font-size:11.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#64748b;"></span> ${escapeHtml(warna || 'Mati / OFF')}</span>`;
+                return `<span class="badge-patlite badge-patlite-mati" style="display:inline-flex; align-items:center; gap:5px; background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; padding:2px 8px; border-radius:6px; font-weight:600; font-size:12.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#64748b;"></span> ${escapeHtml(warna || 'Mati / OFF')}</span>`;
             } else if (w.includes('hijau')) {
-                return `<span class="badge-patlite badge-patlite-hijau" style="display:inline-flex; align-items:center; gap:5px; background:#dcfce7; color:#166534; border:1px solid #bbf7d0; padding:2px 8px; border-radius:6px; font-weight:600; font-size:11.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e;"></span> ${escapeHtml(warna || 'Hijau')}</span>`;
+                return `<span class="badge-patlite badge-patlite-hijau" style="display:inline-flex; align-items:center; gap:5px; background:#dcfce7; color:#166534; border:1px solid #bbf7d0; padding:2px 8px; border-radius:6px; font-weight:600; font-size:12.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e;"></span> ${escapeHtml(warna || 'Hijau')}</span>`;
             } else {
-                return `<span class="badge-patlite badge-patlite-merah" style="display:inline-flex; align-items:center; gap:5px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:2px 8px; border-radius:6px; font-weight:600; font-size:11.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444;"></span> ${escapeHtml(warna || 'Merah')}</span>`;
+                return `<span class="badge-patlite badge-patlite-merah" style="display:inline-flex; align-items:center; gap:5px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:2px 8px; border-radius:6px; font-weight:600; font-size:12.5px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444;"></span> ${escapeHtml(warna || 'Merah')}</span>`;
             }
         }
 
@@ -973,7 +973,7 @@
                         elMrPart.innerText = fullLabel;
                     }
                     if (elMrMulai) {
-                        elMrMulai.innerText = '🟢 Sesi Berjalan';
+                        elMrMulai.innerText = 'Sesi Berjalan';
                         elMrMulai.style.background = '#dcfce7';
                         elMrMulai.style.color = '#15803d';
                     }
@@ -1122,19 +1122,19 @@
 
             if (persentase >= 100) {
                 if (badgeStatus) {
-                    badgeStatus.innerText = '✓ Target Tercapai';
+                    badgeStatus.innerText = 'Target Tercapai';
                     badgeStatus.style.background = '#dcfce7';
                     badgeStatus.style.color = '#15803d';
                     badgeStatus.style.borderColor = '#bbf7d0';
                 }
                 if (labelSisa) {
                     const surplus = Math.round(totalOutputBulan - targetPcs);
-                    labelSisa.innerText = `✓ Terlampaui (+${surplus.toLocaleString('id-ID')} PCS)`;
+                    labelSisa.innerText = `Terlampaui (+${surplus.toLocaleString('id-ID')} PCS)`;
                     labelSisa.style.color = '#16a34a';
                 }
             } else if (persentase >= 75) {
                 if (badgeStatus) {
-                    badgeStatus.innerText = '⚡ On Track';
+                    badgeStatus.innerText = 'On Track';
                     badgeStatus.style.background = '#dbeafe';
                     badgeStatus.style.color = '#1d4ed8';
                     badgeStatus.style.borderColor = '#bfdbfe';
@@ -1146,7 +1146,7 @@
                 }
             } else {
                 if (badgeStatus) {
-                    badgeStatus.innerText = '⏱ Dalam Proses';
+                    badgeStatus.innerText = 'Dalam Proses';
                     badgeStatus.style.background = '#fef9c3';
                     badgeStatus.style.color = '#854d0e';
                     badgeStatus.style.borderColor = '#fef08a';
@@ -1253,7 +1253,7 @@
                             formattedTime = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
                         }
                     } catch(e) {}
-                    teksUpdateStatus.innerHTML = `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> <span>Terakhir diperbarui: ${formattedTime}</span>`;
+                    teksUpdateStatus.innerText = `Terakhir diperbarui: ${formattedTime}`;
                 } else {
                     teksUpdateStatus.innerText = "Belum ada data status";
                 }
@@ -1950,13 +1950,13 @@
                 btn.style.borderColor = '#fde047';
                 btn.style.color = '#854d0e';
                 txt.textContent = 'Garis % Yield: ON';
-                if (ico) ico.textContent = '📈';
+                if (ico) ico.textContent = '';
             } else {
                 btn.style.background = '#f8fafc';
                 btn.style.borderColor = '#cbd5e1';
                 btn.style.color = '#64748b';
                 txt.textContent = '+ Garis % Yield';
-                if (ico) ico.textContent = '📊';
+                if (ico) ico.textContent = '';
             }
         }
 
@@ -3228,7 +3228,7 @@
                             <span class="badge-shift ${s.badgeClass}">${s.nama}</span>
                             <div style="flex:1;">
                                 <div style="font-size:12.5px; font-weight:600; color:#1e293b;">${s.jam}</div>
-                                <div style="font-size:11.5px; color:${adaData ? '#64748b' : '#9a9ab0'};">${info}</div>
+                                <div style="font-size:13px; color:${adaData ? '#475569' : '#64748b'};">${info}</div>
                             </div>
                             <span style="color:#0d3b8c; font-size:13px; font-weight:600;">&rarr;</span>
                         </div>
@@ -3501,47 +3501,44 @@
                         tr.innerHTML = `
                             <td class="td-toggle"><a class="btn-toggle-detail" href="index.php?line=${encodeURIComponent(currentLine)}&view=detail&tanggal=${tgl}" data-nav data-line="${currentLine}" data-view="detail" data-tanggal="${tgl}" title="Lihat detail per jam">&#9656;</a></td>
                             <td class="td-tanggal-klik" onclick="cariSesiProduksiTanggal('${tgl}');" title="Klik untuk menampilkan sesi produksi tanggal ini">
-                                <div style="font-weight:700; color:#0d3b8c; font-size:13px;">${formatTanggalIndo(tgl)}</div>
+                                <div style="font-weight:700; color:#0d3b8c; font-size:14px;">${formatTanggalIndo(tgl)}</div>
                                 <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:2px;">
-                                    <span style="font-size:11px; color:#64748b;">${entry.sesi_count || 1} sesi kontrol</span>
-                                    ${entry.status === 'Ongoing' ? '<span style="font-size:10px; font-weight:700; color:#15803d; background:#dcfce7; border:1px solid #bbf7d0; border-radius:4px; padding:1px 5px;">● Shift Aktif</span>' : ''}
+                                    <span style="font-size:12.5px; color:#64748b;">${entry.sesi_count || 1} sesi</span>
+                                    ${entry.status === 'Ongoing' ? '<span style="font-size:12px; font-weight:700; color:#15803d; background:#dcfce7; border:1px solid #bbf7d0; border-radius:4px; padding:1px 6px;">Aktif</span>' : ''}
                                 </div>
                             </td>
                             <td>
-                                <div style="display:flex; align-items:center; gap:5px; font-weight:700; color:#1e293b; font-size:12.5px;">
-                                    <span>👤</span>
-                                    <span>${escapeHtml(entry.operator_name || 'Mukhamad Nawwaf')}</span>
-                                </div>
-                                <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                                <div style="font-weight:700; color:#1e293b; font-size:14px;">${escapeHtml(entry.operator_name || 'Mukhamad Nawwaf')}</div>
+                                <div style="font-size:12.5px; color:#64748b; margin-top:2px;">
                                     <span style="color:#2563eb; font-weight:600;">${escapeHtml(entry.shift || 'Shift 1')}</span>
-                                    <span style="color:#cbd5e1;">•</span>
+                                    <span style="color:#cbd5e1;">·</span>
                                     <span style="color:#166534; font-weight:600;">${entry.total_manpower || 6} MP</span>
                                 </div>
                             </td>
                             <td style="text-align:right;">
-                                <strong style="color:#1e3a8a; font-size:13.5px;">${entry.totalInput.toLocaleString('id-ID')}</strong> <span style="font-size:11px; color:#64748b;">pcs</span>
+                                <strong style="color:#1e3a8a; font-size:14.5px;">${entry.totalInput.toLocaleString('id-ID')}</strong> <span style="font-size:12.5px; color:#64748b;">pcs</span>
                             </td>
                             <td style="text-align:right;">
-                                <strong style="color:#059669; font-size:13.5px;">${entry.totalOutput.toLocaleString('id-ID')}</strong> <span style="font-size:11px; color:#64748b;">pcs</span>
+                                <strong style="color:#059669; font-size:14.5px;">${entry.totalOutput.toLocaleString('id-ID')}</strong> <span style="font-size:12.5px; color:#64748b;">pcs</span>
                             </td>
                             <td style="text-align:right;">
                                 ${entry.totalNg > 0 
-                                    ? `<strong style="color:#dc2626; font-size:13.5px;">${entry.totalNg.toLocaleString('id-ID')}</strong> <span style="font-size:11px; color:#64748b;">pcs</span>
-                                       <div style="font-size:10px; font-weight:700; color:#dc2626; background:#fee2e2; border-radius:4px; padding:1px 5px; width:fit-content; margin-left:auto; margin-top:2px;">${defectRateRow}% Defect</div>`
-                                    : `<span style="color:#059669; font-size:12px; font-weight:600;">0 pcs (0%)</span>`}
+                                    ? `<strong style="color:#dc2626; font-size:14.5px;">${entry.totalNg.toLocaleString('id-ID')}</strong> <span style="font-size:12.5px; color:#64748b;">pcs</span>
+                                       <div style="font-size:12px; font-weight:700; color:#dc2626; background:#fee2e2; border-radius:4px; padding:1px 6px; width:fit-content; margin-left:auto; margin-top:2px;">${defectRateRow}%</div>`
+                                    : `<span style="color:#059669; font-size:13.5px; font-weight:600;">0 pcs</span>`}
                             </td>
                             <td style="text-align:center;">
-                                <span style="display:inline-block; font-weight:800; font-size:12.5px; padding:3px 8px; border-radius:6px; background:${yieldNum >= 95 ? '#dcfce7' : (yieldNum >= 85 ? '#fef3c7' : '#fee2e2')}; color:${yieldNum >= 95 ? '#15803d' : (yieldNum >= 85 ? '#b45309' : '#b91c1c')};">
+                                <span style="display:inline-block; font-weight:800; font-size:13.5px; padding:4px 10px; border-radius:6px; background:${yieldNum >= 95 ? '#dcfce7' : (yieldNum >= 85 ? '#fef3c7' : '#fee2e2')}; color:${yieldNum >= 95 ? '#15803d' : (yieldNum >= 85 ? '#b45309' : '#b91c1c')};">
                                     ${yieldRow}%
                                 </span>
                             </td>
                             <td style="text-align:center;">
                                 <div style="display:inline-flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:center;">
-                                    <button type="button" class="btn-detail-shift" onclick="bukaModalPilihShift('${tgl}')" title="Klik untuk memilih dari sesi shift">
+                                    <button type="button" class="btn-detail-shift" onclick="bukaModalPilihShift('${tgl}')" style="font-size:13px;" title="Lihat sesi shift">
                                         Lihat Sesi
                                     </button>
-                                    <button type="button" onclick="bukaRincianNgTanggal('${tgl}')" style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; border-radius:6px; padding:4px 8px; font-size:11px; font-weight:700; cursor:pointer;" title="Lihat detail part cacat tanggal ini">
-                                        ⚠️ Detail NG ${entry.totalNg > 0 ? `(${entry.totalNg})` : ''}
+                                    <button type="button" onclick="bukaRincianNgTanggal('${tgl}')" style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; border-radius:6px; padding:5px 10px; font-size:12.5px; font-weight:700; cursor:pointer;" title="Lihat detail NG">
+                                        Detail NG ${entry.totalNg > 0 ? `(${entry.totalNg})` : ''}
                                     </button>
                                 </div>
                             </td>
@@ -3644,8 +3641,8 @@
                                     <span style="color:#cbd5e1;">•</span>
                                     <span>Yield: <strong style="color:#2563eb;">${r.yield_persen || r.H_v2_persen}%</strong></span>
                                 </div>
-                                <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#475569; background:#f8fafc; padding:3px 9px; border-radius:6px; border:1px solid #e2e8f0; width:fit-content;">
-                                    <span>👤 PIC: <strong style="color:#0f172a;">${escapeHtml(r.operator_name || 'Mukhamad Nawwaf')}</strong></span>
+                                <div style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#475569; background:#f8fafc; padding:4px 10px; border-radius:6px; border:1px solid #e2e8f0; width:fit-content;">
+                                    <span>PIC: <strong style="color:#0f172a;">${escapeHtml(r.operator_name || 'Mukhamad Nawwaf')}</strong></span>
                                     <span style="color:#cbd5e1;">&bull;</span>
                                     <span style="color:#2563eb; font-weight:600;">${escapeHtml(r.shift || 'Shift 1')}</span>
                                     <span style="color:#cbd5e1;">&bull;</span>
@@ -3940,8 +3937,8 @@
             effCard.style.background   = warna.bg;
             effCard.style.border       = `1.5px solid ${warna.border}`;
             document.getElementById('ds-val-eff').style.color = warna.text;
-            document.getElementById('ds-eff-unit').innerText = effVal >= 80 ? '✓ Target tercapai'
-                : effVal >= 60 ? '⚠ Perlu perhatian' : (effVal > 0 ? '✗ Di bawah target' : 'Belum ada data');
+            document.getElementById('ds-eff-unit').innerText = effVal >= 80 ? 'Target tercapai'
+                : effVal >= 60 ? 'Perlu perhatian' : (effVal > 0 ? 'Di bawah target' : 'Belum ada data');
 
             // Tabel performance
             const kontenPerf = document.getElementById('ds-konten-performance');
@@ -3958,20 +3955,20 @@
                         <td class="ds-col-part"><strong>${escapeHtml(s.part)}</strong></td>
                         <td class="ds-col-jam">${s.jam_mulai} – ${s.jam_selesai}</td>
                         <td>
-                            <div style="font-weight:700; color:#1e293b; font-size:12px;">👤 ${escapeHtml(s.operator_name || data.operator_name || 'Mukhamad Nawwaf')}</div>
-                            <div style="font-size:11px; color:#64748b;">${escapeHtml(s.shift || data.shift_name || 'Shift 1')} • ${s.total_manpower || 6} MP</div>
+                            <div style="font-weight:700; color:#1e293b; font-size:13.5px;">${escapeHtml(s.operator_name || data.operator_name || 'Mukhamad Nawwaf')}</div>
+                            <div style="font-size:12px; color:#64748b;">${escapeHtml(s.shift || data.shift_name || 'Shift 1')} · ${s.total_manpower || 6} MP</div>
                         </td>
                         <td style="text-align:right; font-weight:700; color:#1e3a8a;">${sInput.toLocaleString('id-ID')} pcs</td>
                         <td style="text-align:right; font-weight:700; color:#059669;">${s.f.toLocaleString('id-ID')} pcs</td>
                         <td style="text-align:right;">
-                            ${s.e > 0 ? `<strong style="color:#dc2626;">${s.e} pcs</strong>` : `<span style="color:#059669; font-size:11.5px;">0 pcs</span>`}
+                            ${s.e > 0 ? `<strong style="color:#dc2626;">${s.e} pcs</strong>` : `<span style="color:#059669; font-size:13px;">0 pcs</span>`}
                         </td>
                         <td style="text-align:center;">
                             <span style="font-weight:700; color:${sYield >= 95 ? '#059669' : '#dc2626'};">${sYield}%</span>
                         </td>
                         <td class="ds-col-eff ds-col-center"><span class="ds-eff-chip ${cls}">${l}%</span></td>
                         <td style="text-align:center;">
-                            <button type="button" class="btn-detail-shift" onclick="bukaDetailPerformance(${s.id || 1})" style="padding:4px 8px; font-size:11px;">🔍 Sesi</button>
+                            <button type="button" class="btn-detail-shift" onclick="bukaDetailPerformance(${s.id || 1})" style="padding:5px 10px; font-size:12.5px;">Detail</button>
                         </td>
                     </tr>`;
                 }).join('');
@@ -4148,7 +4145,7 @@
 
             if (timelineList) {
                 if (daftarStopBelumDiisi.length === 0) {
-                    timelineList.innerHTML = '<div style="font-size:13px; color:#16a34a; text-align:center; padding:10px 0; font-weight:600;">✓ Semua riwayat stop pada shift ini sudah diisi alasannya</div>';
+                    timelineList.innerHTML = '<div style="font-size:13px; color:#16a34a; text-align:center; padding:10px 0; font-weight:600;">Semua riwayat stop pada shift ini sudah diisi alasannya</div>';
                 } else {
                     timelineList.innerHTML = daftarStopBelumDiisi.map((item, idx) => {
                         let dotColor = '#ef4444';
@@ -4473,7 +4470,7 @@
                 if (data.status === 'success') {
                     statusBox.style.background = "#dcfce7";
                     statusBox.style.color = "#15803d";
-                    let pesan = "✅ Status mesin beralih ke Mode Maintenance & dicatat ke Loss Time.";
+                    let pesan = "Status mesin beralih ke Mode Maintenance & dicatat ke Loss Time.";
                     if (data.status_kirim_teman === 'sukses') {
                         pesan += " Data berhasil terkirim ke website tujuan.";
                     } else if (data.status_kirim_teman === 'gagal') {
@@ -4489,15 +4486,15 @@
                 } else {
                     statusBox.style.background = "#fee2e2";
                     statusBox.style.color = "#b91c1c";
-                    statusBox.innerText = "❌ Gagal: " + (data.message || "Terjadi kesalahan.");
+                    statusBox.innerText = "Gagal: " + (data.message || "Terjadi kesalahan.");
                 }
             } catch (err) {
                 statusBox.style.background = "#fee2e2";
                 statusBox.style.color = "#b91c1c";
-                statusBox.innerText = "❌ Gagal koneksi ke server lokal. Coba lagi.";
+                statusBox.innerText = "Gagal koneksi ke server lokal. Coba lagi.";
             } finally {
                 btnKirim.disabled = false;
-                btnKirim.innerText = "🚀 Kirim";
+                btnKirim.innerText = "Kirim Laporan Maintenance";
             }
         }
 
@@ -4749,9 +4746,9 @@
 
             if (elMrMulai) {
                 if (jamMulai) {
-                    elMrMulai.innerText = `🟢 Mulai ${jamMulai}`;
+                    elMrMulai.innerText = `Mulai ${jamMulai}`;
                 } else {
-                    elMrMulai.innerText = '🟢 Sesi Berjalan';
+                    elMrMulai.innerText = 'Sesi Berjalan';
                 }
                 elMrMulai.style.background = '#dcfce7';
                 elMrMulai.style.color = '#15803d';
@@ -5131,7 +5128,7 @@
                                 <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:6px 12px; font-size:12px; display:inline-flex; align-items:center; gap:8px;">
                                     <span style="font-weight:700; color:#991b1b;">${escapeHtml(k)}:</span>
                                     <strong style="color:#dc2626; font-size:13px;">${count} pcs</strong>
-                                    <span style="background:#fee2e2; color:#b91c1c; font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:4px;">${pct}%</span>
+                                    <span style="background:#fee2e2; color:#b91c1c; font-size:12.5px; font-weight:700; padding:2px 7px; border-radius:4px;">${pct}%</span>
                                 </div>
                             `;
                         }).join('');
@@ -5147,32 +5144,32 @@
 
                 tbody.innerHTML = logs.map(item => `
                     <tr style="border-bottom:1px solid #f1f5f9;">
-                        <td style="padding:10px 12px;">
-                            <div style="font-weight:700; color:#0f172a; font-size:13px;">${escapeHtml(item.time || '')}</div>
-                            <div style="font-size:11px; color:#64748b;">${formatTanggalIndo(item.tanggal || '')}</div>
+                        <td style="padding:11px 12px;">
+                            <div style="font-weight:700; color:#0f172a; font-size:14px;">${escapeHtml(item.time || '')}</div>
+                            <div style="font-size:12.5px; color:#64748b;">${formatTanggalIndo(item.tanggal || '')}</div>
                         </td>
-                        <td style="padding:10px 12px;">
-                            <strong style="color:#1e293b;">${escapeHtml(item.part_name || item.part_code || 'Part Painting')}</strong>
-                            <div style="font-size:11px; color:#64748b;">${escapeHtml(item.part_code || '')}</div>
+                        <td style="padding:11px 12px;">
+                            <strong style="color:#1e293b; font-size:14px;">${escapeHtml(item.part_name || item.part_code || 'Part Painting')}</strong>
+                            <div style="font-size:12.5px; color:#64748b;">${escapeHtml(item.part_code || '')}</div>
                         </td>
-                        <td style="padding:10px 12px;">
-                            <span style="display:inline-block; padding:3px 8px; border-radius:6px; background:#fee2e2; color:#991b1b; font-weight:700; font-size:12px; border:1px solid #fecaca;">
-                                ⚠️ ${escapeHtml(item.defect_type || 'Defect')}
+                        <td style="padding:11px 12px;">
+                            <span style="display:inline-block; padding:4px 10px; border-radius:6px; background:#fee2e2; color:#991b1b; font-weight:700; font-size:13px; border:1px solid #fecaca;">
+                                ${escapeHtml(item.defect_type || 'Defect')}
                             </span>
                         </td>
-                        <td style="padding:10px 12px; text-align:center;">
-                            <strong style="font-size:15px; color:#dc2626;">${item.pcs || 1}</strong> <span style="font-size:11px; color:#64748b;">pcs</span>
+                        <td style="padding:11px 12px; text-align:center;">
+                            <strong style="font-size:16px; color:#dc2626;">${item.pcs || 1}</strong> <span style="font-size:12.5px; color:#64748b;">pcs</span>
                         </td>
-                        <td style="padding:10px 12px;">
-                            <div style="font-weight:700; color:#0f172a; font-size:12.5px;">👤 ${escapeHtml(item.operator || 'Mukhamad Nawwaf')}</div>
-                            <div style="font-size:11px; color:#2563eb; font-weight:600;">${escapeHtml(item.shift || 'Shift 1')}</div>
+                        <td style="padding:11px 12px;">
+                            <div style="font-weight:700; color:#0f172a; font-size:13.5px;">${escapeHtml(item.operator || 'Mukhamad Nawwaf')}</div>
+                            <div style="font-size:12.5px; color:#2563eb; font-weight:600;">${escapeHtml(item.shift || 'Shift 1')}</div>
                         </td>
-                        <td style="padding:10px 12px; color:#475569; font-size:12.5px;">
+                        <td style="padding:11px 12px; color:#475569; font-size:13.5px;">
                             ${escapeHtml(item.notes || '-')}
                         </td>
-                        <td style="padding:10px 12px; text-align:center;">
-                            <button type="button" onclick="hapusNgLog('${item.id}')" style="background:#ffffff; border:1px solid #fecaca; color:#dc2626; border-radius:6px; padding:4px 9px; font-size:11.5px; font-weight:700; cursor:pointer;" onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='#ffffff'" title="Hapus catatan defect ini">
-                                🗑️ Hapus
+                        <td style="padding:11px 12px; text-align:center;">
+                            <button type="button" onclick="hapusNgLog('${item.id}')" style="background:#ffffff; border:1px solid #fecaca; color:#dc2626; border-radius:6px; padding:5px 11px; font-size:12.5px; font-weight:700; cursor:pointer;" title="Hapus catatan">
+                                Hapus
                             </button>
                         </td>
                     </tr>
@@ -5204,7 +5201,7 @@
                     if (typeof updateStatsHangerRealtime === 'function') {
                         await updateStatsHangerRealtime();
                     }
-                    alert('✓ ' + json.message);
+                    alert(json.message);
                 } else {
                     alert('Gagal menghapus log: ' + (json.message || 'Error'));
                 }
@@ -5243,16 +5240,16 @@
 
                     return `
                         <tr style="border-bottom:1px solid #e2e8f0;">
-                            <td style="padding:10px 12px; font-family:monospace; color:#475569;">${item.timestamp || item.created_at || '-'}</td>
-                            <td style="padding:10px 12px; font-weight:700; color:#0f172a;">#${item.hanger_number || item.hanger_index || 1}</td>
-                            <td style="padding:10px 12px;"><span style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-weight:700; font-family:monospace; color:#0d3b8c;">${item.part_code || '-'}</span></td>
-                            <td style="padding:10px 12px; text-align:center; font-weight:800; color:#0d3b8c; font-size:14px;">${item.detected_pcs ?? 0}</td>
-                            <td style="padding:10px 12px; text-align:center; color:#64748b;">${item.target_pcs ?? '-'}</td>
-                            <td style="padding:10px 12px; text-align:center;">
-                                <span style="background:${badgeBg}; color:${badgeColor}; padding:3px 8px; border-radius:12px; font-weight:700; font-size:11.5px;">${statusLabel}</span>
+                            <td style="padding:11px 12px; font-family:monospace; color:#475569; font-size:13.5px;">${item.timestamp || item.created_at || '-'}</td>
+                            <td style="padding:11px 12px; font-weight:700; color:#0f172a; font-size:14px;">#${item.hanger_number || item.hanger_index || 1}</td>
+                            <td style="padding:11px 12px;"><span style="background:#f1f5f9; padding:3px 8px; border-radius:5px; font-weight:700; font-family:monospace; color:#0d3b8c; font-size:13.5px;">${item.part_code || '-'}</span></td>
+                            <td style="padding:11px 12px; text-align:center; font-weight:800; color:#0d3b8c; font-size:15px;">${item.detected_pcs ?? 0}</td>
+                            <td style="padding:11px 12px; text-align:center; color:#475569; font-size:14px;">${item.target_pcs ?? '-'}</td>
+                            <td style="padding:11px 12px; text-align:center;">
+                                <span style="background:${badgeBg}; color:${badgeColor}; padding:4px 10px; border-radius:12px; font-weight:700; font-size:12.5px;">${statusLabel}</span>
                             </td>
-                            <td style="padding:10px 12px; font-weight:600; color:#334155;">👤 ${item.operator_name || '-'}</td>
-                            <td style="padding:10px 12px; color:#475569;"><span style="background:#e0e7ff; color:#3730a3; padding:2px 7px; border-radius:4px; font-size:11.5px; font-weight:600;">${item.shift_name || item.shift || 'Shift 1'}</span></td>
+                            <td style="padding:11px 12px; font-weight:600; color:#334155; font-size:13.5px;">${item.operator_name || '-'}</td>
+                            <td style="padding:11px 12px; color:#475569;"><span style="background:#e0e7ff; color:#3730a3; padding:3px 8px; border-radius:5px; font-size:12.5px; font-weight:700;">${item.shift_name || item.shift || 'Shift 1'}</span></td>
                         </tr>
                     `;
                 }).join('');
@@ -5449,8 +5446,8 @@
                         <div class="riwayat-ph-card-sub" style="margin-bottom:6px;">
                             Output: <strong>${r.F} pcs</strong> | NG: <strong>${r.E_persen}%</strong> | Waktu Kerja (B): <strong>${r.B}m</strong> | Stop: <strong>${r.A}m</strong>
                         </div>
-                        <div style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:#475569; background:#f8fafc; padding:3px 9px; border-radius:6px; border:1px solid #e2e8f0; width:fit-content;">
-                            <span>👤 PIC: <strong style="color:#0f172a;">${escapeHtml(r.operator_name || 'Mukhamad Nawwaf')}</strong></span>
+                        <div style="display:inline-flex; align-items:center; gap:6px; font-size:13px; color:#475569; background:#f8fafc; padding:4px 10px; border-radius:6px; border:1px solid #e2e8f0; width:fit-content;">
+                            <span>PIC: <strong style="color:#0f172a;">${escapeHtml(r.operator_name || 'Mukhamad Nawwaf')}</strong></span>
                             <span style="color:#cbd5e1;">&bull;</span>
                             <span style="color:#2563eb; font-weight:600;">${escapeHtml(r.shift || 'Shift 1')}</span>
                             <span style="color:#cbd5e1;">&bull;</span>
@@ -5600,12 +5597,12 @@
 
                 elPosList.innerHTML = positions.map(p => {
                     const st = (p.status || 'tetap').toLowerCase();
-                    const statusBadge = st === 'tetap' ? '<span style="font-size:9.5px; padding:1px 5px; background:#dbeafe; color:#1e40af; border-radius:4px; font-weight:700;">TETAP</span>' :
-                                       (st === 'kwt' ? '<span style="font-size:9.5px; padding:1px 5px; background:#fef3c7; color:#92400e; border-radius:4px; font-weight:700;">KWT</span>' :
-                                       '<span style="font-size:9.5px; padding:1px 5px; background:#f1f5f9; color:#475569; border-radius:4px; font-weight:700;">DAILY</span>');
+                    const statusBadge = st === 'tetap' ? '<span style="font-size:12px; padding:2px 6px; background:#dbeafe; color:#1e40af; border-radius:4px; font-weight:700;">TETAP</span>' :
+                                       (st === 'kwt' ? '<span style="font-size:12px; padding:2px 6px; background:#fef3c7; color:#92400e; border-radius:4px; font-weight:700;">KWT</span>' :
+                                       '<span style="font-size:12px; padding:2px 6px; background:#f1f5f9; color:#475569; border-radius:4px; font-weight:700;">DAILY</span>');
                     const opText = p.operators ? `<span style="color:#0f172a; font-weight:600;">: ${escapeHtml(p.operators)}</span>` : '';
                     return `
-                        <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11px; display:inline-flex; align-items:center; gap:5px;">
+                        <div style="background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; padding:5px 10px; font-size:12.5px; display:inline-flex; align-items:center; gap:5px;">
                             <strong style="color:#1e293b;">${escapeHtml(p.name)}</strong>
                             <span style="color:#64748b;">(${p.count || 1} org)</span>
                             ${statusBadge}
@@ -5649,7 +5646,7 @@
                         elNgTbody.innerHTML = sesiLogs.map(item => `
                             <tr style="border-bottom:1px solid #f1f5f9;">
                                 <td style="padding:6px 8px; font-weight:700; color:#991b1b;">
-                                    <span style="display:inline-block; padding:1px 6px; background:#fee2e2; border-radius:4px;">⚠️ ${escapeHtml(item.defect_type || 'Defect')}</span>
+                                    <span style="display:inline-block; padding:1px 6px; background:#fee2e2; border-radius:4px;">${escapeHtml(item.defect_type || 'Defect')}</span>
                                 </td>
                                 <td style="padding:6px 8px; text-align:center; font-weight:800; color:#dc2626;">${item.pcs || 1} pcs</td>
                                 <td style="padding:6px 8px; color:#475569;">${escapeHtml(item.operator || r.operator_name || 'Mukhamad Nawwaf')} (${escapeHtml(item.shift || r.shift || 'Shift 1')})</td>
@@ -5660,7 +5657,7 @@
                         elNgTbody.innerHTML = `
                             <tr style="border-bottom:1px solid #f1f5f9;">
                                 <td style="padding:6px 8px; font-weight:700; color:#991b1b;">
-                                    <span style="display:inline-block; padding:1px 6px; background:#fee2e2; border-radius:4px;">⚠️ Reject Part</span>
+                                    <span style="display:inline-block; padding:1px 6px; background:#fee2e2; border-radius:4px;">Reject Part</span>
                                 </td>
                                 <td style="padding:6px 8px; text-align:center; font-weight:800; color:#dc2626;">${valE} pcs</td>
                                 <td style="padding:6px 8px; color:#475569;">${escapeHtml(r.operator_name || 'Mukhamad Nawwaf')} (${escapeHtml(r.shift || 'Shift 1')})</td>
@@ -7301,7 +7298,7 @@
                 // Tampilkan notifikasi bahwa sesi berhasil disimpan final dan layar direset
                 const statusEl = document.getElementById('simpan-produksi-status');
                 if (statusEl) {
-                    statusEl.textContent = `✅ Produksi tersimpan sebagai Sesi #${data.nomor_sesi} (final) pukul ${jamSekarangHHMM()}. Sesi selesai & siap mulai awal lagi.`;
+                    statusEl.textContent = `Produksi tersimpan sebagai Sesi #${data.nomor_sesi} (final) pukul ${jamSekarangHHMM()}. Sesi selesai & siap mulai awal lagi.`;
                     statusEl.style.display = '';
                     statusEl.style.color = '#1a7d3a';
                 }
@@ -7309,7 +7306,7 @@
                 _sedangMenyimpanFinal = false;
                 if (btnSimpan) {
                     btnSimpan.disabled = false;
-                    btnSimpan.innerText = '💾 Simpan Produksi';
+                    btnSimpan.innerText = 'Simpan Produksi';
                 }
             }
         }
@@ -7394,7 +7391,7 @@
             const btnIcon = document.getElementById('btn-mp-icon');
             const btnBatal = document.getElementById('btn-mp-batal');
 
-            if (title) title.textContent = `✏️ Edit Part: ${partName}`;
+            if (title) title.textContent = `Edit Part: ${partName}`;
             if (subtitle) subtitle.textContent = `Ubah nilai Cycle Time Standar dan Pcs per Sheet untuk part ini.`;
             if (btnText) btnText.textContent = `Perbarui Part`;
             if (btnIcon) btnIcon.textContent = `💾`;
@@ -7422,7 +7419,7 @@
             const btnIcon = document.getElementById('btn-mp-icon');
             const btnBatal = document.getElementById('btn-mp-batal');
 
-            if (title) title.textContent = `➕ Tambah Part Baru`;
+            if (title) title.textContent = `Tambah Part Baru`;
             if (subtitle) subtitle.textContent = `Lengkapi kode part, cycle time standar, dan jumlah pcs per sheet`;
             if (btnText) btnText.textContent = `Simpan Part Baru`;
             if (btnIcon) btnIcon.textContent = `➕`;
@@ -7907,14 +7904,14 @@
                 if (typeof updateHistoriTable === 'function') {
                     await updateHistoriTable();
                 }
-                alert('✅ Hasil kontrol produksi berhasil disimpan ke tab Riwayat!\n\nAnda dapat melihat detail riwayatnya atau mengunduh laporan Excel resmi pabrik kapan saja.');
+                alert('Hasil kontrol produksi berhasil disimpan ke tab Riwayat!\n\nAnda dapat melihat detail riwayatnya atau mengunduh laporan Excel resmi pabrik kapan saja.');
             } catch (err) {
                 console.error('Error simpan produksi MC:', err);
                 alert('Gagal menyimpan produksi: ' + err.message);
             } finally {
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerText = prevText || '💾 Simpan Produksi ke Riwayat';
+                    btn.innerText = prevText || 'Simpan ke Riwayat';
                 }
             }
         }
@@ -7933,22 +7930,21 @@
                     </div>
                     <div style="display:flex; align-items:center; gap:4px; width:85px; flex-shrink:0;">
                         <input type="number" class="row-pos-count" min="1" max="20" value="${count}" style="width:100%; box-sizing:border-box; padding:6px 4px; border-radius:6px; border:1.2px solid #cbd5e1; font-size:13px; font-weight:800; text-align:center; color:#0d3b8c;" oninput="recalcTotalManpower()">
-                        <span style="font-size:11px; font-weight:700; color:#64748b;">Org</span>
+                        <span style="font-size:12.5px; font-weight:700; color:#475569;">Org</span>
                     </div>
                     <div style="width:115px; flex-shrink:0;">
-                        <select class="row-pos-status" style="width:100%; box-sizing:border-box; padding:6px 6px; border-radius:6px; border:1.2px solid #cbd5e1; font-size:11.5px; font-weight:700; color:#334155; background:#f8fafc;" onchange="recalcTotalManpower()">
+                        <select class="row-pos-status" style="width:100%; box-sizing:border-box; padding:6px 6px; border-radius:6px; border:1.2px solid #cbd5e1; font-size:13px; font-weight:700; color:#334155; background:#f8fafc;" onchange="recalcTotalManpower()">
                             <option value="tetap" ${status === 'tetap' ? 'selected' : ''}>Tetap</option>
                             <option value="kwt" ${status === 'kwt' ? 'selected' : ''}>KWT (Kontrak)</option>
                             <option value="daily" ${status === 'daily' ? 'selected' : ''}>Daily Worker</option>
                         </select>
                     </div>
-                    <button type="button" onclick="hapusBarisPosisi(this)" style="background:transparent; border:none; color:#ef4444; font-size:16px; cursor:pointer; padding:4px 6px; border-radius:6px; opacity:0.7; flex-shrink:0;" onmouseover="this.style.opacity='1'; this.style.background='#fee2e2';" onmouseout="this.style.opacity='0.7'; this.style.background='transparent';" title="Hapus Posisi Ini">
-                        🗑️
+                    <button type="button" onclick="hapusBarisPosisi(this)" style="background:transparent; border:1px solid #fecaca; color:#dc2626; font-size:12.5px; font-weight:700; cursor:pointer; padding:5px 9px; border-radius:6px; flex-shrink:0;" title="Hapus Posisi Ini">
+                        Hapus
                     </button>
                 </div>
-                <div style="position:relative;">
-                    <input type="text" class="row-pos-operators" placeholder="Nama operator yang bertugas (opsional, mis: Budi, Ika)..." value="${operators}" style="width:100%; box-sizing:border-box; padding:5px 8px 5px 26px; border-radius:6px; border:1px dashed #cbd5e1; font-size:11.5px; color:#475569; background:#fafafa;">
-                    <span style="position:absolute; left:8px; top:50%; transform:translateY(-50%); font-size:11px; opacity:0.6;">👤</span>
+                <div>
+                    <input type="text" class="row-pos-operators" placeholder="Nama operator bertugas (opsional)..." value="${operators}" style="width:100%; box-sizing:border-box; padding:7px 10px; border-radius:6px; border:1px dashed #cbd5e1; font-size:13px; color:#334155; background:#fafafa;">
                 </div>
             </div>`;
         }
@@ -8122,7 +8118,7 @@
                     activeShiftData = data.shift;
                     applyShiftDataToUI(data.shift);
                     tutupModalGantiShift();
-                    alert(`✅ Sesi Shift Berhasil Disimpan!\n\nPIC Operator: ${data.shift.operator_name}\nShift: ${data.shift.shift_name}\nTotal Manpower: ${data.shift.total_manpower} Orang (${positions.length} Posisi Stasiun)`);
+                    alert(`Sesi Shift Berhasil Disimpan!\n\nPIC Operator: ${data.shift.operator_name}\nShift: ${data.shift.shift_name}\nTotal Manpower: ${data.shift.total_manpower} Orang (${positions.length} Posisi Stasiun)`);
                 }
             } catch (e) {
                 console.error('Error simpan shift:', e);
@@ -8130,7 +8126,7 @@
             } finally {
                 if (btnSave) {
                     btnSave.disabled = false;
-                    btnSave.innerHTML = '<span>💾</span> Simpan &amp; Mulai Sesi';
+                    btnSave.innerHTML = 'Simpan &amp; Mulai Sesi';
                 }
             }
         }
@@ -8145,6 +8141,12 @@
             if (sideShift) sideShift.innerText = shift.shift_name || shift.shift || 'Shift 1 (Pagi)';
             const sideMp = document.getElementById('sidebar-mp-badge');
             if (sideMp) sideMp.innerText = `${shift.total_manpower || 6} MP`;
+
+            // Update PIC Shift di Dashboard utama
+            const dashOp = document.getElementById('dash-pic-operator');
+            if (dashOp) dashOp.innerText = shift.operator_name || 'Operator';
+            const dashShift = document.getElementById('dash-pic-shift');
+            if (dashShift) dashShift.innerText = `(${shift.shift_name || shift.shift || 'Shift 1 - Pagi'})`;
 
             // Update badge di Topbar jika ada
             const topbarOp = document.getElementById('topbar-operator-name');
@@ -8268,7 +8270,7 @@
                         updateData();
                     }
                     renderNgLogsTable(data.logs || [], data.total_ng);
-                    alert(`✅ Berhasil mencatat ${pcs} Pcs Part Cacat!\n\nDefect: ${selectedDefect}\nTotal NG Sesi Ini: ${data.total_ng} Pcs\nYield Terkoreksi: ${data.yield_val}%`);
+                    alert(`Berhasil mencatat ${pcs} Pcs Part Cacat!\n\nDefect: ${selectedDefect}\nTotal NG Sesi Ini: ${data.total_ng} Pcs\nYield Terkoreksi: ${data.yield_val}%`);
                     tutupModalInputNg();
                 } else {
                     alert('Gagal mencatat part NG: ' + ((data && data.message) ? data.message : 'Error'));
@@ -8278,7 +8280,7 @@
             } finally {
                 if (btnSave) {
                     btnSave.disabled = false;
-                    btnSave.innerText = '💾 Catat Part NG';
+                    btnSave.innerText = 'Simpan Part NG';
                 }
             }
         }
@@ -8302,18 +8304,18 @@
             if (!tbody) return;
 
             if (!logs || logs.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" style="padding:16px; text-align:center; color:#94a3b8;">Belum ada catatan NG untuk sesi ini.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" style="padding:16px; text-align:center; color:#64748b;">Belum ada catatan NG untuk sesi ini.</td></tr>`;
                 return;
             }
 
             tbody.innerHTML = logs.map(log => `
                 <tr style="border-bottom:1px solid #e2e8f0;">
-                    <td style="padding:8px 10px; font-family:monospace; font-weight:700; color:#64748b;">${log.time || '-'}</td>
-                    <td style="padding:8px 10px; font-weight:700; color:#0f172a;">${log.part_code || '-'}</td>
-                    <td style="padding:8px 10px; color:#b91c1c; font-weight:600;">${log.defect_type || '-'}</td>
-                    <td style="padding:8px 10px; text-align:center; font-weight:800; color:#dc2626;">${log.pcs || 1} pcs</td>
-                    <td style="padding:8px 10px; text-align:center;">
-                        <button type="button" onclick="hapusLogNg('${log.id}')" title="Batalkan / Hapus Catatan Ini" style="background:#fee2e2; border:none; border-radius:5px; padding:3px 7px; color:#b91c1c; font-size:12px; cursor:pointer;">🗑️</button>
+                    <td style="padding:9px 10px; font-family:monospace; font-weight:700; color:#475569; font-size:13px;">${log.time || '-'}</td>
+                    <td style="padding:9px 10px; font-weight:700; color:#0f172a; font-size:13px;">${log.part_code || '-'}</td>
+                    <td style="padding:9px 10px; color:#b91c1c; font-weight:600; font-size:13px;">${log.defect_type || '-'}</td>
+                    <td style="padding:9px 10px; text-align:center; font-weight:800; color:#dc2626; font-size:13.5px;">${log.pcs || 1} pcs</td>
+                    <td style="padding:9px 10px; text-align:center;">
+                        <button type="button" onclick="hapusLogNg('${log.id}')" title="Hapus" style="background:#fee2e2; border:none; border-radius:5px; padding:4px 9px; color:#b91c1c; font-size:12.5px; font-weight:700; cursor:pointer;">Hapus</button>
                     </td>
                 </tr>
             `).join('');

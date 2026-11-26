@@ -5,506 +5,414 @@
 @endphp
 <div id="view-ai-vision" style="{{ $view_aktif !== 'ai-vision' ? 'display:none;' : '' }}">
     <div class="panel">
-        <div class="panel-header-row">
-            <div class="panel-title">Pengaturan ESP32-CAM & AI Vision (Object Detection Hanger)</div>
-        </div>
-        <div class="settings-row-desc" style="margin-bottom:16px;">
-            Sistem deteksi visual dan counter otomatis untuk part/barang pada conveyor hanger Line Painting menggunakan model <strong>Roboflow Object Detection</strong> yang terintegrasi dengan <strong>RS-485 Photosensor Input & Output</strong>.
+        <div class="panel-header-row" style="margin-bottom:14px;">
+            <div class="panel-title">AI Vision &amp; Kamera</div>
         </div>
 
-        <!-- Banner Sesi Produksi & Part Aktif (Changeover Bar) -->
-        <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border-radius:12px; padding:18px 22px; margin-bottom:20px; box-shadow:0 4px 16px rgba(49,46,129,0.25); color:white;">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
-                <div style="display:flex; align-items:center; gap:16px;">
-                    <div style="width:50px; height:50px; border-radius:12px; background:rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center; font-size:26px; border:1px solid rgba(255,255,255,0.2);">
-                        🏷️
-                    </div>
-                    <div>
-                        <div style="font-size:12.5px; text-transform:uppercase; letter-spacing:0.8px; color:#a5b4fc; font-weight:700; display:flex; align-items:center; gap:6px;">
-                            <span>✨</span> Deteksi Part Otomatis (Vision AI)
-                        </div>
-                        <div style="display:flex; align-items:center; gap:12px; margin-top:3px;">
-                            <span id="active-part-name" style="font-size:22px; font-weight:800; color:#ffffff; letter-spacing:-0.2px;">Part Otomatis</span>
-                            <span id="active-part-code" style="background:#4f46e5; color:#e0e7ff; font-size:13px; font-weight:700; padding:3px 10px; border-radius:6px; font-family:monospace;">AUTO</span>
-                        </div>
-                    </div>
+        <!-- Banner Part Aktif -->
+        <div class="mr-header-part" style="padding:16px 22px; margin-bottom:18px;">
+            <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                <span class="mr-header-label" style="font-size:12.5px; opacity:0.9;">Part Aktif</span>
+                <span id="active-part-name" style="font-size:21px; font-weight:800; color:#ffffff;">Part Otomatis</span>
+                <span id="active-part-code" style="background:rgba(255,255,255,0.2); color:#ffffff; font-size:13.5px; font-weight:700; padding:4px 12px; border-radius:6px; font-family:monospace;">AUTO</span>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div style="background:rgba(255,255,255,0.14); padding:7px 14px; border-radius:8px; font-size:13.5px;">
+                    <span style="opacity:0.85;">Model:</span>
+                    <strong id="active-part-model-info" style="color:#ffffff; margin-left:4px; font-family:monospace;">-</strong>
+                    <span id="badge-model-version" style="background:#22c55e; color:#ffffff; font-size:12px; font-weight:700; padding:2px 8px; border-radius:5px; margin-left:6px;">v1</span>
                 </div>
 
-                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-                    <!-- Status Mode Otomatis -->
-                    <div style="background:rgba(34,197,94,0.18); padding:8px 14px; border-radius:8px; border:1px solid rgba(34,197,94,0.4); font-size:13px; color:#4ade80; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
-                        <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 8px #22c55e;"></span>
-                        Auto-Recognition Active
-                    </div>
+                <button type="button" onclick="bukaModalGantiShift()" style="display:inline-flex; align-items:center; gap:7px; background:rgba(255,255,255,0.16); padding:7px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.28); font-size:13.5px; color:#ffffff; font-weight:700; cursor:pointer;" title="Ganti Operator Shift">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.9;">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    <span>PIC: <strong id="label-ai-operator" style="color:#fde047;">Mukhamad Nawwaf</strong></span>
+                </button>
 
-                    <!-- Info Model Roboflow yang sedang aktif -->
-                    <div style="background:rgba(255,255,255,0.1); padding:8px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); font-size:13.5px;">
-                        <span style="color:#c7d2fe;">Model AI:</span>
-                        <strong id="active-part-model-info" style="color:#ffffff; margin-left:6px; font-family:monospace;">-</strong>
-                        <span id="badge-model-version" style="background:#22c55e; color:#ffffff; font-size:12px; font-weight:700; padding:2px 8px; border-radius:5px; margin-left:6px;">v1</span>
-                    </div>
-
-                    <!-- Operator PIC Shift Aktif -->
-                    <div onclick="bukaModalGantiShift()" style="background:rgba(255,255,255,0.12); padding:8px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); font-size:13px; color:#ffffff; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" title="Klik untuk Ganti Operator Shift">
-                        <span>👤</span>
-                        <span>PIC: <strong id="label-ai-operator" style="color:#fde047;">Mukhamad Nawwaf</strong></span>
-                    </div>
-
-                    <!-- Tombol Kelola Part -->
-                    <button type="button" id="btn-open-manage-parts" style="display:inline-flex; align-items:center; gap:8px; padding:9px 15px; background:rgba(255,255,255,0.15); color:white; border:1px solid rgba(255,255,255,0.3); border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;" title="Kelola Data Spesifikasi & SUT Part">
-                        ⚙️ Katalog Part
-                    </button>
-                </div>
+                <button type="button" id="btn-open-manage-parts" class="btn-mr-detail" style="font-size:13.5px; padding:8px 16px; cursor:pointer;">
+                    Katalog Part
+                </button>
             </div>
         </div>
 
-        <!-- Banner Sinkronisasi Konfigurasi ESP32 & RS-485 Status -->
-        <div style="background:#f8fafc; border:1.5px solid #dbe4f3; border-radius:10px; padding:18px; margin-bottom:20px;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
-                <div>
-                    <h3 style="margin-top:0; margin-bottom:6px; font-size:16.5px; color:#1e293b; font-weight:800;">Konfigurasi Master & Jalur RS-485</h3>
-                    <p style="font-size:13.5px; color:#475569; margin:0; line-height:1.5;">
-                        ESP32 membaca sensor melalui <strong>RS-485 to TTL</strong>. Photosensor 1 menandai hanger masuk, Photosensor 2 memicu kamera mengonfirmasi jumlah pcs barang.
-                    </p>
-                </div>
-                <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                    <a href="http://master-painting.test/cctv" target="_blank" class="btn-simpan-produksi" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; padding:9px 16px; background:#0d3b8c; color:white; border-radius:8px; font-weight:700; font-size:13px;">
-                        ⚙️ Master Painting &rarr;
+        <!-- Status Jalur RS-485 & Aksi Cepat -->
+        <div class="av-sensor-strip">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:14px;">
+                <h3 class="av-card-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    Status Sensor &amp; Sinkronisasi
+                </h3>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                    <a href="http://master-painting.test/cctv" target="_blank" class="btn-nav-action btn-blue" style="font-size:13.5px; height:38px; padding:0 15px; display:inline-flex; align-items:center; gap:6px; box-sizing:border-box;">
+                        <span>Master Painting</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
                     </a>
-                    <button type="button" id="btn-selesai-konfigurasi" class="btn-simpan-produksi" style="display:inline-flex; align-items:center; gap:6px; padding:9px 16px; background:#16a34a; color:white; border:none; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;">
-                        🔄 Sinkronkan IP Kamera
+                    <button type="button" id="btn-selesai-konfigurasi" class="btn-nav-action btn-green" style="font-size:13.5px; height:38px; padding:0 16px; border:none; display:inline-flex; align-items:center; gap:7px; box-sizing:border-box;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                        </svg>
+                        <span>Sinkronkan IP Kamera</span>
                     </button>
                 </div>
             </div>
 
-            <!-- Status Indikator Realtime RS-485 Photosensor (Hardware Monitoring) -->
-            <div style="margin-top:14px; padding-top:14px; border-top:1px dashed #cbd5e1; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-                <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-                    <!-- Indikator Status Mesin Produksi (PB ON / PB OFF) - Standar 2 Warna: MERAH (Off) & HIJAU (On) -->
-                    <div style="display:flex; align-items:center; gap:8px; background:#ffffff; border:1px solid #cbd5e1; padding:7px 14px; border-radius:8px;">
-                        <span id="dot-mesin-status" style="width:12px; height:12px; border-radius:50%; background:{{ $isMesinActiveAi ? '#22c55e' : '#ef4444' }}; box-shadow:0 0 {{ $isMesinActiveAi ? '12px #22c55e' : '8px rgba(239,68,68,0.5)' }}; display:inline-block; transition:all 0.3s;"></span>
-                        <span style="font-size:13px; font-weight:700; color:#334155;">Status Mesin:</span>
-                        <span id="status-mesin-text" style="font-size:13px; font-weight:800; color:{{ $isMesinActiveAi ? '#16a34a' : '#dc2626' }}; font-family:monospace;">{{ $isMesinActiveAi ? 'PRODUKSI AKTIF (Nilai 1)' : 'STANDBY (Nilai 0)' }}</span>
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <div class="av-sensor-chip">
+                        <span id="dot-mesin-status" style="width:10px; height:10px; border-radius:50%; background:{{ $isMesinActiveAi ? '#22c55e' : '#ef4444' }}; display:inline-block;"></span>
+                        <span style="font-weight:700; color:#334155;">Status Mesin:</span>
+                        <span id="status-mesin-text" style="font-weight:800; color:{{ $isMesinActiveAi ? '#16a34a' : '#dc2626' }}; font-family:ui-monospace,monospace;">{{ $isMesinActiveAi ? 'PRODUKSI AKTIF (1)' : 'STANDBY (0)' }}</span>
                     </div>
 
-                    <!-- Indikator Sensor 1 (Input Box - Pin 27) - Standar 2 Warna: MERAH (Standby) & HIJAU (Trigger) -->
-                    <div style="display:flex; align-items:center; gap:8px; background:#ffffff; border:1px solid #cbd5e1; padding:7px 14px; border-radius:8px;">
-                        <span id="dot-sensor-input" style="width:12px; height:12px; border-radius:50%; background:#ef4444; box-shadow:0 0 8px rgba(239,68,68,0.5); display:inline-block; transition:all 0.3s;"></span>
-                        <span style="font-size:13px; font-weight:700; color:#334155;">Sensor Masuk (Pin 27):</span>
-                        <span id="status-sensor-input-text" style="font-size:13px; font-weight:800; color:#dc2626; font-family:monospace;">Standby</span>
+                    <div class="av-sensor-chip">
+                        <span id="dot-sensor-input" style="width:10px; height:10px; border-radius:50%; background:#ef4444; display:inline-block;"></span>
+                        <span style="font-weight:700; color:#334155;">Sensor Masuk (Pin 27):</span>
+                        <span id="status-sensor-input-text" style="font-weight:800; color:#dc2626; font-family:ui-monospace,monospace;">Standby</span>
                     </div>
 
-                    <!-- Indikator Sensor 2 (Output Box - Pin 25) - Standar 2 Warna: MERAH (Standby) & HIJAU (Trigger) -->
-                    <div style="display:flex; align-items:center; gap:8px; background:#ffffff; border:1px solid #cbd5e1; padding:7px 14px; border-radius:8px;">
-                        <span id="dot-sensor-output" style="width:12px; height:12px; border-radius:50%; background:#ef4444; box-shadow:0 0 8px rgba(239,68,68,0.5); display:inline-block; transition:all 0.3s;"></span>
-                        <span style="font-size:13px; font-weight:700; color:#334155;">Sensor Keluar (Pin 25):</span>
-                        <span id="status-sensor-output-text" style="font-size:13px; font-weight:800; color:#dc2626; font-family:monospace;">Standby</span>
-                    </div>
-
-                    <!-- Tombol Simulasi Sensor Manual (Dev & Uji Coba) -->
-                    <div style="display:flex; align-items:center; gap:6px;">
-                        <button type="button" onclick="fetch('/api/sensor-trigger?type=input').catch(()=>{})" title="Simulasi Hanger Masuk Box (Pin 27: Mulai Tracking)" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; font-size:11.5px; font-weight:700; padding:6px 10px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
-                            🚪 Test In (Pin 27)
-                        </button>
-                        <button type="button" onclick="fetch('/api/sensor-trigger?type=output').catch(()=>{})" title="Simulasi Hanger Keluar Box (Pin 25: Finalisasi Hasil)" style="background:#f1f5f9; border:1px solid #cbd5e1; color:#334155; font-size:11.5px; font-weight:700; padding:6px 10px; border-radius:6px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all 0.2s;" onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
-                            📸 Test Out (Pin 25)
-                        </button>
+                    <div class="av-sensor-chip">
+                        <span id="dot-sensor-output" style="width:10px; height:10px; border-radius:50%; background:#ef4444; display:inline-block;"></span>
+                        <span style="font-weight:700; color:#334155;">Sensor Keluar (Pin 25):</span>
+                        <span id="status-sensor-output-text" style="font-weight:800; color:#dc2626; font-family:ui-monospace,monospace;">Standby</span>
                     </div>
                 </div>
 
-
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button type="button" onclick="fetch('/api/sensor-trigger?type=input').catch(()=>{})" class="riwayat-quick-btn" style="font-size:13px; height:36px; padding:0 12px;" title="Simulasi Hanger Masuk (Pin 27)">
+                        Test In (Pin 27)
+                    </button>
+                    <button type="button" onclick="fetch('/api/sensor-trigger?type=output').catch(()=>{})" class="riwayat-quick-btn" style="font-size:13px; height:36px; padding:0 12px;" title="Simulasi Hanger Keluar (Pin 25)">
+                        Test Out (Pin 25)
+                    </button>
+                </div>
             </div>
         </div>
 
-        <div style="display:flex; gap:22px; flex-wrap:wrap;">
+        <div class="av-grid">
             <!-- KOLOM KIRI: Layar Video Stream & Live Counter KPI -->
-            <div style="flex:1.3; min-width:340px; display:flex; flex-direction:column; gap:16px;">
+            <div class="av-col">
                 
                 <!-- Layar Video Stream ESP32-CAM dengan Canvas Bounding Box -->
-                <div id="ai-video-container" style="background:#0b1120; border:2px solid #1e293b; border-radius:12px; overflow:hidden; position:relative; min-height:360px; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 24px rgba(0,0,0,0.25); transition:border-color 0.3s;">
+                <div id="ai-video-container" style="background:#0b1120; border:1.5px solid #1e293b; border-radius:12px; overflow:hidden; position:relative; min-height:360px; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 24px rgba(15,23,42,0.18);">
                     
-                    <!-- Placeholder saat Stream Mati / Loading -->
-                    <div id="ai-video-placeholder" style="color:#94a3b8; font-size:14px; text-align:center; padding:28px; display:flex; flex-direction:column; align-items:center; gap:10px;">
-                        <span style="font-size:46px;">📷</span>
-                        <span id="ai-video-placeholder-title" style="font-weight:700; color:#f1f5f9; font-size:16px;">Menghubungkan ke Kamera ESP32-CAM (Output)...</span>
-                        <span id="ai-video-placeholder-desc" style="font-size:13px; color:#94a3b8; max-width:360px; line-height:1.5;">
-                            Mencari IP kamera secara otomatis. Pastikan modul ESP32-CAM terhubung ke jaringan WiFi yang sama.
+                    <div id="ai-video-placeholder" style="color:#cbd5e1; font-size:14.5px; text-align:center; padding:28px; display:flex; flex-direction:column; align-items:center; gap:10px;">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                            <circle cx="12" cy="13" r="4"></circle>
+                        </svg>
+                        <span id="ai-video-placeholder-title" style="font-weight:700; color:#f1f5f9; font-size:16.5px;">Menghubungkan ke Kamera ESP32-CAM (Output)...</span>
+                        <span id="ai-video-placeholder-desc" style="font-size:13.5px; color:#94a3b8; max-width:360px; line-height:1.5;">
+                            Menunggu koneksi IP kamera di jaringan lokal.
                         </span>
                     </div>
 
-                    <!-- Wrapper Stream & Canvas Overlay -->
                     <div id="ai-stream-wrapper" style="display:none; position:relative; width:100%; height:auto; line-height:0;">
-                        <!-- Gambar MJPEG Stream -->
                         <img id="ai-mjpeg-stream" crossorigin="anonymous" style="width:100%; height:auto; object-fit:contain; max-height:480px; display:block;" alt="ESP32-CAM Stream">
-                        
-                        <!-- Canvas Overlay untuk Gambar Bounding Box -->
                         <canvas id="ai-canvas-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
                         
-                        <!-- Badge Indikator Live di Pojok Layar -->
-                        <div style="position:absolute; top:10px; left:10px; display:flex; gap:6px; z-index:5; flex-wrap:wrap;">
-                            <span id="ai-stream-badge" style="background:rgba(15,23,42,0.88); color:#4ade80; border:1px solid rgba(74,222,128,0.3); font-size:12px; font-weight:700; padding:5px 11px; border-radius:6px; font-family:ui-monospace, monospace; backdrop-filter:blur(4px); display:flex; align-items:center; gap:6px;">
-                                <span style="width:8px; height:8px; border-radius:50%; background:#22c55e; animation:lampKedip 1.2s infinite;"></span>
+                        <div style="position:absolute; top:10px; left:10px; display:flex; gap:8px; z-index:5; flex-wrap:wrap;">
+                            <span id="ai-stream-badge" style="background:rgba(15,23,42,0.88); color:#4ade80; border:1px solid rgba(74,222,128,0.3); font-size:12.5px; font-weight:700; padding:5px 12px; border-radius:6px; font-family:ui-monospace, monospace; display:flex; align-items:center; gap:6px;">
+                                <span style="width:8px; height:8px; border-radius:50%; background:#22c55e;"></span>
                                 LIVE OUTPUT CAM
                             </span>
-                            <span id="ai-inference-time-badge" style="background:rgba(15,23,42,0.88); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); font-size:12px; font-weight:700; padding:5px 11px; border-radius:6px; font-family:ui-monospace, monospace; backdrop-filter:blur(4px); display:none;">
+                            <span id="ai-inference-time-badge" style="background:rgba(15,23,42,0.88); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); font-size:12.5px; font-weight:700; padding:5px 12px; border-radius:6px; font-family:ui-monospace, monospace; display:none;">
                                 0 ms
                             </span>
-                            <!-- Badge Gated Inspection Window (Pin 27 Start -> Pin 25 Finish) -->
-                            <span id="ai-inspection-badge" style="background:rgba(16,185,129,0.92); color:#ffffff; border:1px solid rgba(255,255,255,0.35); font-size:12px; font-weight:800; padding:5px 12px; border-radius:6px; font-family:ui-monospace, monospace; backdrop-filter:blur(4px); display:none; align-items:center; gap:6px; box-shadow:0 0 12px rgba(16,185,129,0.5);">
-                                <span style="width:8px; height:8px; border-radius:50%; background:#ffffff; animation:lampKedip 0.8s infinite;"></span>
-                                <span id="ai-inspection-badge-text">🔍 INSPEKSI AKTIF: 0 PART</span>
+                            <span id="ai-inspection-badge" style="background:rgba(16,185,129,0.92); color:#ffffff; border:1px solid rgba(255,255,255,0.35); font-size:12.5px; font-weight:800; padding:5px 12px; border-radius:6px; font-family:ui-monospace, monospace; display:none; align-items:center; gap:6px;">
+                                <span id="ai-inspection-badge-text">INSPEKSI AKTIF: 0 PART</span>
                             </span>
                         </div>
 
-                        <!-- Flash Shutter Banner saat Sensor Output Trigger -->
                         <div id="ai-shutter-flash" style="display:none; position:absolute; inset:0; background:rgba(255,255,255,0.35); pointer-events:none; z-index:10;"></div>
                     </div>
                 </div>
 
                 <!-- 4 KPI Box: Live Conveyor & Hanger Flow -->
-                <!-- 4 KPI Box: Live Conveyor & Hanger Flow (Selaras, Proporsional & Elegan) -->
-                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px;">
-                    
-                    <!-- Kartu 1: WIP Hanger (Sedang di dalam line oven/booth) -->
-                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-top:3.5px solid #f59e0b; border-radius:12px; padding:14px 16px; box-shadow:0 2px 8px rgba(15,23,42,0.04); display:flex; flex-direction:column; justify-content:space-between; min-height:122px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                            <span style="font-size:11.5px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Hanger di Line (WIP)</span>
-                            <span style="font-size:10.5px; font-weight:700; background:#fef3c7; color:#b45309; padding:2px 7px; border-radius:4px;">In-Line</span>
-                        </div>
-                        <div style="display:flex; align-items:baseline; gap:6px; margin:2px 0;">
-                            <span id="kpi-wip-hangers" style="font-size:32px; font-weight:900; color:#f59e0b; line-height:1;">{{ $initialStatsAi['wip_hangers'] ?? 0 }}</span>
+                <div class="av-kpi-grid">
+                    <div class="av-kpi-card kpi-amber">
+                        <div class="av-kpi-label">Hanger di Line (WIP)</div>
+                        <div style="display:flex; align-items:baseline; gap:6px;">
+                            <span id="kpi-wip-hangers" class="av-kpi-val" style="color:#d97706;">{{ $initialStatsAi['wip_hangers'] ?? 0 }}</span>
                             <span style="font-size:13px; font-weight:700; color:#64748b;">Hanger</span>
-                        </div>
-                        <div>
-                            <span style="font-size:11px; color:#b45309; font-weight:700; display:inline-flex; align-items:center; gap:5px; background:#fffbeb; padding:2px 8px; border-radius:6px; border:1px solid #fde68a;">
-                                <span style="width:6px; height:6px; border-radius:50%; background:#f59e0b;"></span>
-                                Marked Sensor 1
-                            </span>
                         </div>
                     </div>
 
-                    <!-- Kartu 2: Part di Hanger Output Saat Ini -->
-                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-top:3.5px solid #0284c7; border-radius:12px; padding:14px 16px; box-shadow:0 2px 8px rgba(15,23,42,0.04); display:flex; flex-direction:column; justify-content:space-between; min-height:122px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                            <span style="font-size:11.5px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Part di Hanger Ini</span>
-                            <span style="font-size:10.5px; font-weight:700; background:#e0f2fe; color:#0369a1; padding:2px 7px; border-radius:4px;">Kamera</span>
-                        </div>
-                        <div style="display:flex; align-items:baseline; gap:6px; margin:2px 0;">
-                            <span id="kpi-current-parts" style="font-size:32px; font-weight:900; color:#0284c7; line-height:1;">0</span>
+                    <div class="av-kpi-card kpi-sky">
+                        <div class="av-kpi-label">Part di Hanger Ini</div>
+                        <div style="display:flex; align-items:baseline; gap:6px;">
+                            <span id="kpi-current-parts" class="av-kpi-val" style="color:#0284c7;">0</span>
                             <span style="font-size:13px; font-weight:700; color:#64748b;">Pcs</span>
                         </div>
-                        <div>
-                            <span style="font-size:11px; color:#0369a1; font-weight:700; display:inline-flex; align-items:center; gap:5px; background:#f0f9ff; padding:2px 8px; border-radius:6px; border:1px solid #bae6fd;">
-                                <span style="width:6px; height:6px; border-radius:50%; background:#0284c7;"></span>
-                                Deteksi Kamera Output
-                            </span>
-                        </div>
                     </div>
 
-                    <!-- Kartu 3: Total Hanger Selesai (Output) -->
-                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-top:3.5px solid #0d9488; border-radius:12px; padding:14px 16px; box-shadow:0 2px 8px rgba(15,23,42,0.04); display:flex; flex-direction:column; justify-content:space-between; min-height:122px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                            <span style="font-size:11.5px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Hanger Selesai</span>
-                            <span style="font-size:10.5px; font-weight:700; background:#ccfbf1; color:#0f766e; padding:2px 7px; border-radius:4px;">Output</span>
-                        </div>
-                        <div style="display:flex; align-items:baseline; gap:6px; margin:2px 0;">
-                            <span id="kpi-output-hangers" style="font-size:32px; font-weight:900; color:#0d9488; line-height:1;">{{ $initialStatsAi['total_output_hangers'] ?? 0 }}</span>
+                    <div class="av-kpi-card kpi-teal">
+                        <div class="av-kpi-label">Hanger Selesai</div>
+                        <div style="display:flex; align-items:baseline; gap:6px;">
+                            <span id="kpi-output-hangers" class="av-kpi-val" style="color:#0d9488;">{{ $initialStatsAi['total_output_hangers'] ?? 0 }}</span>
                             <span style="font-size:13px; font-weight:700; color:#64748b;">Hanger</span>
                         </div>
-                        <div>
-                            <span style="font-size:11px; color:#0f766e; font-weight:700; display:inline-flex; align-items:center; gap:5px; background:#f0fdfa; padding:2px 8px; border-radius:6px; border:1px solid #99f6e4;">
-                                <span style="width:6px; height:6px; border-radius:50%; background:#0d9488;"></span>
-                                Terkonfirmasi Sensor 2
-                            </span>
-                        </div>
                     </div>
 
-                    <!-- Kartu 4: Total Output Aktual Terkonfirmasi (PCS) -->
-                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-top:3.5px solid #16a34a; border-radius:12px; padding:14px 16px; box-shadow:0 2px 8px rgba(15,23,42,0.04); display:flex; flex-direction:column; justify-content:space-between; min-height:122px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                            <span style="font-size:11.5px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Total Output</span>
-                            <button type="button" id="btn-reset-counter" style="background:#fee2e2; border:1px solid #fca5a5; color:#dc2626; font-size:11px; cursor:pointer; font-weight:800; padding:2px 8px; border-radius:5px; transition:all 0.15s; display:inline-flex; align-items:center; gap:3px;" onmouseover="this.style.background='#fecaca'" onmouseout="this.style.background='#fee2e2'">
-                                ↺ Reset
+                    <div class="av-kpi-card kpi-green">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <span class="av-kpi-label" style="margin-bottom:0;">Total Output</span>
+                            <button type="button" id="btn-reset-counter" style="background:#fee2e2; border:1px solid #fca5a5; color:#dc2626; font-size:11.5px; cursor:pointer; font-weight:700; padding:2px 8px; border-radius:5px;">
+                                Reset
                             </button>
                         </div>
-                        <div style="display:flex; align-items:baseline; gap:6px; margin:2px 0;">
-                            <span id="kpi-total-parts" style="font-size:32px; font-weight:900; color:#16a34a; line-height:1;">{{ $initialStatsAi['total_output_pcs'] ?? 0 }}</span>
+                        <div style="display:flex; align-items:baseline; gap:6px;">
+                            <span id="kpi-total-parts" class="av-kpi-val" style="color:#16a34a;">{{ $initialStatsAi['total_output_pcs'] ?? 0 }}</span>
                             <span style="font-size:13px; font-weight:700; color:#64748b;">Pcs</span>
-                        </div>
-                        <div>
-                            <span style="font-size:11px; color:#15803d; font-weight:700; display:inline-flex; align-items:center; gap:5px; background:#f0fdf4; padding:2px 8px; border-radius:6px; border:1px solid #bbf7d0;">
-                                <span style="width:6px; height:6px; border-radius:50%; background:#16a34a;"></span>
-                                Aktual Roboflow AI
-                            </span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Info Log Alur Kerja Konveyor -->
-                <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:13px 16px; font-size:13.5px; color:#1e40af; line-height:1.5;">
-                    💡 <strong>Alur Gated Inspection Window:</strong> Saat <strong>Sensor Masuk (Pin 27)</strong> mendeteksi hanger masuk ke dalam box, sistem membuka sesi inspeksi dan AI ByteTrack otomatis melacak & mengakumulasikan setiap part unik yang terlihat. Begitu hanger memicu <strong>Sensor Keluar (Pin 25)</strong>, sesi inspeksi selesai, total part unik otomatis dikonfirmasi ke <em>Total Output</em>, dan counter di-reset bersih untuk hanger berikutnya!
-                </div>
-
-                <!-- CARD KOLEKTOR DATASET ROBOFLOW (UNLIMITED & CEPAT) -->
-                <div style="background:#ffffff; border:1.5px solid #c7d2fe; border-radius:12px; padding:18px; box-shadow:0 2px 8px rgba(99,102,241,0.06);">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; border-bottom:1px solid #e0e7ff; padding-bottom:12px; flex-wrap:wrap; gap:8px;">
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <span style="font-size:24px;">📸</span>
-                            <div>
-                                <h4 style="margin:0; font-size:16px; color:#3730a3; font-weight:800;">Kolektor Dataset Foto Part</h4>
-                                <div style="font-size:13px; color:#4338ca; font-weight:700; margin-top:2px;">
-                                    Part Sasaran: <span id="label-kolektor-part-name" style="background:#e0e7ff; padding:2px 10px; border-radius:5px; font-family:monospace; color:#3730a3; font-size:13px;">Memuat...</span>
-                                </div>
+                <!-- CARD KOLEKTOR DATASET -->
+                <div class="av-card">
+                    <div class="av-card-header" style="flex-wrap:wrap;">
+                        <div>
+                            <h4 class="av-card-title">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                </svg>
+                                Kolektor Dataset Foto
+                            </h4>
+                            <div style="font-size:13.5px; color:#475569; font-weight:600; margin-top:4px;">
+                                Part: <span id="label-kolektor-part-name" style="background:#eff6ff; padding:2px 10px; border-radius:5px; font-family:ui-monospace,monospace; color:#0d3b8c; font-weight:700;">Memuat...</span>
                             </div>
                         </div>
-                        <span id="badge-sample-status" style="font-size:12.5px; font-weight:700; background:#e0e7ff; color:#3730a3; padding:5px 12px; border-radius:6px; font-family:ui-monospace,monospace;">
-                            Standby (0 Foto Terkumpul)
+                        <span id="badge-sample-status" class="av-status-pill" style="background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe;">
+                            Standby (0 Foto)
                         </span>
                     </div>
 
-                    <!-- Indikator Total Sampel Terkumpul (Bebas & Dinamis) -->
-                    <div style="background:#f8fafc; border:1.5px solid #e0e7ff; border-radius:10px; padding:14px 18px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
                         <div>
-                            <div style="font-size:12px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Total Sampel Tersimpan:</div>
+                            <div style="font-size:12px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;">Total Sampel Tersimpan</div>
                             <div style="display:flex; align-items:baseline; gap:8px; margin-top:2px;">
-                                <span id="label-sample-progress" style="color:#4f46e5; font-family:monospace; font-weight:900; font-size:28px;">0</span>
-                                <span style="color:#334155; font-weight:800; font-size:14.5px;">Foto Sampel</span>
+                                <span id="label-sample-progress" style="color:#0d3b8c; font-family:ui-monospace,monospace; font-weight:900; font-size:30px; font-variant-numeric:tabular-nums;">0</span>
+                                <span style="color:#334155; font-weight:700; font-size:15px;">Foto</span>
                             </div>
-                        </div>
-                        <div style="font-size:12.5px; color:#475569; text-align:right; max-width:340px; line-height:1.45;">
-                            ⚡ <strong>Jumlah Sampel Bebas:</strong> Tidak dibatasi 100 foto. Klik <strong>Mulai Ambil Sampel</strong> untuk memotret beruntun super cepat, dan klik <strong>Berhenti</strong> kapan pun Anda mau.
-                        </div>
-                    </div>
-
-                    <!-- Kontrol Pengambilan Sampel Dataset -->
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
-                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                            <button type="button" id="btn-toggle-sampling" style="display:inline-flex; align-items:center; gap:8px; padding:9px 20px; background:#4f46e5; color:white; border:none; border-radius:8px; font-weight:800; font-size:14px; cursor:pointer; transition:all 0.25s; box-shadow:0 2px 6px rgba(79,70,229,0.3);">
-                                ▶ Mulai Ambil Sampel
-                            </button>
-                            <div style="display:inline-flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:6px 10px;">
-                                <span style="font-size:12px; font-weight:700; color:#475569;">⏱️ Jeda:</span>
-                                <select id="select-sampling-speed" style="font-size:12.5px; font-weight:700; color:#1e293b; background:transparent; border:none; outline:none; cursor:pointer;">
-                                    <option value="500" selected>0.5 detik (Pas &amp; Rekomendasi)</option>
-                                    <option value="350">0.35 detik (Sedikit Lebih Cepat)</option>
-                                    <option value="750">0.75 detik (Santai)</option>
-                                    <option value="1000">1.0 detik (Pelan / 1 foto per detik)</option>
-                                    <option value="150">0.15 detik (Kilat / Sangat Cepat)</option>
-                                </select>
-                            </div>
-                            <button type="button" id="btn-capture-manual-sample" style="display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:#f8fafc; color:#1e293b; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;" title="Ambil 1 foto secara manual">
-                                📷 1x Jepret Manual
-                            </button>
                         </div>
 
                         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                            <a id="btn-download-dataset-zip" href="/api/download-roboflow-zip" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; padding:8px 16px; background:#16a34a; color:white; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; opacity:0.6; pointer-events:none; transition:all 0.2s;">
-                                📦 Download ZIP
+                            <a id="btn-download-dataset-zip" href="/api/download-roboflow-zip" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center; gap:6px; height:38px; padding:0 15px; background:#16a34a; color:white; border-radius:8px; font-weight:700; font-size:13.5px; cursor:pointer; opacity:0.6; pointer-events:none; box-sizing:border-box;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                <span>Download ZIP</span>
                             </a>
-                            <button type="button" id="btn-open-update-version" style="display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:#0284c7; color:white; border:none; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;" title="Update Versi Model Roboflow Setelah Retraining">
-                                🆙 Update Versi Model
+                            <button type="button" id="btn-open-update-version" style="height:38px; padding:0 14px; background:#0284c7; color:white; border:none; border-radius:8px; font-weight:700; font-size:13.5px; cursor:pointer;">
+                                Update Versi Model
                             </button>
-                            <button type="button" id="btn-reset-samples" style="display:inline-flex; align-items:center; gap:6px; padding:8px 12px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;" title="Reset / Hapus Semua Sampel Part Ini">
-                                ↺ Reset
+                            <button type="button" id="btn-reset-samples" style="height:38px; padding:0 14px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:8px; font-weight:700; font-size:13.5px; cursor:pointer;">
+                                Reset
                             </button>
                         </div>
                     </div>
 
-                    <div style="font-size:12px; color:#4338ca; background:#eef2ff; border:1px solid #c7d2fe; border-radius:6px; padding:6px 10px; margin-bottom:14px; display:flex; align-items:center; gap:6px;">
-                        <span>⚡</span>
-                        <span><strong>Pengambilan Foto Mandiri:</strong> Kamera langsung memotret terus-menerus secara cepat tanpa menunggu sensor, trigger hardware, ataupun konveyor.</span>
+                    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+                        <button type="button" id="btn-toggle-sampling" style="height:38px; padding:0 18px; background:#0d3b8c; color:white; border:none; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;">
+                            Mulai Ambil Sampel
+                        </button>
+                        <div style="display:inline-flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; height:38px; padding:0 12px; box-sizing:border-box;">
+                            <span style="font-size:13px; font-weight:700; color:#475569;">Jeda:</span>
+                            <select id="select-sampling-speed" style="font-size:13.5px; font-weight:700; color:#1e293b; background:transparent; border:none; outline:none; cursor:pointer;">
+                                <option value="500" selected>0.5 detik</option>
+                                <option value="350">0.35 detik</option>
+                                <option value="750">0.75 detik</option>
+                                <option value="1000">1.0 detik</option>
+                                <option value="150">0.15 detik</option>
+                            </select>
+                        </div>
+                        <button type="button" id="btn-capture-manual-sample" style="height:38px; padding:0 14px; background:#f8fafc; color:#1e293b; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:13.5px; cursor:pointer;">
+                            1x Jepret Manual
+                        </button>
                     </div>
 
-                    <!-- Filmstrip Preview Sampel Terbaru -->
                     <div>
-                        <div style="font-size:12.5px; font-weight:700; color:#475569; margin-bottom:6px;">Preview Sampel Terakhir:</div>
+                        <div style="font-size:13px; font-weight:700; color:#475569; margin-bottom:6px;">Preview Sampel Terakhir:</div>
                         <div id="sample-preview-container" style="display:flex; gap:8px; overflow-x:auto; padding:6px 0; min-height:72px; align-items:center;">
-                            <div id="sample-empty-notice" style="font-size:12.5px; color:#94a3b8; font-style:italic;">Belum ada sampel foto yang diambil. Klik 'Mulai Ambil Sampel' untuk mengambil foto beruntun.</div>
+                            <div id="sample-empty-notice" style="font-size:13.5px; color:#64748b;">Belum ada sampel foto yang diambil.</div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- KOLOM KANAN: Pengaturan Model Roboflow & Kontrol Stream -->
-            <div style="flex:1; min-width:320px; display:flex; flex-direction:column; gap:16px;">
+            <!-- KOLOM KANAN: Pengaturan Model & Kontrol Stream -->
+            <div class="av-col">
                 
-                <!-- CARD 1: Profil Model AI Part Aktif & Roboflow -->
-                <div style="background:#ffffff; border:1.5px solid #dbe4f3; border-radius:10px; padding:18px; box-shadow:0 2px 6px rgba(0,0,0,0.03);">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:20px;">🤖</span>
-                            <h4 style="margin:0; font-size:16px; color:#0d3b8c; font-weight:800;">Model Roboflow Part Aktif</h4>
-                        </div>
-                        <span id="badge-ai-model-ready" style="font-size:12px; font-weight:700; background:#fee2e2; color:#dc2626; padding:3px 10px; border-radius:6px; font-family:ui-monospace,monospace;">
-                            🔴 Belum Siap
+                <!-- CARD 1: Model AI Part Aktif -->
+                <div class="av-card">
+                    <div class="av-card-header">
+                        <h4 class="av-card-title">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                                <polyline points="2 17 12 22 22 17"></polyline>
+                                <polyline points="2 12 12 17 22 12"></polyline>
+                            </svg>
+                            Model AI Part Aktif
+                        </h4>
+                        <span id="badge-ai-model-ready" class="av-status-pill" style="background:#fee2e2; color:#dc2626;">
+                            Belum Siap
                         </span>
                     </div>
 
-                    <!-- Diagnostik Error Model Roboflow (Otomatis muncul jika gagal) -->
-                    <div id="ai-model-error-hint" style="display:none; margin-bottom:14px; padding:12px 14px; background:#fef2f2; border:1.5px solid #fecaca; border-radius:8px; font-size:12.5px; color:#991b1b;">
-                        <div style="font-weight:800; display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:13px;">
-                            <span>⚠️</span> <span id="ai-model-error-title">Gagal Memuat Model Roboflow</span>
-                        </div>
-                        <div id="ai-model-error-msg" style="font-family:monospace; font-size:11.5px; background:#ffffff; color:#b91c1c; padding:8px 10px; border-radius:6px; border:1px solid #fee2e2; margin-bottom:8px; word-break:break-word; line-height:1.4;">
-                            -
-                        </div>
-                        <div style="font-size:11.5px; color:#7f1d1d; line-height:1.45;">
-                            💡 <strong>Solusi:</strong> Klik <strong>⚙️ Pengaturan Manual (Advanced / Override)</strong> di bawah atau tombol <strong>⚙️ Katalog Part</strong>, lalu sesuaikan <strong>Model Slug</strong>, <strong>Versi</strong>, dan <strong>Publishable API Key</strong> dari akun Roboflow Anda.
-                        </div>
+                    <div id="ai-model-error-hint" style="display:none; margin-bottom:14px; padding:12px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; font-size:13px; color:#991b1b;">
+                        <div style="font-weight:800; margin-bottom:6px;" id="ai-model-error-title">Gagal Memuat Model</div>
+                        <div id="ai-model-error-msg" style="font-family:ui-monospace,monospace; font-size:12.5px; background:#ffffff; color:#b91c1c; padding:8px 10px; border-radius:6px; border:1px solid #fee2e2; word-break:break-word; line-height:1.4;">-</div>
                     </div>
 
-                    <!-- Profil Part Aktif Box -->
-                    <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:14px;">
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px; margin-bottom:14px;">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                             <div>
-                                <span id="card-part-code" style="font-size:12.5px; font-weight:800; background:#0d3b8c; color:white; padding:3px 8px; border-radius:4px; font-family:monospace;">-</span>
-                                <div id="card-part-name" style="font-size:16px; font-weight:800; color:#0f172a; margin-top:5px;">Memuat Part...</div>
+                                <span id="card-part-code" style="font-size:13px; font-weight:800; background:#0d3b8c; color:white; padding:3px 9px; border-radius:5px; font-family:ui-monospace,monospace;">-</span>
+                                <div id="card-part-name" style="font-size:17px; font-weight:800; color:#0f172a; margin-top:6px;">Memuat Part...</div>
                             </div>
-                            <span id="card-model-version" style="font-size:12.5px; font-weight:800; background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:6px; font-family:monospace;">v1</span>
+                            <span id="card-model-version" style="font-size:13px; font-weight:800; background:#dbeafe; color:#1d4ed8; padding:4px 10px; border-radius:6px; font-family:ui-monospace,monospace;">v1</span>
                         </div>
                         
-                        <div style="font-size:13px; color:#475569; margin-top:8px; display:flex; flex-direction:column; gap:4px;">
-                            <div><strong>Slug Model:</strong> <span id="card-model-slug" style="font-family:monospace; color:#0f172a; font-weight:600;">-</span></div>
-                            <div><strong>Target Part / Hanger:</strong> <span id="card-part-target" style="font-weight:800; color:#16a34a;">-</span> Pcs</div>
+                        <div style="font-size:13.5px; color:#475569; margin-top:8px; display:flex; flex-direction:column; gap:4px;">
+                            <div>Slug Model: <strong id="card-model-slug" style="font-family:ui-monospace,monospace; color:#0f172a;">-</strong></div>
+                            <div>Target / Hanger: <strong id="card-part-target" style="color:#16a34a;">-</strong> Pcs</div>
                         </div>
 
                         <div style="display:flex; gap:8px; margin-top:12px;">
-                            <button type="button" id="btn-quick-manage-parts" style="flex:1; padding:8px 12px; background:#f1f5f9; color:#0d3b8c; border:1px solid #cbd5e1; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer;" title="Lihat & Kelola Spesifikasi Part di Katalog">
-                                ⚙️ Katalog Part
+                            <button type="button" id="btn-quick-manage-parts" style="flex:1; height:36px; padding:0 12px; background:#ffffff; color:#0d3b8c; border:1px solid #cbd5e1; border-radius:7px; font-size:13.5px; font-weight:700; cursor:pointer;">
+                                Katalog Part
                             </button>
-                            <button type="button" id="btn-quick-update-ver" style="padding:8px 12px; background:#e0f2fe; color:#0284c7; border:1px solid #bae6fd; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer;" title="Update Versi Model Setelah Retraining">
-                                🆙 Update Versi
+                            <button type="button" id="btn-quick-update-ver" style="height:36px; padding:0 12px; background:#e0f2fe; color:#0284c7; border:1px solid #bae6fd; border-radius:7px; font-size:13.5px; font-weight:700; cursor:pointer;">
+                                Update Versi
                             </button>
                         </div>
                     </div>
 
-                    <!-- Slider Confidence Threshold -->
                     <div style="margin-bottom:14px;">
-                        <div style="display:flex; justify-content:space-between; font-size:13.5px; font-weight:700; color:#334155; margin-bottom:5px;">
-                            <span>Threshold Confidence AI:</span>
-                            <span id="label-conf-val" style="color:#0d3b8c; font-weight:800;">50%</span>
+                        <div style="display:flex; justify-content:space-between; font-size:14px; font-weight:700; color:#334155; margin-bottom:6px;">
+                            <span>Confidence Threshold:</span>
+                            <span id="label-conf-val" style="color:#0d3b8c; font-weight:800; font-variant-numeric:tabular-nums;">50%</span>
                         </div>
                         <input type="range" id="rf-conf-slider" min="20" max="95" value="50" style="width:100%; accent-color:#0d3b8c;">
-                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#94a3b8; margin-top:3px; font-weight:600;">
-                            <span>20% (Sensitif)</span>
-                            <span>50% (Ideal)</span>
-                            <span>95% (Sangat Ketat)</span>
+                        <div style="display:flex; justify-content:space-between; font-size:12px; color:#64748b; margin-top:3px;">
+                            <span>20%</span>
+                            <span>50%</span>
+                            <span>95%</span>
                         </div>
                     </div>
 
-                    <!-- Collapsible Panel: Pengaturan Manual / Override API Key -->
                     <div style="border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#f8fafc;">
-                        <button type="button" id="btn-toggle-advanced-rf" style="width:100%; display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; border:none; padding:9px 12px; cursor:pointer; font-size:12.5px; font-weight:700; color:#475569; text-align:left;">
-                            <span>⚙️ Pengaturan Manual (Advanced / Override)</span>
-                            <span id="icon-toggle-advanced-rf" style="font-size:11px; color:#64748b;">▼</span>
+                        <button type="button" id="btn-toggle-advanced-rf" style="width:100%; display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; border:none; padding:10px 14px; cursor:pointer; font-size:13.5px; font-weight:700; color:#334155; text-align:left;">
+                            <span>Pengaturan Manual (Override)</span>
+                            <span id="icon-toggle-advanced-rf" style="font-size:12px; color:#64748b;">&#9660;</span>
                         </button>
 
-                        <div id="panel-advanced-rf" style="display:none; padding:12px; border-top:1px solid #e2e8f0; font-size:12.5px;">
+                        <div id="panel-advanced-rf" style="display:none; padding:14px; border-top:1px solid #e2e8f0; font-size:13.5px;">
                             <div style="margin-bottom:10px;">
-                                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:3px;">Model ID (Project Slug):</label>
-                                <input type="text" id="rf-model-input" class="filter-select" style="width:100%; padding:8px 10px; font-size:12.5px;" placeholder="contoh: hanger-object-detection">
-                                <div style="font-size:11px; color:#64748b; margin-top:3px;">* Tanpa spasi (gunakan tanda strip <code style="background:#e2e8f0; padding:1px 4px; border-radius:3px;">-</code>). Contoh: <b>hanger-object-detection</b></div>
+                                <label style="display:block; font-size:13px; font-weight:700; color:#475569; margin-bottom:4px;">Model ID (Project Slug):</label>
+                                <input type="text" id="rf-model-input" class="filter-select" style="width:100%; height:38px; padding:0 10px; font-size:13.5px; background:#ffffff; box-sizing:border-box;" placeholder="hanger-object-detection">
                             </div>
 
                             <div style="margin-bottom:10px;">
-                                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:3px;">Versi Model:</label>
-                                <input type="number" id="rf-version-input" class="filter-select" style="width:100%; padding:8px 10px; font-size:12.5px;" value="1" min="1">
-                                <div style="font-size:11px; color:#64748b; margin-top:3px;">* Sesuai nomor versi training Roboflow (misal: <b>2</b>).</div>
+                                <label style="display:block; font-size:13px; font-weight:700; color:#475569; margin-bottom:4px;">Versi Model:</label>
+                                <input type="number" id="rf-version-input" class="filter-select" style="width:100%; height:38px; padding:0 10px; font-size:13.5px; background:#ffffff; box-sizing:border-box;" value="1" min="1">
                             </div>
 
                             <div style="margin-bottom:12px;">
-                                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:3px;">Roboflow Publishable API Key:</label>
+                                <label style="display:block; font-size:13px; font-weight:700; color:#475569; margin-bottom:4px;">Roboflow API Key:</label>
                                 <div style="position:relative; display:flex;">
-                                    <input type="password" id="rf-key-input" class="filter-select" style="width:100%; padding:8px 36px 8px 10px; font-size:12.5px; font-family:monospace;" placeholder="rf_xxxxxxxxxxxx">
-                                    <button type="button" id="btn-toggle-key" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; color:#64748b; cursor:pointer; font-size:14px;">👁️</button>
+                                    <input type="password" id="rf-key-input" class="filter-select" style="width:100%; height:38px; padding:0 52px 0 10px; font-size:13.5px; font-family:ui-monospace,monospace; background:#ffffff; box-sizing:border-box;" placeholder="rf_xxxxxxxxxxxx">
+                                    <button type="button" id="btn-toggle-key" style="position:absolute; right:8px; top:50%; transform:translateY(-50%); background:none; border:none; color:#475569; cursor:pointer; font-size:12px; font-weight:700;">Lihat</button>
                                 </div>
                             </div>
 
-                            <button type="button" class="btn-simpan-produksi" id="btn-load-model" style="width:100%; padding:9px 14px; background:#0d3b8c; color:white; border:none; border-radius:6px; font-weight:700; font-size:12.5px; cursor:pointer;">
-                                📥 Muat Ulang Model Manual
+                            <button type="button" class="btn-simpan-produksi" id="btn-load-model" style="width:100%; height:38px; padding:0 14px; background:#0d3b8c; color:white; border:none; border-radius:7px; font-weight:700; font-size:13.5px; cursor:pointer;">
+                                Muat Ulang Model
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- CARD 2: Kamera ESP32-CAM (Output) & Auto-Stream -->
-                <div style="background:#ffffff; border:1.5px solid #dbe4f3; border-radius:10px; padding:18px; box-shadow:0 2px 6px rgba(0,0,0,0.03);">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:20px;">📹</span>
-                            <h4 style="margin:0; font-size:16px; color:#0d3b8c; font-weight:800;">Kamera ESP32-CAM (Output)</h4>
-                        </div>
+                <!-- CARD 2: Kamera ESP32-CAM (Output) -->
+                <div class="av-card">
+                    <div class="av-card-header">
+                        <h4 class="av-card-title">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                            Kamera ESP32-CAM (Output)
+                        </h4>
                         <div style="display:flex; align-items:center; gap:6px;">
-                            <span id="ai-cam-quick-badge" style="font-size:12px; font-weight:700; background:#fee2e2; color:#dc2626; padding:3px 10px; border-radius:6px; font-family:ui-monospace, monospace;">
-                                🔴 Mencari IP...
+                            <span id="ai-cam-quick-badge" class="av-status-pill" style="background:#fee2e2; color:#dc2626;">
+                                Mencari IP...
                             </span>
-                            <button type="button" id="btn-reconnect-cam" style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:13px; cursor:pointer;" title="Hubungkan Ulang / Refresh Kamera">
-                                🔄
+                            <button type="button" id="btn-reconnect-cam" style="background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; height:28px; padding:0 10px; font-size:12.5px; font-weight:700; color:#334155; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" title="Hubungkan Ulang Kamera">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                                </svg>
+                                <span>Refresh</span>
                             </button>
                         </div>
                     </div>
 
-                    <!-- Pilihan Resolusi Kamera Utama -->
                     <div style="margin-bottom:14px;">
-                        <label style="display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:700; color:#334155; margin-bottom:5px;">
-                            <span>Resolusi Kamera:</span>
-                            <span style="font-size:11.5px; color:#16a34a; font-weight:700;">Auto-Apply</span>
-                        </label>
-                        <select id="cam-resolution-select" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px; font-weight:600; border-radius:6px; border:1px solid #cbd5e1; background:#ffffff;">
-                            <option value="5">QVGA (320 x 240) - Sangat Cepat & Ringan</option>
-                            <option value="6">CIF (400 x 296) - Cepat</option>
-                            <option value="8" selected>VGA (640 x 480) - Standar Roboflow (Rekomendasi AI)</option>
-                            <option value="9">SVGA (800 x 600) - Lebih Detail</option>
+                        <label style="display:block; font-size:13.5px; font-weight:700; color:#334155; margin-bottom:5px;">Resolusi Kamera</label>
+                        <select id="cam-resolution-select" class="filter-select" style="width:100%; height:38px; padding:0 12px; font-size:13.5px; font-weight:600; background:#ffffff; box-sizing:border-box;">
+                            <option value="5">QVGA (320 x 240)</option>
+                            <option value="6">CIF (400 x 296)</option>
+                            <option value="8" selected>VGA (640 x 480) - Standar AI</option>
+                            <option value="9">SVGA (800 x 600)</option>
                             <option value="10">XGA (1024 x 768)</option>
-                            <option value="11">HD (1280 x 720) - Tajam (FPS Rendah)</option>
+                            <option value="11">HD (1280 x 720)</option>
                             <option value="12">SXGA (1280 x 1024)</option>
-                            <option value="13">UXGA (1600 x 1200) - 2 MP (Still Photo / Berat)</option>
+                            <option value="13">UXGA (1600 x 1200)</option>
                         </select>
                     </div>
 
-                    <!-- Collapsible Panel: Pengaturan Sensor & Pencahayaan -->
                     <div style="margin-bottom:14px; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; background:#f8fafc;">
-                        <button type="button" id="btn-toggle-cam-tuning" style="width:100%; display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; border:none; padding:10px 14px; cursor:pointer; font-size:13px; font-weight:700; color:#1e293b; text-align:left;">
-                            <span style="display:flex; align-items:center; gap:8px;">
-                                <span>⚙️</span>
-                                <span>Pengaturan Sensor & Pencahayaan</span>
-                            </span>
-                            <span id="icon-toggle-cam-tuning" style="font-size:11px; color:#64748b; transition:transform 0.2s;">▼</span>
+                        <button type="button" id="btn-toggle-cam-tuning" style="width:100%; display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; border:none; padding:10px 14px; cursor:pointer; font-size:13.5px; font-weight:700; color:#1e293b; text-align:left;">
+                            <span>Pengaturan Sensor &amp; Pencahayaan</span>
+                            <span id="icon-toggle-cam-tuning" style="font-size:12px; color:#64748b;">&#9660;</span>
                         </button>
 
-                        <div id="panel-cam-tuning" style="display:none; padding:14px; border-top:1px solid #e2e8f0; font-size:12.5px;">
-                            
-                            <!-- XCLK Clock Speed (Kecepatan Streaming Sensor) -->
+                        <div id="panel-cam-tuning" style="display:none; padding:14px; border-top:1px solid #e2e8f0; font-size:13px;">
                             <div style="margin-bottom:12px; background:#ffffff; padding:10px 12px; border-radius:6px; border:1px solid #e2e8f0;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                    <span style="font-weight:700; color:#334155; font-size:12.5px;">⚡ Kecepatan Clock Sensor (XCLK):</span>
-                                    <span id="val-cam-xclk" style="color:#0d3b8c; font-weight:800; font-family:monospace; font-size:13px;">20 MHz</span>
+                                    <span style="font-weight:700; color:#334155;">Clock Sensor (XCLK):</span>
+                                    <span id="val-cam-xclk" style="color:#0d3b8c; font-weight:800; font-family:ui-monospace,monospace;">20 MHz</span>
                                 </div>
                                 <div style="display:flex; gap:6px;">
-                                    <button type="button" class="btn-xclk-opt" data-xclk="10" style="flex:1; padding:6px 8px; font-size:12px; font-weight:600; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; cursor:pointer;">10 MHz</button>
-                                    <button type="button" class="btn-xclk-opt" data-xclk="16" style="flex:1; padding:6px 8px; font-size:12px; font-weight:600; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; cursor:pointer;">16 MHz</button>
-                                    <button type="button" class="btn-xclk-opt active" data-xclk="20" style="flex:1; padding:6px 8px; font-size:12px; font-weight:700; background:#0d3b8c; color:white; border:none; border-radius:4px; cursor:pointer;">20 MHz (Mulus)</button>
-                                </div>
-                                <div style="font-size:11px; color:#64748b; margin-top:5px;">
-                                    *Pilih 20 MHz untuk streaming langsung tanpa lag/freeze.
+                                    <button type="button" class="btn-xclk-opt" data-xclk="10" style="flex:1; padding:7px 8px; font-size:12.5px; font-weight:600; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; cursor:pointer;">10 MHz</button>
+                                    <button type="button" class="btn-xclk-opt" data-xclk="16" style="flex:1; padding:7px 8px; font-size:12.5px; font-weight:600; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; cursor:pointer;">16 MHz</button>
+                                    <button type="button" class="btn-xclk-opt active" data-xclk="20" style="flex:1; padding:7px 8px; font-size:12.5px; font-weight:700; background:#0d3b8c; color:white; border:none; border-radius:4px; cursor:pointer;">20 MHz</button>
                                 </div>
                             </div>
 
-                            <!-- Kualitas JPEG & Brightness -->
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                                 <div>
-                                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px; font-size:12px;">
+                                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px;">
                                         <span>Kualitas JPEG:</span>
                                         <span id="val-cam-quality" style="color:#0d3b8c; font-weight:800;">10</span>
                                     </div>
-                                    <input type="range" id="slider-cam-quality" min="4" max="63" value="10" step="1" style="width:100%; accent-color:#0d3b8c;" title="Angka lebih kecil = kualitas gambar makin tinggi dan tajam">
-                                    <div style="display:flex; justify-content:space-between; font-size:10.5px; color:#94a3b8; margin-top:2px;">
-                                        <span>4 (Tajam)</span>
-                                        <span>63 (Buram)</span>
-                                    </div>
+                                    <input type="range" id="slider-cam-quality" min="4" max="63" value="10" step="1" style="width:100%; accent-color:#0d3b8c;">
                                 </div>
                                 <div>
-                                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px; font-size:12px;">
+                                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px;">
                                         <span>Brightness:</span>
                                         <span id="val-cam-brightness" style="color:#0d3b8c; font-weight:800;">0</span>
                                     </div>
@@ -512,17 +420,16 @@
                                 </div>
                             </div>
 
-                            <!-- Contrast & Saturation -->
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
                                 <div>
-                                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px; font-size:12px;">
+                                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px;">
                                         <span>Contrast:</span>
                                         <span id="val-cam-contrast" style="color:#0d3b8c; font-weight:800;">0</span>
                                     </div>
                                     <input type="range" id="slider-cam-contrast" min="-2" max="2" value="0" step="1" style="width:100%; accent-color:#0d3b8c;">
                                 </div>
                                 <div>
-                                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px; font-size:12px;">
+                                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px;">
                                         <span>Saturation:</span>
                                         <span id="val-cam-saturation" style="color:#0d3b8c; font-weight:800;">0</span>
                                     </div>
@@ -530,223 +437,185 @@
                                 </div>
                             </div>
 
-                            <!-- Flash LED Intensity -->
                             <div style="margin-bottom:12px;">
-                                <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px; font-size:12px;">
-                                    <span>Lampu Flash ESP32-CAM:</span>
+                                <div style="display:flex; justify-content:space-between; font-weight:700; color:#475569; margin-bottom:4px;">
+                                    <span>Flash LED ESP32-CAM:</span>
                                     <span id="val-cam-led" style="color:#d97706; font-weight:800;">0 (Mati)</span>
                                 </div>
                                 <input type="range" id="slider-cam-led" min="0" max="255" value="0" step="5" style="width:100%; accent-color:#f59e0b;">
                             </div>
 
-                            <!-- Orientasi Kamera: V-Flip & H-Mirror -->
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:12px; background:#ffffff; padding:10px 12px; border-radius:6px; border:1px solid #e2e8f0;">
-                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:#334155; font-size:12.5px;">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; background:#ffffff; padding:10px 12px; border-radius:6px; border:1px solid #e2e8f0;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:#334155;">
                                     <input type="checkbox" id="chk-cam-vflip" style="accent-color:#0d3b8c;">
                                     <span>V-Flip</span>
                                 </label>
-                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:#334155; font-size:12.5px;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:#334155;">
                                     <input type="checkbox" id="chk-cam-hmirror" style="accent-color:#0d3b8c;">
                                     <span>H-Mirror</span>
                                 </label>
                             </div>
 
-                            <!-- Exposure & White Balance -->
-                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:12px; background:#ffffff; padding:10px 12px; border-radius:6px; border:1px solid #e2e8f0;">
-                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:#334155; font-size:12.5px;">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; background:#ffffff; padding:10px 12px; border-radius:6px; border:1px solid #e2e8f0;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:#334155;">
                                     <input type="checkbox" id="chk-cam-awb" checked style="accent-color:#0d3b8c;">
                                     <span>AWB</span>
                                 </label>
-                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:#334155; font-size:12.5px;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:600; color:#334155;">
                                     <input type="checkbox" id="chk-cam-aec" checked style="accent-color:#0d3b8c;">
                                     <span>AEC</span>
                                 </label>
                             </div>
 
-                            <!-- Tombol Reset & IP Manual Dropdown -->
                             <div style="display:flex; gap:8px; margin-top:10px;">
-                                <button type="button" id="btn-reset-cam-tuning" style="flex:1; padding:7px 10px; font-size:12px; font-weight:700; background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; color:#475569;" title="Kembalikan semua slider ke standar rekomendasi AI">
-                                    ↺ Reset Standar AI
+                                <button type="button" id="btn-reset-cam-tuning" style="flex:1; height:36px; padding:0 10px; font-size:13px; font-weight:700; background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; color:#475569;">
+                                    Reset Standar
                                 </button>
-                                <button type="button" id="btn-toggle-manual-ip" style="padding:7px 12px; font-size:12px; font-weight:700; background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; color:#475569;" title="Atur IP Kamera Secara Manual">
+                                <button type="button" id="btn-toggle-manual-ip" style="height:36px; padding:0 12px; font-size:13px; font-weight:700; background:#ffffff; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer; color:#475569;">
                                     IP Manual
                                 </button>
                             </div>
 
-                            <!-- Box IP Manual (Hidden by default) -->
                             <div id="box-manual-ip" style="display:none; margin-top:10px; padding:10px; background:#ffffff; border:1px dashed #cbd5e1; border-radius:6px;">
-                                <label style="display:block; font-size:12px; font-weight:700; color:#475569; margin-bottom:4px;">IP Kamera Output Manual:</label>
+                                <label style="display:block; font-size:13px; font-weight:700; color:#475569; margin-bottom:4px;">IP Kamera Manual:</label>
                                 <div style="display:flex; gap:8px;">
-                                    <input type="text" id="manual-cam-ip-input" class="filter-select" style="flex:1; padding:7px 10px; font-size:12.5px;" placeholder="192.168.1.89">
-                                    <button type="button" id="btn-apply-manual-ip" style="padding:7px 14px; background:#0d3b8c; color:white; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer;">
+                                    <input type="text" id="manual-cam-ip-input" class="filter-select" style="flex:1; height:36px; padding:0 10px; font-size:13.5px; background:#ffffff;" placeholder="192.168.1.89">
+                                    <button type="button" id="btn-apply-manual-ip" style="height:36px; padding:0 14px; background:#0d3b8c; color:white; border:none; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer;">
                                         Simpan
                                     </button>
                                 </div>
                             </div>
-
                         </div>
                     </div>
 
-                    <!-- Mode Pemicu Deteksi (Auto Shutter via RS-485 vs Manual Kontinu) -->
-                    <div style="margin-bottom:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px;">
+                    <div style="margin-bottom:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px;">
                         <label style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                            <span style="font-size:13.5px; font-weight:700; color:#1e293b;">⚡ Auto-Trigger RS-485 Aktif</span>
-                            <input type="checkbox" id="chk-auto-trigger" checked style="width:17px; height:17px; accent-color:#16a34a;">
+                            <span style="font-size:14px; font-weight:700; color:#1e293b;">Auto-Trigger RS-485</span>
+                            <input type="checkbox" id="chk-auto-trigger" checked style="width:18px; height:18px; accent-color:#16a34a;">
                         </label>
-                        <div style="font-size:12px; color:#64748b; margin-top:5px; line-height:1.4;">
-                            Saat Photosensor 2 terpicu, sistem otomatis memotret dan menghitung jumlah part pada hanger.
-                        </div>
                     </div>
 
-                    <!-- Tombol Kontrol Deteksi AI (Default Otomatis Aktif) -->
-                    <button type="button" id="btn-start-ai" style="padding:13px 18px; width:100%; text-align:center; background:#16a34a; color:white; border:none; border-radius:8px; font-weight:800; font-size:14.5px; cursor:pointer; transition:all 0.2s;">
-                        🟢 Deteksi AI Aktif Otomatis (Klik untuk Jeda)
+                    <button type="button" id="btn-start-ai" style="height:44px; padding:0 18px; width:100%; text-align:center; background:#16a34a; color:white; border:none; border-radius:8px; font-weight:800; font-size:14.5px; cursor:pointer;">
+                        Deteksi AI Aktif (Klik untuk Jeda)
                     </button>
                 </div>
 
-                <!-- CARD: Kontrol Lampu Flash Area Kamera (ESP32 DevKit - Pin 26) -->
-                <div style="background:#ffffff; border:1.5px solid #fde68a; border-radius:10px; padding:18px; box-shadow:0 2px 6px rgba(0,0,0,0.04);">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; border-bottom:1px solid #fef9c3; padding-bottom:10px;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:20px;">💡</span>
-                            <h4 style="margin:0; font-size:16px; color:#92400e; font-weight:800;">Lampu Flash Area Kamera</h4>
-                        </div>
-                        <span id="devkit-flash-badge" style="font-size:12px; font-weight:700; background:#fef3c7; color:#b45309; padding:3px 10px; border-radius:6px; font-family:ui-monospace,monospace;">Mencari DevKit...</span>
+                <!-- CARD: Lampu Flash Area Kamera (ESP32 DevKit - Pin 26) -->
+                <div class="av-card" style="border-color:#fde68a;">
+                    <div class="av-card-header" style="border-bottom-color:#fef3c7;">
+                        <h4 class="av-card-title" style="color:#92400e;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                            Lampu Flash Kamera
+                        </h4>
+                        <span id="devkit-flash-badge" class="av-status-pill" style="background:#fef3c7; color:#b45309;">Mencari DevKit...</span>
                     </div>
 
-                    <!-- Slider Kecerahan Lampu -->
                     <div style="margin-bottom:12px;">
-                        <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:700; color:#78350f; margin-bottom:5px;">
-                            <span>Kecerahan Lampu (Pin 26):</span>
-                            <span id="val-devkit-flash" style="color:#d97706; font-weight:800; font-family:monospace; font-size:13.5px;">255 (Maks)</span>
+                        <div style="display:flex; justify-content:space-between; font-size:13.5px; font-weight:700; color:#78350f; margin-bottom:5px;">
+                            <span>Kecerahan (Pin 26):</span>
+                            <span id="val-devkit-flash" style="color:#d97706; font-weight:800; font-family:ui-monospace,monospace; font-size:14px;">255 (Maks)</span>
                         </div>
-                        <input type="range" id="slider-devkit-flash" min="0" max="255" value="255" step="5"
-                            style="width:100%; accent-color:#f59e0b;">
-                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#94a3b8; margin-top:3px; font-weight:600;">
-                            <span>0 (Mati)</span>
-                            <span>128 (Redup)</span>
-                            <span>255 (Maks)</span>
-                        </div>
+                        <input type="range" id="slider-devkit-flash" min="0" max="255" value="255" step="5" style="width:100%; accent-color:#f59e0b;">
                     </div>
 
-                    <!-- Mode Toggle: Solid / Strobe / Off -->
                     <div style="display:flex; gap:6px; margin-bottom:12px;">
-                        <button type="button" class="btn-flash-mode active" data-mode="solid"
-                            style="flex:1; padding:7px 6px; font-size:12.5px; font-weight:700; background:#f59e0b; color:white; border:none; border-radius:6px; cursor:pointer;">
-                            ☀️ Solid
-                        </button>
-                        <button type="button" class="btn-flash-mode" data-mode="strobe"
-                            style="flex:1; padding:7px 6px; font-size:12.5px; font-weight:700; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">
-                            ⚡ Strobe
-                        </button>
-                        <button type="button" class="btn-flash-mode" data-mode="off"
-                            style="flex:1; padding:7px 6px; font-size:12.5px; font-weight:700; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">
-                            🌑 Mati
-                        </button>
+                        <button type="button" class="btn-flash-mode active" data-mode="solid" style="flex:1; height:36px; font-size:13px; font-weight:700; background:#f59e0b; color:white; border:none; border-radius:6px; cursor:pointer;">Solid</button>
+                        <button type="button" class="btn-flash-mode" data-mode="strobe" style="flex:1; height:36px; font-size:13px; font-weight:700; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">Strobe</button>
+                        <button type="button" class="btn-flash-mode" data-mode="off" style="flex:1; height:36px; font-size:13px; font-weight:700; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:6px; cursor:pointer;">Mati</button>
                     </div>
 
-                    <!-- Input IP DevKit Manual -->
-                    <div style="background:#fffbeb; border:1px dashed #fcd34d; border-radius:8px; padding:10px;">
-                        <div style="font-size:12px; font-weight:700; color:#92400e; margin-bottom:5px;">IP ESP32 DevKit:</div>
+                    <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 12px;">
+                        <div style="font-size:12.5px; font-weight:700; color:#92400e; margin-bottom:5px;">IP ESP32 DevKit</div>
                         <div style="display:flex; gap:8px;">
-                            <input type="text" id="devkit-ip-input" placeholder="contoh: 192.168.1.50"
-                                style="flex:1; padding:7px 10px; font-size:12.5px; border:1px solid #fcd34d; border-radius:6px; background:#fff; font-family:monospace;">
-                            <button type="button" id="btn-save-devkit-ip"
-                                style="padding:7px 14px; background:#f59e0b; color:white; border:none; border-radius:6px; font-size:12.5px; font-weight:700; cursor:pointer;">
-                                Simpan
-                            </button>
-                        </div>
-                        <div style="font-size:11px; color:#a16207; margin-top:4px;">
-                            Lihat IP DevKit di Serial Monitor Arduino IDE saat ESP32 menyala.
+                            <input type="text" id="devkit-ip-input" placeholder="192.168.1.50" style="flex:1; height:36px; padding:0 10px; font-size:13.5px; border:1px solid #fcd34d; border-radius:6px; background:#fff; font-family:ui-monospace,monospace; box-sizing:border-box;">
+                            <button type="button" id="btn-save-devkit-ip" style="height:36px; padding:0 14px; background:#f59e0b; color:white; border:none; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer;">Simpan</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- CARD: Inspektor Frekuensi Gangguan Motor (EMI Spectrum Monitor) -->
-                <div style="background:#ffffff; border:1.5px solid #c7d2fe; border-radius:10px; padding:18px; box-shadow:0 2px 6px rgba(0,0,0,0.04);">
-                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid #e0e7ff; padding-bottom:8px;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span style="font-size:20px;">⚡</span>
-                            <h4 style="margin:0; font-size:15px; color:#3730a3; font-weight:800;">Spektrum Noise Motor Industri</h4>
-                        </div>
-                        <span id="badge-noise-status" style="font-size:11.5px; font-weight:700; background:#dcfce7; color:#16a34a; padding:3px 9px; border-radius:6px; font-family:ui-monospace,monospace;">
-                            🟢 Bersih (0.0 Hz)
+                <!-- CARD: Spektrum Noise Motor Industri -->
+                <div class="av-card">
+                    <div class="av-card-header">
+                        <h4 class="av-card-title">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                            </svg>
+                            Monitor Noise Sensor
+                        </h4>
+                        <span id="badge-noise-status" class="av-status-pill" style="background:#dcfce7; color:#16a34a;">
+                            Bersih (0.0 Hz)
                         </span>
                     </div>
 
-                    <!-- Indikator Dua Kolom: Pin 25 (Inlet) & Pin 27 (Outlet) -->
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
                         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; text-align:center;">
-                            <div style="font-size:11.5px; color:#64748b; font-weight:700;">Pin 25 (Inlet Sensor)</div>
-                            <div id="val-noise-in" style="font-size:20px; font-weight:800; color:#1e293b; font-family:monospace; margin:4px 0;">0.0 <span style="font-size:12px; color:#94a3b8;">Hz</span></div>
-                            <div style="font-size:11px; color:#94a3b8;">Peak: <span id="val-peak-in" style="font-weight:700; color:#475569;">0.0 Hz</span></div>
+                            <div style="font-size:12.5px; color:#475569; font-weight:700;">Pin 25 (Inlet)</div>
+                            <div id="val-noise-in" style="font-size:22px; font-weight:800; color:#1e293b; font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums; margin:4px 0;">0.0 <span style="font-size:13px; color:#64748b;">Hz</span></div>
+                            <div style="font-size:12px; color:#64748b;">Peak: <span id="val-peak-in" style="font-weight:700; color:#334155;">0.0 Hz</span></div>
                         </div>
 
                         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; text-align:center;">
-                            <div style="font-size:11.5px; color:#64748b; font-weight:700;">Pin 27 (Outlet Sensor)</div>
-                            <div id="val-noise-out" style="font-size:20px; font-weight:800; color:#1e293b; font-family:monospace; margin:4px 0;">0.0 <span style="font-size:12px; color:#94a3b8;">Hz</span></div>
-                            <div style="font-size:11px; color:#94a3b8;">Peak: <span id="val-peak-out" style="font-weight:700; color:#475569;">0.0 Hz</span></div>
+                            <div style="font-size:12.5px; color:#475569; font-weight:700;">Pin 27 (Outlet)</div>
+                            <div id="val-noise-out" style="font-size:22px; font-weight:800; color:#1e293b; font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums; margin:4px 0;">0.0 <span style="font-size:13px; color:#64748b;">Hz</span></div>
+                            <div style="font-size:12px; color:#64748b;">Peak: <span id="val-peak-out" style="font-weight:700; color:#334155;">0.0 Hz</span></div>
                         </div>
                     </div>
 
-                    <!-- Diagnosa & Rekomendasi Filter -->
-                    <div style="background:#eef2ff; border-left:3px solid #6366f1; border-radius:6px; padding:8px 10px; margin-bottom:10px; font-size:12px;">
-                        <div style="color:#4338ca; font-weight:700; margin-bottom:2px;">
-                            Diagnosa: <span id="text-noise-diagnosis" style="font-weight:800;">Memuat spektrum...</span>
-                        </div>
-                        <div style="color:#6366f1; font-size:11px;">
-                            Input (Pin 25): <b>RAW Tanpa Filter (Instant 0 ms)</b> | Outlet (Pin 27): <b>Filter 10 Hz (100 ms)</b>.
-                        </div>
+                    <div style="background:#f8fafc; border-left:3px solid #0d3b8c; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:13px; color:#1e293b;">
+                        Diagnosa: <strong id="text-noise-diagnosis">Memuat...</strong>
                     </div>
 
-                    <!-- Live Serial Stream Log Frekuensi Motor (Mirip Serial Monitor) -->
-                    <div style="background:#090d16; border:1px solid #1e293b; border-radius:6px; padding:8px 10px; margin-bottom:10px; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:11px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; border-bottom:1px solid #1e293b; padding-bottom:3px;">
-                            <span style="color:#38bdf8; font-weight:700; display:flex; align-items:center; gap:5px;">
-                                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e;"></span>
-                                Aliran Serial Monitor Frekuensi
-                            </span>
-                            <span id="noise-stream-status" style="color:#64748b; font-size:10px;">Live Sync</span>
+                    <div style="background:#090d16; border:1px solid #1e293b; border-radius:6px; padding:8px 10px; margin-bottom:10px; font-family:ui-monospace,monospace; font-size:12px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; border-bottom:1px solid #1e293b; padding-bottom:4px;">
+                            <span style="color:#38bdf8; font-weight:700;">Log Frekuensi</span>
+                            <span id="noise-stream-status" style="color:#94a3b8; font-size:11.5px;">Live</span>
                         </div>
                         <div id="noise-serial-log-list" style="max-height:80px; overflow-y:auto; display:flex; flex-direction:column; gap:3px;">
-                            <div style="color:#64748b; font-style:italic;">[Menunggu sinyal frekuensi dari Serial Monitor ESP32...]</div>
+                            <div style="color:#94a3b8;">[Menunggu sinyal frekuensi...]</div>
                         </div>
                     </div>
 
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span id="text-noise-rejected-summary" style="font-size:11.5px; color:#64748b;">
-                            Total noise disaring: <b id="val-total-noise-rejected" style="color:#ef4444;">0</b> pulsa
+                        <span id="text-noise-rejected-summary" style="font-size:12.5px; color:#475569;">
+                            Noise disaring: <b id="val-total-noise-rejected" style="color:#ef4444;">0</b> pulsa
                         </span>
-                        <button type="button" id="btn-reset-noise-peak" style="font-size:11px; font-weight:700; color:#4f46e5; background:#e0e7ff; border:none; border-radius:4px; padding:4px 8px; cursor:pointer;">
+                        <button type="button" id="btn-reset-noise-peak" style="font-size:12.5px; font-weight:700; color:#0d3b8c; background:#eff6ff; border:1px solid #bfdbfe; border-radius:5px; padding:4px 10px; cursor:pointer;">
                             Reset Peak
                         </button>
                     </div>
                 </div>
 
-                <!-- CARD 3: Status Sistem & Timeline Log Deteksi -->
-                <div style="background:#f8fafc; border:1.5px solid #dbe4f3; border-radius:10px; padding:18px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                        <h4 style="margin:0; font-size:15px; color:#0d3b8c; font-weight:800;">Status & Riwayat Trigger</h4>
-                        <span id="ai-conn-badge" style="font-size:12px; font-weight:700; background:#e2e8f0; color:#475569; padding:3px 9px; border-radius:6px;">Standby</span>
+                <!-- CARD 3: Status Sistem & Riwayat Trigger -->
+                <div class="av-card">
+                    <div class="av-card-header">
+                        <h4 class="av-card-title">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            Status &amp; Riwayat Trigger
+                        </h4>
+                        <span id="ai-conn-badge" class="av-status-pill" style="background:#e2e8f0; color:#475569;">Standby</span>
                     </div>
                     
-                    <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:13.5px;">
-                        <span style="color:#64748b;">Status Model Roboflow:</span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:14px;">
+                        <span style="color:#475569;">Status Model:</span>
                         <span id="ai-model-status" style="font-weight:700; color:#b45309;">Belum Dimuat</span>
                     </div>
                     
-                    <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:13.5px;">
-                        <span style="color:#64748b;">Koneksi Kamera:</span>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:14px;">
+                        <span style="color:#475569;">Koneksi Kamera:</span>
                         <span id="ai-cam-status" style="font-weight:700; color:#b45309;">Terputus</span>
                     </div>
 
-                    <!-- Timeline Log Hanger -->
                     <div style="margin-top:14px; padding-top:12px; border-top:1px dashed #cbd5e1;">
-                        <span style="font-size:13px; color:#334155; font-weight:700; display:block; margin-bottom:8px;">
-                            Riwayat Event Hanger & Sensor:
+                        <span style="font-size:13.5px; color:#334155; font-weight:700; display:block; margin-bottom:8px;">
+                            Riwayat Event Hanger &amp; Sensor:
                         </span>
                         <div id="ai-predictions-container" style="display:flex; flex-direction:column; gap:6px; max-height:210px; overflow-y:auto; padding-right:4px;">
-                            <div style="font-size:13px; color:#94a3b8; font-style:italic;">Menunggu aktivitas sensor atau deteksi...</div>
+                            <div style="font-size:13.5px; color:#64748b;">Menunggu aktivitas sensor atau deteksi...</div>
                         </div>
                     </div>
                 </div>
@@ -760,259 +629,194 @@
 <!-- 1. MODAL: KONFIRMASI GANTI PART (CHANGEOVER) -->
 <!-- ================================================================ -->
 <div id="modal-change-part" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:9999; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
-    <div style="background:#ffffff; border-radius:14px; max-width:560px; width:92%; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.25); border:1px solid #e2e8f0; animation:modalSlide 0.25s ease-out;">
-        
-        <!-- Header Modal -->
+    <div style="background:#ffffff; border-radius:14px; max-width:560px; width:92%; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.25); border:1px solid #e2e8f0;">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:10px;">
-                <span style="font-size:26px;">🔄</span>
-                <div>
-                    <h3 style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Konfirmasi Ganti Part (Changeover)</h3>
-                    <div style="font-size:13px; color:#64748b;">Pergantian jenis part produksi di lini conveyor</div>
-                </div>
-            </div>
-            <button type="button" id="btn-close-modal-change-x" style="background:none; border:none; font-size:20px; color:#94a3b8; cursor:pointer; padding:4px 8px; border-radius:4px;">✕</button>
+            <h3 style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Konfirmasi Ganti Part</h3>
+            <button type="button" id="btn-close-modal-change-x" style="background:none; border:none; font-size:20px; color:#64748b; cursor:pointer; padding:4px 8px;">✕</button>
         </div>
 
-        <!-- Warning Callout -->
-        <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:14px 16px; font-size:13px; color:#92400e; line-height:1.5; margin-bottom:16px;">
-            ⚠️ <strong>SOP Changeover:</strong> Di lini produksi, 1 sesi berjalan khusus untuk 1 jenis part. Mengganti part akan mengarsipkan statistik sesi saat ini ke riwayat, mereset counter conveyor ke 0, dan otomatis memuat Model Roboflow yang sesuai.
-        </div>
-
-        <!-- Summary Sesi Part Sebelumnya -->
-        <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; padding:14px 16px; margin-bottom:16px;">
-            <div style="font-size:12px; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:6px;">Data Sesi Saat Ini yang Akan Diarsipkan:</div>
-            <div style="font-size:15px; font-weight:800; color:#0f172a; margin-bottom:10px;" id="modal-summary-part-name">-</div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px 16px; margin-bottom:16px;">
+            <div style="font-size:12.5px; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:6px;">Sesi Saat Ini:</div>
+            <div style="font-size:16px; font-weight:800; color:#0f172a; margin-bottom:10px;" id="modal-summary-part-name">-</div>
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
                 <div style="background:#ffffff; padding:8px 12px; border-radius:6px; border:1px solid #cbd5e1; text-align:center;">
-                    <div style="font-size:11.5px; color:#64748b; font-weight:700;">WIP Hanger</div>
-                    <div id="modal-summary-wip" style="font-size:19px; font-weight:800; color:#f59e0b;">0</div>
+                    <div style="font-size:12.5px; color:#64748b; font-weight:700;">WIP Hanger</div>
+                    <div id="modal-summary-wip" style="font-size:20px; font-weight:800; color:#d97706;">0</div>
                 </div>
                 <div style="background:#ffffff; padding:8px 12px; border-radius:6px; border:1px solid #cbd5e1; text-align:center;">
-                    <div style="font-size:11.5px; color:#64748b; font-weight:700;">Hanger Output</div>
-                    <div id="modal-summary-output" style="font-size:19px; font-weight:800; color:#0f172a;">0</div>
+                    <div style="font-size:12.5px; color:#64748b; font-weight:700;">Hanger Output</div>
+                    <div id="modal-summary-output" style="font-size:20px; font-weight:800; color:#0f172a;">0</div>
                 </div>
                 <div style="background:#ffffff; padding:8px 12px; border-radius:6px; border:1px solid #cbd5e1; text-align:center;">
-                    <div style="font-size:11.5px; color:#64748b; font-weight:700;">Total Pcs Part</div>
-                    <div id="modal-summary-parts" style="font-size:19px; font-weight:800; color:#16a34a;">0</div>
+                    <div style="font-size:12.5px; color:#64748b; font-weight:700;">Total Pcs</div>
+                    <div id="modal-summary-parts" style="font-size:20px; font-weight:800; color:#16a34a;">0</div>
                 </div>
             </div>
         </div>
 
-        <!-- Pemilihan Part Baru (Hanya Part yang Sudah Ditraining) -->
         <div id="wrapper-select-change-part" style="margin-bottom:16px;">
-            <label style="display:block; font-size:13.5px; font-weight:700; color:#1e293b; margin-bottom:6px;">
-                Pilih Part Baru untuk Sesi Berikutnya:
+            <label style="display:block; font-size:14px; font-weight:700; color:#1e293b; margin-bottom:6px;">
+                Pilih Part Baru:
             </label>
-            <select id="select-change-part" class="filter-select" style="width:100%; padding:11px 14px; font-size:14px; font-weight:700; border:1.5px solid #0d3b8c; border-radius:8px; background:#f0f7ff;">
-                <!-- Diisi dinamis via JS hanya part yang sudah ditraining -->
-            </select>
+            <select id="select-change-part" class="filter-select" style="width:100%; padding:11px 14px; font-size:14.5px; font-weight:700; border:1.5px solid #0d3b8c; border-radius:8px; background:#f0f7ff;"></select>
         </div>
 
-        <!-- Notifikasi jika belum ada part yang ditraining di katalog -->
         <div id="box-empty-part-notice" style="display:none; padding:16px; background:#fef2f2; border:1.5px solid #fecaca; border-radius:10px; color:#dc2626; margin-bottom:18px; text-align:center;">
-            <div style="font-size:15px; font-weight:800; margin-bottom:6px;">⚠️ Belum Ada Part yang Ditraining</div>
-            <div style="font-size:13px; color:#64748b; line-height:1.5; margin-bottom:12px;">
-                Katalog saat ini belum memiliki data part. Silakan daftarkan part yang sudah Anda training di Roboflow terlebih dahulu melalui menu <strong>Katalog Part</strong>.
-            </div>
-            <button type="button" id="btn-goto-manage-parts" style="background:#4f46e5; color:white; border:none; padding:9px 18px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;">
-                ⚙️ Buka Katalog Part Sekarang
+            <div style="font-size:15.5px; font-weight:800; margin-bottom:6px;">Belum Ada Part di Katalog</div>
+            <button type="button" id="btn-goto-manage-parts" style="background:#0d3b8c; color:white; border:none; padding:9px 18px; border-radius:8px; font-size:13.5px; font-weight:700; cursor:pointer; margin-top:8px;">
+                Buka Katalog Part
             </button>
         </div>
 
-        <!-- Detail Model Part Baru -->
-        <div id="box-new-part-preview" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px 14px; font-size:13px; color:#166534; margin-bottom:18px;">
-            <div style="font-weight:700; margin-bottom:4px;">Detail Konfigurasi Otomatis:</div>
-            <div>• Slug Model: <strong id="preview-new-slug">-</strong> (Versi: <strong id="preview-new-version">-</strong>)</div>
-            <div>• Target Isi: <strong id="preview-new-target">-</strong> Pcs / Hanger</div>
-            <div style="font-size:12px; color:#15803d; margin-top:4px;">✨ Operator tidak perlu memasukkan API Key atau setting manual.</div>
+        <div id="box-new-part-preview" style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px 14px; font-size:13.5px; color:#166534; margin-bottom:18px;">
+            <div>Model: <strong id="preview-new-slug">-</strong> (Versi: <strong id="preview-new-version">-</strong>)</div>
+            <div>Target Isi: <strong id="preview-new-target">-</strong> Pcs / Hanger</div>
         </div>
 
-        <!-- Tombol Aksi Modal -->
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" id="btn-cancel-change-part" style="padding:10px 18px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:13.5px; cursor:pointer;">
+            <button type="button" id="btn-cancel-change-part" style="padding:10px 18px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;">
                 Batal
             </button>
-            <button type="button" id="btn-confirm-change-part" style="padding:10px 22px; background:#0d3b8c; color:white; border:none; border-radius:8px; font-weight:800; font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                ✓ Konfirmasi & Mulai Sesi Part Ini
+            <button type="button" id="btn-confirm-change-part" style="padding:10px 22px; background:#0d3b8c; color:white; border:none; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;">
+                Konfirmasi &amp; Mulai
             </button>
         </div>
     </div>
 </div>
 
 <!-- ================================================================ -->
-<!-- 2. MODAL: MANAJEMEN KATALOG PART & MODEL ROBOFLOW -->
+<!-- 2. MODAL: MANAJEMEN KATALOG PART & MODEL -->
 <!-- ================================================================ -->
 <div id="modal-manage-parts" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:9999; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
-    <div style="background:#ffffff; border-radius:14px; max-width:840px; width:94%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.25); border:1px solid #e2e8f0; animation:modalSlide 0.25s ease-out;">
-        
-        <!-- Header Modal -->
+    <div style="background:#ffffff; border-radius:14px; max-width:840px; width:94%; max-height:90vh; overflow-y:auto; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.25); border:1px solid #e2e8f0;">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:10px;">
-                <span style="font-size:26px;">📋</span>
-                <div>
-                    <h3 style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Katalog & Profil Part (AI Offline)</h3>
-                    <div style="font-size:13px; color:#64748b;">Kelola daftar part dan upload file model AI (.pt / .onnx) hasil download Roboflow</div>
-                </div>
-            </div>
-            <button type="button" id="btn-close-manage-parts-x" style="background:none; border:none; font-size:20px; color:#94a3b8; cursor:pointer; padding:4px 8px; border-radius:4px;">✕</button>
+            <h3 style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Katalog Part &amp; Model AI</h3>
+            <button type="button" id="btn-close-manage-parts-x" style="background:none; border:none; font-size:20px; color:#64748b; cursor:pointer; padding:4px 8px;">✕</button>
         </div>
 
-        <!-- Tabel Daftar Part -->
         <div style="margin-bottom:20px;">
-            <div style="font-size:13.5px; font-weight:700; color:#334155; margin-bottom:8px;">Daftar Part Terdaftar:</div>
             <div style="border:1px solid #cbd5e1; border-radius:8px; overflow:hidden;">
-                <table style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
+                <table style="width:100%; border-collapse:collapse; font-size:13.5px; text-align:left;">
                     <thead>
                         <tr style="background:#f8fafc; border-bottom:1px solid #cbd5e1; color:#475569; font-weight:700;">
-                            <th style="padding:11px 14px;">Kode & Nama Part</th>
-                            <th style="padding:11px 14px;">File Model AI (Offline)</th>
+                            <th style="padding:11px 14px;">Kode &amp; Nama Part</th>
+                            <th style="padding:11px 14px;">File Model AI</th>
                             <th style="padding:11px 14px; text-align:center;">Target/Hgr</th>
                             <th style="padding:11px 14px; text-align:center;">Status</th>
                             <th style="padding:11px 14px; text-align:center;">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody id="table-parts-body">
-                        <!-- Diisi via JS -->
-                    </tbody>
+                    <tbody id="table-parts-body"></tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Form Tambah / Edit Part -->
-        <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:10px; padding:18px;">
-            <div style="font-size:14.5px; font-weight:800; color:#0d3b8c; margin-bottom:14px; display:flex; align-items:center; gap:8px;">
-                <span>➕</span>
-                <span id="form-part-title">Tambah Part Baru ke Katalog</span>
-            </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:18px;">
+            <div id="form-part-title" style="font-size:15.5px; font-weight:800; color:#0d3b8c; margin-bottom:14px;">Tambah Part Baru</div>
 
             <form id="form-save-part" onsubmit="return false;" enctype="multipart/form-data">
                 <input type="hidden" id="part-form-id">
                 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:14px;">
                     <div>
-                        <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">Kode Part <span style="color:#ef4444;">*</span></label>
-                        <input type="text" id="part-form-code" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" placeholder="contoh: PART-001" required>
+                        <label style="display:block; font-size:13px; font-weight:700; color:#475569; margin-bottom:5px;">Kode Part *</label>
+                        <input type="text" id="part-form-code" class="filter-select" style="width:100%; padding:9px 12px; font-size:14px; background:#ffffff;" placeholder="PART-001" required>
                     </div>
                     <div>
-                        <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">Nama Part <span style="color:#ef4444;">*</span></label>
-                        <input type="text" id="part-form-name" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" placeholder="contoh: PART-Tester" required>
+                        <label style="display:block; font-size:13px; font-weight:700; color:#475569; margin-bottom:5px;">Nama Part *</label>
+                        <input type="text" id="part-form-name" class="filter-select" style="width:100%; padding:9px 12px; font-size:14px; background:#ffffff;" placeholder="PART-Tester" required>
                     </div>
                     <div>
-                        <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">Target Pcs / Hanger <span style="color:#ef4444;">*</span></label>
-                        <input type="number" id="part-form-target" class="filter-select" style="width:100%; padding:9px 12px; font-size:13px;" value="15" min="1" required>
+                        <label style="display:block; font-size:13px; font-weight:700; color:#475569; margin-bottom:5px;">Target Pcs / Hanger *</label>
+                        <input type="number" id="part-form-target" class="filter-select" style="width:100%; padding:9px 12px; font-size:14px; background:#ffffff;" value="15" min="1" required>
                     </div>
                 </div>
 
-                <!-- Upload File Model AI (.pt / .onnx) -->
                 <div style="margin-bottom:16px;">
-                    <label style="display:block; font-size:12.5px; font-weight:700; color:#475569; margin-bottom:5px;">
-                        File Model AI Offline (.pt / .onnx)
-                    </label>
-                    <div id="part-form-model-info" style="display:none; margin-bottom:8px; padding:9px 13px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; font-size:12.5px; color:#15803d; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                    <label style="display:block; font-size:13px; font-weight:700; color:#475569; margin-bottom:5px;">File Model AI (.pt / .onnx)</label>
+                    <div id="part-form-model-info" style="display:none; margin-bottom:8px; padding:9px 13px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:6px; font-size:13px; color:#15803d; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
                         <div style="display:flex; align-items:center; gap:8px;">
-                            <span>🟢 Model Tersimpan: <strong id="current-model-filename">PART-001_v1.pt</strong></span>
-                            <span id="current-model-size" style="font-size:11px; background:#dcfce7; padding:2px 8px; border-radius:4px; font-weight:700;">42.0 MB</span>
+                            <span>Model Tersimpan: <strong id="current-model-filename">PART-001_v1.pt</strong></span>
+                            <span id="current-model-size" style="font-size:12px; background:#dcfce7; padding:2px 8px; border-radius:4px; font-weight:700;">42.0 MB</span>
                         </div>
-                        <button type="button" id="btn-delete-model-file" style="padding:4px 10px; background:#fef2f2; border:1px solid #fecaca; color:#dc2626; border-radius:6px; font-weight:700; font-size:11.5px; cursor:pointer; display:inline-flex; align-items:center; gap:4px; transition:all 0.15s;" title="Hapus file weights (.pt/.onnx) ini dari server">
-                            🗑️ Hapus Model Saja
+                        <button type="button" id="btn-delete-model-file" style="padding:4px 10px; background:#fef2f2; border:1px solid #fecaca; color:#dc2626; border-radius:6px; font-weight:700; font-size:12.5px; cursor:pointer;">
+                            Hapus Model
                         </button>
                     </div>
                     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                         <input type="file" id="part-form-file" accept=".pt,.onnx" style="display:none;">
-                        <button type="button" id="btn-browse-model-file" style="padding:9px 16px; background:#ffffff; color:#0d3b8c; border:1.5px solid #0d3b8c; border-radius:7px; font-size:13px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
-                            📂 Pilih File weights.pt / .onnx
+                        <button type="button" id="btn-browse-model-file" style="padding:9px 16px; background:#ffffff; color:#0d3b8c; border:1.5px solid #0d3b8c; border-radius:7px; font-size:13.5px; font-weight:700; cursor:pointer;">
+                            Pilih File .pt / .onnx
                         </button>
-                        <span id="label-selected-model-file" style="font-size:12.5px; color:#64748b; font-family:monospace;">
-                            Belum ada file baru dipilih (opsional jika sudah ada)
+                        <span id="label-selected-model-file" style="font-size:13px; color:#64748b; font-family:monospace;">
+                            Belum ada file baru dipilih
                         </span>
-                    </div>
-                    <div style="font-size:11.5px; color:#64748b; margin-top:6px; line-height:1.4;">
-                        💡 <em>Cukup upload file <strong>weights.pt</strong> atau <strong>.onnx</strong> hasil download dari Roboflow. Sistem akan mengeksekusi model ini secara 100% offline di PC pabrik tanpa butuh internet lagi!</em>
                     </div>
                 </div>
 
-                <!-- Progress Bar Upload Model AI (Realtime) -->
                 <div id="part-upload-progress-container" style="display:none; margin-bottom:14px; background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:12px 14px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12.5px; font-weight:700; color:#1e40af; margin-bottom:6px;">
-                        <span id="part-upload-progress-text">Mengupload file model weights...</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:700; color:#1e40af; margin-bottom:6px;">
+                        <span id="part-upload-progress-text">Mengupload file model...</span>
                         <span id="part-upload-progress-percent">0%</span>
                     </div>
                     <div style="background:#dbeafe; border-radius:6px; height:10px; width:100%; overflow:hidden;">
                         <div id="part-upload-progress-bar" style="height:100%; width:0%; background:linear-gradient(90deg, #2563eb, #16a34a); border-radius:6px; transition:width 0.15s ease;"></div>
                     </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:#64748b; margin-top:5px; font-family:monospace;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#475569; margin-top:5px; font-family:monospace;">
                         <span id="part-upload-progress-bytes">0 MB / 0 MB</span>
                         <span id="part-upload-progress-speed">Memulai upload...</span>
                     </div>
                 </div>
 
                 <div style="display:flex; justify-content:flex-end; gap:10px;">
-                    <button type="button" id="btn-reset-part-form" style="padding:9px 16px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:7px; font-size:13px; font-weight:700; cursor:pointer;">
+                    <button type="button" id="btn-reset-part-form" style="padding:9px 16px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:7px; font-size:13.5px; font-weight:700; cursor:pointer;">
                         Batal Edit
                     </button>
-                    <button type="button" id="btn-submit-part-form" style="padding:9px 20px; background:#0d3b8c; color:white; border:none; border-radius:7px; font-size:13px; font-weight:800; cursor:pointer;">
-                        💾 Simpan Part
+                    <button type="button" id="btn-submit-part-form" style="padding:9px 20px; background:#0d3b8c; color:white; border:none; border-radius:7px; font-size:13.5px; font-weight:700; cursor:pointer;">
+                        Simpan Part
                     </button>
                 </div>
             </form>
         </div>
 
-        <!-- Footer Modal -->
         <div style="display:flex; justify-content:flex-end; margin-top:18px;">
-            <button type="button" id="btn-close-manage-parts" style="padding:9px 20px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:7px; font-weight:700; font-size:13.5px; cursor:pointer;">
+            <button type="button" id="btn-close-manage-parts" style="padding:9px 20px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:7px; font-weight:700; font-size:14px; cursor:pointer;">
                 Tutup
             </button>
         </div>
-
     </div>
 </div>
 
 <!-- ================================================================ -->
-<!-- 3. MODAL: UPDATE VERSI MODEL (SETELAH RETRAINING ROBOFLOW) -->
+<!-- 3. MODAL: UPDATE VERSI MODEL -->
 <!-- ================================================================ -->
 <div id="modal-update-version" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); z-index:9999; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
-    <div style="background:#ffffff; border-radius:14px; max-width:500px; width:92%; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.25); border:1px solid #e2e8f0; animation:modalSlide 0.25s ease-out;">
-        
-        <!-- Header Modal -->
+    <div style="background:#ffffff; border-radius:14px; max-width:500px; width:92%; padding:24px; box-shadow:0 20px 40px rgba(0,0,0,0.25); border:1px solid #e2e8f0;">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:10px;">
-                <span style="font-size:26px;">🆙</span>
-                <div>
-                    <h3 style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Update Versi Model Roboflow</h3>
-                    <div style="font-size:13px; color:#64748b;">Perbarui versi model setelah selesai retraining di Roboflow</div>
-                </div>
-            </div>
-            <button type="button" id="btn-close-update-version-x" style="background:none; border:none; font-size:20px; color:#94a3b8; cursor:pointer; padding:4px 8px; border-radius:4px;">✕</button>
+            <h3 style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Update Versi Model</h3>
+            <button type="button" id="btn-close-update-version-x" style="background:none; border:none; font-size:20px; color:#64748b; cursor:pointer; padding:4px 8px;">✕</button>
         </div>
 
-        <!-- Profil Part Aktif -->
-        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:16px; font-size:13.5px;">
-            <div>Part Sasaran: <strong id="ver-modal-part-name">-</strong></div>
-            <div style="margin-top:5px;">Model Slug: <span id="ver-modal-slug" style="font-family:monospace; color:#0d3b8c; font-weight:700;">-</span></div>
-            <div style="margin-top:5px;">Versi Model Saat Ini: <strong id="ver-modal-current" style="color:#d97706;">v1</strong></div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:16px; font-size:14px;">
+            <div>Part: <strong id="ver-modal-part-name">-</strong></div>
+            <div style="margin-top:5px;">Slug: <span id="ver-modal-slug" style="font-family:monospace; color:#0d3b8c; font-weight:700;">-</span></div>
+            <div style="margin-top:5px;">Versi Saat Ini: <strong id="ver-modal-current" style="color:#d97706;">v1</strong></div>
         </div>
 
-        <!-- Input Versi Baru -->
         <div style="margin-bottom:18px;">
-            <label style="display:block; font-size:13.5px; font-weight:700; color:#1e293b; margin-bottom:6px;">
-                Nomor Versi Model Terbaru di Roboflow:
+            <label style="display:block; font-size:14px; font-weight:700; color:#1e293b; margin-bottom:6px;">
+                Nomor Versi Terbaru:
             </label>
-            <input type="number" id="input-new-model-version" class="filter-select" style="width:100%; padding:11px 14px; font-size:15px; font-weight:800;" min="1" value="2">
-            <div style="font-size:12px; color:#64748b; margin-top:5px; line-height:1.4;">
-                Setelah kamu upload 100 gambar dari ZIP ke Roboflow dan melatih model baru (misal: v2 atau v3), masukkan nomor versinya di sini.
-            </div>
+            <input type="number" id="input-new-model-version" class="filter-select" style="width:100%; padding:11px 14px; font-size:15px; font-weight:800; background:#ffffff;" min="1" value="2">
         </div>
 
-        <!-- Tombol Aksi Modal -->
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" id="btn-cancel-update-ver" style="padding:10px 18px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:13.5px; cursor:pointer;">
+            <button type="button" id="btn-cancel-update-ver" style="padding:10px 18px; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;">
                 Batal
             </button>
-            <button type="button" id="btn-save-new-version" style="padding:10px 22px; background:#0284c7; color:white; border:none; border-radius:8px; font-weight:800; font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                🚀 Terapkan & Reload Model
+            <button type="button" id="btn-save-new-version" style="padding:10px 22px; background:#0d3b8c; color:white; border:none; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer;">
+                Terapkan &amp; Reload Model
             </button>
         </div>
-
     </div>
 </div>
 
@@ -1138,18 +942,18 @@
 
     async function sendFlashCmd(params) {
         if (!activeDevkitIp) {
-            devkitFlashBadge.innerText = '⚠ IP DevKit Belum Diset';
+            devkitFlashBadge.innerText = 'IP DevKit Belum Diset';
             devkitFlashBadge.style.background = '#fee2e2';
             devkitFlashBadge.style.color = '#dc2626';
             return;
         }
         try {
             await fetch(`http://${activeDevkitIp}/lampu?${params}`, { mode: 'no-cors' });
-            devkitFlashBadge.innerText = `🟢 Online (${activeDevkitIp})`;
+            devkitFlashBadge.innerText = `Online (${activeDevkitIp})`;
             devkitFlashBadge.style.background = '#dcfce7';
             devkitFlashBadge.style.color = '#16a34a';
         } catch (e) {
-            devkitFlashBadge.innerText = `🔴 Offline (${activeDevkitIp})`;
+            devkitFlashBadge.innerText = `Offline (${activeDevkitIp})`;
             devkitFlashBadge.style.background = '#fee2e2';
             devkitFlashBadge.style.color = '#dc2626';
         }
@@ -1188,13 +992,13 @@
         activeDevkitIp = ip;
         localStorage.setItem('devkit_ip', ip);
         await fetch(`/api/set-devkit-ip?ip=${encodeURIComponent(ip)}`).catch(() => {});
-        devkitFlashBadge.innerText = '🔄 Mencoba...';
+        devkitFlashBadge.innerText = 'Mencoba...';
         devkitFlashBadge.style.background = '#fef3c7';
         devkitFlashBadge.style.color = '#b45309';
         // Langsung coba konek dengan setting saat ini
         const val = parseInt(sliderDevkitFlash.value);
         await sendFlashCmd(`mode=solid&val=${val}`);
-        appendLog(`💡 IP ESP32 DevKit disimpan: ${ip}`, '#d97706');
+        appendLog(`IP ESP32 DevKit disimpan: ${ip}`, '#d97706');
     });
 
     // Load IP DevKit dari server & localStorage saat halaman dibuka
@@ -1259,15 +1063,15 @@
 
                 if (badgeNoiseStatus) {
                     if (maxHz < 1.5) {
-                        badgeNoiseStatus.innerText = `🟢 Bersih (${maxHz.toFixed(1)} Hz)`;
+                        badgeNoiseStatus.innerText = `Bersih (${maxHz.toFixed(1)} Hz)`;
                         badgeNoiseStatus.style.background = '#dcfce7';
                         badgeNoiseStatus.style.color = '#16a34a';
                     } else if (maxHz < 50) {
-                        badgeNoiseStatus.innerText = `🟡 Noise (${maxHz.toFixed(1)} Hz)`;
+                        badgeNoiseStatus.innerText = `Noise (${maxHz.toFixed(1)} Hz)`;
                         badgeNoiseStatus.style.background = '#fef3c7';
                         badgeNoiseStatus.style.color = '#b45309';
                     } else {
-                        badgeNoiseStatus.innerText = `🚨 Tinggi (${maxHz.toFixed(1)} Hz)`;
+                        badgeNoiseStatus.innerText = `Tinggi (${maxHz.toFixed(1)} Hz)`;
                         badgeNoiseStatus.style.background = '#fee2e2';
                         badgeNoiseStatus.style.color = '#dc2626';
                     }
@@ -1279,7 +1083,7 @@
                         noiseSerialLogList.innerHTML = data.events.map(ev => {
                             const isClean = ev.hz < 1.5;
                             const color = isClean ? '#4ade80' : (ev.hz >= 50 ? '#f87171' : '#fbbf24');
-                            const icon = isClean ? '🟢' : (ev.hz >= 50 ? '🚨' : '⚡');
+                            const icon = isClean ? '[OK]' : (ev.hz >= 50 ? '[HIGH]' : '[NOISE]');
                             return `<div style="color:${color}; display:flex; gap:6px; line-height:1.4;">
                                 <span style="color:#64748b;">[${ev.time || '-'}]</span>
                                 <span>${icon} <b>${ev.hz} Hz</b></span>
@@ -1290,7 +1094,7 @@
                         const nowTime = new Date().toLocaleTimeString('id-ID');
                         const isClean = maxHz < 1.5;
                         const color = isClean ? '#4ade80' : (maxHz >= 50 ? '#f87171' : '#fbbf24');
-                        const icon = isClean ? '🟢' : (maxHz >= 50 ? '🚨' : '⚡');
+                        const icon = isClean ? '[OK]' : (maxHz >= 50 ? '[HIGH]' : '[NOISE]');
                         noiseSerialLogList.innerHTML = `<div style="color:${color};">
                             <span style="color:#64748b;">[${nowTime}]</span> ${icon} <b>${maxHz.toFixed(1)} Hz</b> — ${data.diagnosis || 'Sinyal Terdeteksi'}
                         </div>`;
@@ -1300,14 +1104,14 @@
                 // Log ke konsol & timeline utama saat ada lonjakan noise
                 if (maxHz >= 3.0 && Math.abs(maxHz - lastLoggedNoiseHz) >= 2.0) {
                     lastLoggedNoiseHz = maxHz;
-                    appendLog(`⚡ [Noise Motor] Terdeteksi frekuensi ${maxHz.toFixed(1)} Hz (${data.diagnosis}). Filter otomatis menyaring pulsa palsu.`, '#f59e0b');
+                    appendLog(`[Noise Motor] Terdeteksi frekuensi ${maxHz.toFixed(1)} Hz (${data.diagnosis}). Filter otomatis menyaring pulsa palsu.`, '#f59e0b');
                 } else if (maxHz < 1.5 && lastLoggedNoiseHz >= 3.0) {
                     lastLoggedNoiseHz = 0;
-                    appendLog('🟢 [Jalur Sensor Bersih] Gangguan motor telah reda / hilang.', '#16a34a');
+                    appendLog('[Jalur Sensor Bersih] Gangguan motor telah reda / hilang.', '#16a34a');
                 }
             } else if (data && data.status === 'offline') {
                 if (badgeNoiseStatus) {
-                    badgeNoiseStatus.innerText = '⚪ DevKit Offline';
+                    badgeNoiseStatus.innerText = 'DevKit Offline';
                     badgeNoiseStatus.style.background = '#f1f5f9';
                     badgeNoiseStatus.style.color = '#64748b';
                 }
@@ -1329,7 +1133,7 @@
             if (noiseSerialLogList) {
                 noiseSerialLogList.innerHTML = '<div style="color:#a5b4fc; font-style:italic;">[Peak & log frekuensi di-reset ke 0 Hz]</div>';
             }
-            appendLog('🔄 Peak frekuensi noise motor di-reset ke 0 Hz.', '#6366f1');
+            appendLog('Peak frekuensi noise motor di-reset ke 0 Hz.', '#6366f1');
         });
     }
 
@@ -1399,7 +1203,7 @@
             kpiOutputHangers.innerText = '0';
             kpiTotalParts.innerText = '0';
             kpiCurrentParts.innerText = '0';
-            appendLog('🔄 Statistik hanger & output berhasil direset.', '#ef4444');
+            appendLog('Statistik hanger & output berhasil direset.', '#ef4444');
         } catch (e) {}
     });
 
@@ -1418,7 +1222,7 @@
 
         logItem.innerHTML = `
             <span style="color:${color}; font-weight:600;">${text}</span>
-            <span style="font-size:10.5px; color:#94a3b8; font-family:monospace;">${time}</span>
+            <span style="font-size:12px; color:#64748b; font-family:monospace;">${time}</span>
         `;
 
         if (containerPredictions.children.length === 1 && containerPredictions.children[0].innerText.includes('Menunggu')) {
@@ -1438,7 +1242,7 @@
             statusModel.style.color = '#94a3b8';
             const badgeModel = document.getElementById('badge-ai-model-ready');
             if (badgeModel) {
-                badgeModel.innerText = '⚙ Belum Dikonfigurasi';
+                badgeModel.innerText = 'Belum Dikonfigurasi';
                 badgeModel.style.background = '#fef3c7';
                 badgeModel.style.color = '#b45309';
                 badgeModel.style.cursor = 'default';
@@ -1470,7 +1274,7 @@
 
         const badgeModel = document.getElementById('badge-ai-model-ready');
         if (badgeModel) {
-            badgeModel.innerText = '⏳ Memuat Model...';
+            badgeModel.innerText = 'Memuat Model...';
             badgeModel.style.background = '#fef3c7';
             badgeModel.style.color = '#b45309';
         }
@@ -1493,7 +1297,7 @@
             statusModel.innerText = `Model Siap (${modelId} v${version})`;
             statusModel.style.color = '#16a34a';
             if (badgeModel) {
-                badgeModel.innerText = `🟢 v${version} Siap`;
+                badgeModel.innerText = `v${version} Siap`;
                 badgeModel.title = `Model ${modelId} v${version} aktif & siap mendeteksi`;
                 badgeModel.style.background = '#dcfce7';
                 badgeModel.style.color = '#15803d';
@@ -1504,7 +1308,7 @@
             if (errBox) errBox.style.display = 'none';
 
             checkEnableDetectButton();
-            appendLog(`🤖 Model Roboflow [${modelId} v${version}] aktif & siap mendeteksi.`, '#16a34a');
+            appendLog(`Model Roboflow [${modelId} v${version}] aktif & siap mendeteksi.`, '#16a34a');
             return true;
         } catch (err) {
             console.error('Error memuat model Roboflow:', err);
@@ -1523,7 +1327,7 @@
             statusModel.innerText = 'Gagal: ' + userFriendlyMsg;
             statusModel.style.color = '#dc2626';
             if (badgeModel) {
-                badgeModel.innerText = '🔴 Gagal';
+                badgeModel.innerText = 'Gagal';
                 badgeModel.title = `Klik untuk detail: ${userFriendlyMsg}`;
                 badgeModel.style.cursor = 'pointer';
                 badgeModel.onclick = () => alert(`Detail Error Roboflow:\n\n${rawMsg}\n\nSolusi:\n1. Buka 'Pengaturan Manual' di bawah.\n2. Masukkan Model Slug & Publishable API Key yang sesuai dari project Roboflow Anda.\n3. Pastikan versi model (v${version}) sudah selesai di-training.`);
@@ -1538,7 +1342,7 @@
                 errBox.style.display = 'block';
             }
 
-            appendLog(`❌ Gagal muat model [${modelId} v${version}]: ${userFriendlyMsg}`, '#dc2626');
+            appendLog(`Gagal muat model [${modelId} v${version}]: ${userFriendlyMsg}`, '#dc2626');
             if (!silent) {
                 alert(`Gagal memuat model Roboflow [${modelId} v${version}]:\n\n${userFriendlyMsg}\n\n(Error teknis: ${rawMsg})`);
             }
@@ -1604,7 +1408,7 @@
                 activePart.model_id = modelId;
                 activePart.model_version = version;
                 activePart.publishable_key = apiKey;
-                appendLog(`💾 Konfigurasi model untuk part [${activePart.code}] telah diperbarui permanen di katalog.`, '#16a34a');
+                appendLog(`Konfigurasi model untuk part [${activePart.code}] telah diperbarui permanen di katalog.`, '#16a34a');
             } catch (e) {
                 console.warn('Gagal sync part katalog:', e);
             }
@@ -1670,7 +1474,7 @@
             streamImg.src = streamUrl;
 
             if (showNotice) {
-                appendLog(`🔄 Menyambungkan ulang ke Kamera Output (IP: ${activeCamIp})...`, '#0284c7');
+                appendLog(`Menyambungkan ulang ke Kamera Output (IP: ${activeCamIp})...`, '#0284c7');
             }
         } catch (e) {
             console.error('Gagal mengambil IP kamera:', e);
@@ -1686,7 +1490,7 @@
         streamPlaceholder.style.display = 'none';
         streamWrapper.style.display = 'block';
         if (camQuickBadge) {
-            camQuickBadge.innerText = `🟢 Online (${activeCamIp})`;
+            camQuickBadge.innerText = `Online (${activeCamIp})`;
             camQuickBadge.style.background = '#dcfce7';
             camQuickBadge.style.color = '#15803d';
         }
@@ -1697,7 +1501,7 @@
         canvasOverlay.height = streamImg.naturalHeight || streamImg.clientHeight || 480;
 
         checkEnableDetectButton();
-        appendLog(`📹 Kamera ESP32-CAM (${activeCamIp}) aktif & live stream dimulai.`, '#16a34a');
+        appendLog(`Kamera ESP32-CAM (${activeCamIp}) aktif & live stream dimulai.`, '#16a34a');
 
         // Sinkronkan settingan sensor kamera dari ESP32
         syncCameraSettingsFromDevice(activeCamIp);
@@ -1705,7 +1509,7 @@
 
     streamImg.onerror = () => {
         if (camQuickBadge) {
-            camQuickBadge.innerText = `🔴 Offline (${activeCamIp || 'Kamera'})`;
+            camQuickBadge.innerText = `Offline (${activeCamIp || 'Kamera'})`;
             camQuickBadge.style.background = '#fee2e2';
             camQuickBadge.style.color = '#dc2626';
         }
@@ -1717,7 +1521,7 @@
         const pTitle = document.getElementById('ai-video-placeholder-title');
         const pDesc = document.getElementById('ai-video-placeholder-desc');
         if (pTitle) pTitle.innerText = `[ Kamera di ${activeCamIp || 'Jaringan'} Terputus ]`;
-        if (pDesc) pDesc.innerText = `Pastikan ESP32-CAM menyala dan terhubung ke WiFi. Klik tombol 🔄 untuk mencoba lagi.`;
+        if (pDesc) pDesc.innerText = `Pastikan ESP32-CAM menyala dan terhubung ke WiFi. Klik tombol Refresh untuk mencoba lagi.`;
 
         if (isDetecting) {
             isDetecting = false;
@@ -1812,7 +1616,7 @@
         selCamResolution.addEventListener('change', (e) => {
             const val = e.target.value;
             sendCamControl('framesize', val);
-            appendLog(`📐 Resolusi kamera diubah: ${e.target.options[e.target.selectedIndex].text}`, '#0d3b8c');
+            appendLog(`Resolusi kamera diubah: ${e.target.options[e.target.selectedIndex].text}`, '#0d3b8c');
         });
     }
 
@@ -1833,7 +1637,7 @@
 
             if (activeCamIp) {
                 fetch(`http://${activeCamIp}/xclk?xclk=${xclk}`, { mode: 'no-cors' }).catch(() => {});
-                appendLog(`⚡ Kecepatan XCLK diatur ke ${xclk} MHz.`, '#0d3b8c');
+                appendLog(`Kecepatan XCLK diatur ke ${xclk} MHz.`, '#0d3b8c');
             }
         });
     });
@@ -1921,7 +1725,7 @@
             sendCamControl('aec', 1);
             sendCamControl('special_effect', 0);
 
-            appendLog('↺ Pengaturan kamera dikembalikan ke standar rekomendasi AI (VGA 640x480).', '#0d3b8c');
+            appendLog('Pengaturan kamera dikembalikan ke standar rekomendasi AI (VGA 640x480).', '#0d3b8c');
         });
     }
 
@@ -1982,7 +1786,7 @@
                 isDetecting = true;
                 updateDetectButtonState();
                 detectLoop();
-                appendLog('🚀 Deteksi AI Vision otomatis AKTIF (Real-Time Monitoring).', '#16a34a');
+                appendLog('Deteksi AI Vision otomatis AKTIF (Real-Time Monitoring).', '#16a34a');
             }
         } else if (!isCamConnected) {
             btnStartAi.disabled = true;
@@ -1995,11 +1799,11 @@
 
     function updateDetectButtonState() {
         if (isDetecting) {
-            btnStartAi.innerHTML = '🟢 Deteksi AI Aktif Otomatis (Klik untuk Jeda)';
+            btnStartAi.innerHTML = 'Deteksi AI Aktif (Klik untuk Jeda)';
             btnStartAi.style.background = '#15803d';
             badgeLatency.style.display = 'inline-block';
         } else {
-            btnStartAi.innerHTML = '▶ Lanjutkan Deteksi AI';
+            btnStartAi.innerHTML = 'Lanjutkan Deteksi AI';
             btnStartAi.style.background = '#0284c7';
             badgeLatency.style.display = 'none';
         }
@@ -2084,16 +1888,16 @@
                         if (cardPartCode) cardPartCode.innerText = activePart.code;
                         if (cardPartTarget) cardPartTarget.innerText = activePart.target_per_hanger;
                         if (labelKolektorPartName) labelKolektorPartName.innerText = `[${activePart.code}] ${activePart.name}`;
-                        appendLog(`🤖 [AI Auto-Switch] Kamera mendeteksi: [${activePart.code}] ${activePart.name}. Part aktif otomatis diganti!`, '#0284c7');
+                        appendLog(`[AI Auto-Switch] Kamera mendeteksi: [${activePart.code}] ${activePart.name}. Part aktif otomatis diganti!`, '#0284c7');
                     }
                 } else if (detData && detData.status === 'error') {
                     const errMsg = detData.message || 'Error inferensi AI lokal';
-                    badgeLatency.innerText = `⚠️ Format Model Belum Sesuai`;
+                    badgeLatency.innerText = `Format Model Belum Sesuai`;
                     badgeLatency.style.background = '#ef4444';
                     badgeLatency.title = errMsg;
                     if (!window._lastAiErrToastTime || Date.now() - window._lastAiErrToastTime > 15000) {
                         window._lastAiErrToastTime = Date.now();
-                        appendLog(`⚠️ [AI Error] ${errMsg}`, '#ef4444');
+                        appendLog(`[AI Error] ${errMsg}`, '#ef4444');
                         console.warn('AI Inference Error:', detData);
                     }
                 }
@@ -2141,7 +1945,7 @@
                 if (badgeInspection && badgeInspectionText) {
                     badgeInspection.style.display = 'inline-flex';
                     badgeInspection.style.background = 'rgba(16,185,129,0.92)';
-                    badgeInspectionText.innerText = `🔍 MELACAK: ${accumulatedCount} PART UNIK`;
+                    badgeInspectionText.innerText = `MELACAK: ${accumulatedCount} PART UNIK`;
                 }
             } else {
                 kpiCurrentParts.innerText = countPart;
@@ -2227,7 +2031,7 @@
                 if (badgeInspection && badgeInspectionText) {
                     badgeInspection.style.display = 'inline-flex';
                     badgeInspection.style.background = '#0284c7';
-                    badgeInspectionText.innerText = `✅ SELESAI: ${finalPcs} PART (${durationSec}s)`;
+                    badgeInspectionText.innerText = `SELESAI: ${finalPcs} PART (${durationSec}s)`;
                     setTimeout(() => {
                         if (!isInspectionActive) {
                             badgeInspection.style.display = 'none';
@@ -2263,9 +2067,9 @@
                 }
                 const partLabel = detectedPartCode ? ` [Part: ${detectedPartCode}]` : (activePart ? ` [Part: ${activePart.code}]` : '');
                 if (finalPcs === 0) {
-                    appendLog(`📸 [Sensor Keluar - Pin 25] Hanger KOSONG Lewat (0 Pcs)${partLabel} (${durationSec}s) — Counter part tidak bertambah.`, '#f59e0b');
+                    appendLog(`[Sensor Keluar - Pin 25] Hanger KOSONG Lewat (0 Pcs)${partLabel} (${durationSec}s) — Counter part tidak bertambah.`, '#f59e0b');
                 } else {
-                    appendLog(`📸 [Sensor Keluar - Pin 25] Hanger Selesai: ${finalPcs} Pcs${partLabel} diverifikasi (${durationSec}s)!`, '#0d3b8c');
+                    appendLog(`[Sensor Keluar - Pin 25] Hanger Selesai: ${finalPcs} Pcs${partLabel} diverifikasi (${durationSec}s)!`, '#0d3b8c');
                 }
 
                 // Reset tracker di background AI Daemon agar hanger berikutnya mulai dari nol
@@ -2306,7 +2110,7 @@
                         body: JSON.stringify({ part_id: matched.id })
                     }).catch(e => console.warn('Auto-sync part aktif error:', e));
 
-                    appendLog(`🤖 [AI Auto-Switch] Kamera mendeteksi: [${matched.code}] ${matched.name}. Part aktif otomatis diganti!`, '#0284c7');
+                    appendLog(`[AI Auto-Switch] Kamera mendeteksi: [${matched.code}] ${matched.name}. Part aktif otomatis diganti!`, '#0284c7');
                 }
             }
 
@@ -2388,11 +2192,11 @@
     function updateSamplingButtonState() {
         if (!btnToggleSampling) return;
         if (isSamplingActive) {
-            btnToggleSampling.innerHTML = '⏹ Berhenti Ambil Sampel';
+            btnToggleSampling.innerHTML = 'Berhenti Ambil Sampel';
             btnToggleSampling.style.background = '#dc2626';
             btnToggleSampling.style.boxShadow = '0 0 14px rgba(220, 38, 38, 0.45)';
         } else {
-            btnToggleSampling.innerHTML = '▶ Mulai Ambil Sampel';
+            btnToggleSampling.innerHTML = 'Mulai Ambil Sampel';
             btnToggleSampling.style.background = '#4f46e5';
             btnToggleSampling.style.boxShadow = '0 2px 6px rgba(79, 70, 229, 0.3)';
         }
@@ -2506,7 +2310,7 @@
 
         if (!base64Data) {
             if (source !== 'Beruntun') {
-                appendLog('⚠ Gagal mengambil sampel: Kamera belum siap / stream belum aktif.', '#dc2626');
+                appendLog('Gagal mengambil sampel: Kamera belum siap / stream belum aktif.', '#dc2626');
             }
             return;
         }
@@ -2547,7 +2351,7 @@
             console.error('Error background save sample:', err);
         });
 
-        appendLog(`📸 [Sampel #${sampleCount}] ${source}: Foto tersimpan untuk Part [${activePart ? activePart.code : 'Default'}]!`, '#4f46e5');
+        appendLog(`[Sampel #${sampleCount}] ${source}: Foto tersimpan untuk Part [${activePart ? activePart.code : 'Default'}]!`, '#4f46e5');
     }
 
     // ================================================================
@@ -2584,7 +2388,7 @@
         updateSamplingButtonState();
         const speedEl = document.getElementById('select-sampling-speed');
         const interval = speedEl ? (parseInt(speedEl.value, 10) || 500) : 500;
-        appendLog(`📸 Pengambilan sampel foto beruntun DIMULAI (Jeda: ${interval}ms / ${(interval/1000).toFixed(2)} detik per foto). Klik Berhenti kapan saja!`, '#16a34a');
+        appendLog(`Pengambilan sampel foto beruntun DIMULAI (Jeda: ${interval}ms / ${(interval/1000).toFixed(2)} detik per foto). Klik Berhenti kapan saja!`, '#16a34a');
         runContinuousSamplingLoop();
     }
 
@@ -2592,7 +2396,7 @@
         btnToggleSampling.addEventListener('click', () => {
             if (isSamplingActive) {
                 stopContinuousSampling();
-                appendLog('⏹ Pengambilan sampel beruntun DIHENTIKAN.', '#dc2626');
+                appendLog('Pengambilan sampel beruntun DIHENTIKAN.', '#dc2626');
             } else {
                 startContinuousSampling();
             }
@@ -2637,8 +2441,8 @@
                 // Verifikasi ulang dari server
                 await loadRoboflowSamplesStats(pId);
 
-                appendLog(`↺ Seluruh sampel foto Roboflow untuk ${pName} berhasil direset (0 foto).`, '#dc2626');
-                alert(`✅ Seluruh sampel foto untuk ${pName} berhasil direset menjadi 0.`);
+                appendLog(`Seluruh sampel foto Roboflow untuk ${pName} berhasil direset (0 foto).`, '#dc2626');
+                alert(`Seluruh sampel foto untuk ${pName} berhasil direset menjadi 0.`);
             } catch (e) {
                 alert('Gagal mereset sampel: ' + e.message);
             } finally {
@@ -2737,7 +2541,7 @@
                         if (activePartModelInfo) activePartModelInfo.innerText = `AI Offline: ${activePart.model_file}`;
                         const badgeModel = document.getElementById('badge-ai-model-ready');
                         if (badgeModel) {
-                            badgeModel.innerText = `🟢 Model Offline Siap`;
+                            badgeModel.innerText = `Model Offline Siap`;
                             badgeModel.title = `Model offline ${activePart.model_file} (${activePart.model_size_mb || 42} MB) aktif & siap mendeteksi 100% lokal`;
                             badgeModel.style.background = '#dcfce7';
                             badgeModel.style.color = '#15803d';
@@ -2751,7 +2555,7 @@
                             statusModel.style.color = '#16a34a';
                         }
                         checkEnableDetectButton();
-                        appendLog(`🤖 Model AI Offline [${activePart.model_file}] aktif & siap mendeteksi 100% lokal.`, '#16a34a');
+                        appendLog(`Model AI Offline [${activePart.model_file}] aktif & siap mendeteksi 100% lokal.`, '#16a34a');
                     } else if (reloadModel && activePart.model_id && activePart.publishable_key && !activePart.model_id.startsWith('offline_')) {
                         initRoboflowModel(activePart.model_id, activePart.model_version, activePart.publishable_key, true);
                     } else if (reloadModel) {
@@ -2781,7 +2585,7 @@
 
                     const badgeModel = document.getElementById('badge-ai-model-ready');
                     if (badgeModel) {
-                        badgeModel.innerText = '🔴 Belum Ada Model';
+                        badgeModel.innerText = 'Belum Ada Model';
                         badgeModel.style.background = '#fee2e2';
                         badgeModel.style.color = '#dc2626';
                     }
@@ -2808,25 +2612,25 @@
 
             const hasModel = p.has_local_model;
             const modelBadge = hasModel 
-                ? `<span style="font-size:11.5px; font-weight:700; background:#dcfce7; color:#15803d; padding:3px 9px; border-radius:6px; font-family:monospace;">🟢 ${p.model_file} (${p.model_size_mb || 42} MB)</span>`
-                : `<span style="font-size:11.5px; font-weight:700; background:#fee2e2; color:#dc2626; padding:3px 9px; border-radius:6px; font-family:monospace;">🔴 Belum Upload</span>`;
+                ? `<span style="font-size:12.5px; font-weight:700; background:#dcfce7; color:#15803d; padding:3px 9px; border-radius:6px; font-family:monospace;">${p.model_file} (${p.model_size_mb || 42} MB)</span>`
+                : `<span style="font-size:12.5px; font-weight:700; background:#fee2e2; color:#dc2626; padding:3px 9px; border-radius:6px; font-family:monospace;">Belum Upload</span>`;
 
             tr.innerHTML = `
                 <td style="padding:10px 14px;">
                     <div style="font-weight:700; color:#0f172a;">${p.name}</div>
-                    <span style="font-size:10.5px; font-weight:800; background:#e2e8f0; color:#475569; padding:1px 6px; border-radius:4px; font-family:monospace;">${p.code}</span>
+                    <span style="font-size:12px; font-weight:800; background:#e2e8f0; color:#475569; padding:1px 6px; border-radius:4px; font-family:monospace;">${p.code}</span>
                 </td>
                 <td style="padding:10px 14px;">
                     ${modelBadge}
                 </td>
                 <td style="padding:10px 14px; text-align:center; font-weight:700; color:#16a34a;">${p.target_per_hanger} pcs</td>
                 <td style="padding:10px 14px; text-align:center;">
-                    ${isActive ? '<span style="font-size:11px; font-weight:700; background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px;">● Aktif</span>' : '<span style="color:#94a3b8; font-size:11px;">Standby</span>'}
+                    ${isActive ? '<span style="font-size:12.5px; font-weight:700; background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:12px;">Aktif</span>' : '<span style="color:#64748b; font-size:12.5px;">Standby</span>'}
                 </td>
                 <td style="padding:10px 14px; text-align:center;">
                     <div style="display:inline-flex; align-items:center; gap:6px;">
-                        <button type="button" class="btn-edit-part" data-id="${p.id}" style="background:#f0f9ff; border:1px solid #bae6fd; color:#0284c7; cursor:pointer; font-weight:700; font-size:12px; padding:5px 10px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; transition:all 0.15s;" title="Edit Part" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#f0f9ff'">✏️ Edit</button>
-                        <button type="button" class="btn-delete-part" data-id="${p.id}" data-name="${p.name}" data-is-active="${isActive ? '1' : '0'}" style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; cursor:pointer; font-weight:700; font-size:12px; padding:5px 10px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; transition:all 0.15s;" title="Hapus Part" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'">🗑️ Hapus</button>
+                        <button type="button" class="btn-edit-part" data-id="${p.id}" style="background:#f0f9ff; border:1px solid #bae6fd; color:#0284c7; cursor:pointer; font-weight:700; font-size:12px; padding:5px 10px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; transition:all 0.15s;" title="Edit Part" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#f0f9ff'">Edit</button>
+                        <button type="button" class="btn-delete-part" data-id="${p.id}" data-name="${p.name}" data-is-active="${isActive ? '1' : '0'}" style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; cursor:pointer; font-weight:700; font-size:12px; padding:5px 10px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; transition:all 0.15s;" title="Hapus Part" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'">Hapus</button>
                     </div>
                 </td>
             `;
@@ -2891,7 +2695,7 @@
                 <div style="background:#ffffff; border-radius:14px; max-width:480px; width:92%; padding:28px; box-shadow:0 20px 40px rgba(0,0,0,0.25); border:1px solid #e2e8f0; animation:modalSlide 0.25s ease-out;">
                     <div style="display:flex; align-items:center; gap:14px; margin-bottom:18px;">
                         <div style="width:48px; height:48px; border-radius:12px; background:#fef2f2; display:flex; align-items:center; justify-content:center; flex-shrink:0; border:1.5px solid #fecaca;">
-                            <span style="font-size:24px;">⚠️</span>
+                            
                         </div>
                         <div>
                             <h3 style="margin:0; font-size:17px; color:#0f172a; font-weight:800;">Konfirmasi Hapus Part</h3>
@@ -2900,7 +2704,7 @@
                     </div>
 
                     <div id="hapus-part-warning-active" style="display:none; background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:12.5px; color:#92400e; line-height:1.5;">
-                        ⚠️ <strong>Peringatan Part Aktif:</strong> Part ini sedang <strong>Aktif Diproduksi</strong>. Jika dihapus, sistem akan mengosongkan antrean part aktif atau mengalihkan ke part berikutnya yang tersedia di katalog.
+                        <strong>Peringatan:</strong> Part ini sedang <strong>Aktif Diproduksi</strong>. Jika dihapus, sistem akan mengosongkan antrean part aktif atau mengalihkan ke part berikutnya yang tersedia di katalog.
                     </div>
 
                     <div style="background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:14px 16px; margin-bottom:18px;">
@@ -2916,7 +2720,7 @@
                             Batal
                         </button>
                         <button type="button" id="btn-konfirmasi-hapus-part" style="padding:9px 18px; background:#dc2626; color:white; border:none; border-radius:7px; font-weight:700; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:all 0.15s;">
-                            🗑️ Ya, Hapus Part
+                            Ya, Hapus Part
                         </button>
                     </div>
                 </div>
@@ -2944,7 +2748,7 @@
 
         newBtn.addEventListener('click', async () => {
             newBtn.disabled = true;
-            newBtn.innerHTML = '⏳ Menghapus...';
+            newBtn.innerHTML = 'Menghapus...';
 
             try {
                 const res = await fetch(`${APP_BASE_PATH}/api/delete-part`, {
@@ -2975,7 +2779,7 @@
                 modal.style.display = 'none';
             } finally {
                 newBtn.disabled = false;
-                newBtn.innerHTML = '🗑️ Ya, Hapus Part';
+                newBtn.innerHTML = 'Ya, Hapus Part';
             }
         });
     }
@@ -2984,7 +2788,7 @@
         const notif = document.createElement('div');
         const isError = type === 'error';
         notif.style.cssText = `position:fixed; top:20px; right:20px; z-index:10002; padding:14px 20px; border-radius:10px; font-size:13.5px; font-weight:700; box-shadow:0 8px 24px rgba(0,0,0,0.18); display:flex; align-items:center; gap:10px; animation:modalSlide 0.3s ease-out; max-width:420px; background:${isError ? '#fef2f2' : '#f0fdf4'}; border:1.5px solid ${isError ? '#fecaca' : '#bbf7d0'}; color:${isError ? '#991b1b' : '#166534'};`;
-        notif.innerHTML = `<span style="font-size:18px;">${isError ? '❌' : '✅'}</span> <span>${message}</span>`;
+        notif.innerHTML = `<span>${message}</span>`;
         document.body.appendChild(notif);
         setTimeout(() => {
             notif.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
@@ -3100,16 +2904,16 @@
                 const data = await res.json();
                 if (data && data.status === 'ok') {
                     modalChangePart.style.display = 'none';
-                    appendLog(`🔄 CHANGEOVER: Part produksi diganti ke [${data.active_part.code}] ${data.active_part.name}. Counter direset!`, '#0d3b8c');
+                    appendLog(`CHANGEOVER: Part produksi diganti ke [${data.active_part.code}] ${data.active_part.name}. Counter direset!`, '#0d3b8c');
                     await loadHangerStats();
                     await loadPartsCatalog(true);
-                    alert(`✅ Pergantian part berhasil!\n\nPart Aktif: ${data.active_part.name}\nModel Roboflow v${data.active_part.model_version} siap digunakan.`);
+                    alert(`Pergantian part berhasil!\n\nPart Aktif: ${data.active_part.name}\nModel Roboflow v${data.active_part.model_version} siap digunakan.`);
                 }
             } catch (e) {
                 alert('Gagal mengganti part: ' + e.message);
             } finally {
                 btnConfirmChangePart.disabled = false;
-                btnConfirmChangePart.innerHTML = '✓ Konfirmasi & Mulai Sesi Part Ini';
+                btnConfirmChangePart.innerHTML = 'Konfirmasi & Mulai';
             }
         });
     }
@@ -3136,7 +2940,7 @@
             if (inputModelFile.files && inputModelFile.files[0]) {
                 const file = inputModelFile.files[0];
                 const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-                labelSelectedFile.innerText = `📄 ${file.name} (${sizeMb} MB) dipilih`;
+                labelSelectedFile.innerText = `${file.name} (${sizeMb} MB) dipilih`;
                 labelSelectedFile.style.color = '#15803d';
                 labelSelectedFile.style.fontWeight = '700';
             }
@@ -3174,7 +2978,7 @@
             if (!confirm(`Yakin ingin menghapus file model AI (.pt / .onnx) untuk part '${name}' dari server?\n\nProfil part tetap tersimpan di katalog, Anda dapat mengupload model baru kapan saja.`)) return;
 
             btnDeleteModelFile.disabled = true;
-            btnDeleteModelFile.innerText = '⏳ Menghapus...';
+            btnDeleteModelFile.innerText = 'Menghapus...';
             try {
                 const res = await fetch(`${APP_BASE_PATH}/api/delete-part-model`, {
                     method: 'POST',
@@ -3197,7 +3001,7 @@
                 tampilkanNotifikasiHapusPart('error', 'Terjadi kesalahan saat menghapus model');
             } finally {
                 btnDeleteModelFile.disabled = false;
-                btnDeleteModelFile.innerText = '🗑️ Hapus Model Saja';
+                btnDeleteModelFile.innerText = 'Hapus Model Saja';
             }
         });
     }
@@ -3281,7 +3085,7 @@
             xhr.onload = async () => {
                 window.isUploadingLargeFile = false;
                 btnSubmitPartForm.disabled = false;
-                btnSubmitPartForm.innerText = '💾 Simpan Part';
+                btnSubmitPartForm.innerText = 'Simpan Part';
 
                 if (xhr.status >= 200 && xhr.status < 300) {
                     try {
@@ -3291,7 +3095,7 @@
                             btnResetPartForm.click();
                             await loadPartsCatalog(true);
                             appendLog(`💾 Part [${code}] ${name} berhasil disimpan ke katalog offline.`, '#16a34a');
-                            alert(`✅ Part '${name}' [${code}] berhasil disimpan!\nModel AI Offline (${fileSizeMB > 0 ? fileSizeMB + ' MB' : 'siap'}) kini aktif.`);
+                            alert(`Part '${name}' [${code}] berhasil disimpan!\nModel AI Offline (${fileSizeMB > 0 ? fileSizeMB + ' MB' : 'siap'}) kini aktif.`);
                             return;
                         } else {
                             throw new Error(data.message || 'Gagal menyimpan part');
@@ -3312,7 +3116,7 @@
             xhr.onerror = () => {
                 window.isUploadingLargeFile = false;
                 btnSubmitPartForm.disabled = false;
-                btnSubmitPartForm.innerText = '💾 Simpan Part';
+                btnSubmitPartForm.innerText = 'Simpan Part';
                 if (progressContainer) progressContainer.style.display = 'none';
                 alert('Gagal menghubungi server saat upload. Periksa koneksi lokal Anda.');
             };
@@ -3362,9 +3166,9 @@
                 const data = await res.json();
                 if (data && data.status === 'ok') {
                     modalUpdateVersion.style.display = 'none';
-                    appendLog(`🆙 Model part [${activePart.name}] diupdate ke Versi v${newVer}! Me-reload model...`, '#0284c7');
+                    appendLog(`Model part [${activePart.name}] diupdate ke Versi v${newVer}! Me-reload model...`, '#0284c7');
                     await loadPartsCatalog(true);
-                    alert(`🎉 Berhasil update versi model ke v${newVer}!\n\nModel Roboflow baru telah otomatis dimuat.`);
+                    alert(`Berhasil update versi model ke v${newVer}!\n\nModel Roboflow baru telah otomatis dimuat.`);
                 }
             } catch (e) {
                 alert('Gagal update versi model: ' + e.message);
@@ -3397,12 +3201,12 @@
                 // Event Tombol Hardware PB ON (Start)
                 if (trig.type === 'btn_on') {
                     updateMesinUI(true, true);
-                    appendLog('🚀 [Hardware PB ON] Tombol START Ditekan: Status Produksi Aktif (Nilai 1). Photosensor kini aktif!', '#16a34a');
+                    appendLog('[Hardware PB ON] Tombol START Ditekan: Status Produksi Aktif (Nilai 1). Photosensor kini aktif!', '#16a34a');
                 }
                 // Event Tombol Hardware PB OFF (Stop)
                 else if (trig.type === 'btn_off') {
                     updateMesinUI(false, true);
-                    appendLog('🛑 [Hardware PB OFF] Tombol STOP Ditekan: Status Produksi Dihentikan (Nilai 0). Photosensor standby.', '#dc2626');
+                    appendLog('[Hardware PB OFF] Tombol STOP Ditekan: Status Produksi Dihentikan (Nilai 0). Photosensor standby.', '#dc2626');
                 }
                 // Event Sinyal Heartbeat dari ESP32
                 else if (trig.type === 'heartbeat') {
@@ -3418,7 +3222,7 @@
                     textSensorInput.style.color = '#16a34a';
 
                     const durText = trig.duration_ms ? ` (${trig.duration_ms}ms)` : '';
-                    appendLog(`🚪 [Sensor Masuk Box - Pin 27] Hanger Masuk${durText} -> Buka Sesi Inspeksi & Mulai Melacak Part...`, '#16a34a');
+                    appendLog(`[Sensor Masuk Box - Pin 27] Hanger Masuk${durText} -> Buka Sesi Inspeksi & Mulai Melacak Part...`, '#16a34a');
                     loadHangerStats();
 
                     // --- BUKA JENDELA INSPEKSI GATED WINDOW (PIN 27: MULAI HITUNG) ---
@@ -3435,7 +3239,7 @@
                     if (badgeInspection && badgeInspectionText) {
                         badgeInspection.style.display = 'inline-flex';
                         badgeInspection.style.background = 'rgba(16,185,129,0.92)';
-                        badgeInspectionText.innerText = '🔍 INSPEKSI AKTIF: MULAI MELACAK...';
+                        badgeInspectionText.innerText = 'INSPEKSI AKTIF: MELACAK...';
                     }
 
                     setTimeout(() => {
@@ -3455,7 +3259,7 @@
                     textSensorOutput.style.color = '#16a34a';
 
                     const durText = trig.duration_ms ? ` (${trig.duration_ms}ms)` : '';
-                    appendLog(`📸 [Sensor Keluar Box - Pin 25] Hanger Keluar${durText} -> Finalisasi Hasil Inspeksi!`, '#16a34a');
+                    appendLog(`[Sensor Keluar Box - Pin 25] Hanger Keluar${durText} -> Finalisasi Hasil Inspeksi!`, '#16a34a');
 
                     // Efek Rana / Flash Kamera di Layar (Border Hijau)
                     videoContainer.style.borderColor = '#22c55e';

@@ -49,27 +49,22 @@
         </div>
 
         <!-- ===== KARTU OPERATOR PIC & SHIFT (SIDEBAR) ===== -->
-        <div class="sidebar-operator-card" onclick="bukaModalGantiShift()" title="Klik untuk Ganti PIC Operator / Serah Terima Shift" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:10px; padding:10px 12px; margin-bottom:18px; cursor:pointer; transition:all 0.2s ease;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
-                <div style="display:flex; align-items:center; gap:5px; font-size:10px; font-weight:800; color:#93c5fd; text-transform:uppercase; letter-spacing:0.8px;">
-                    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px #22c55e;"></span>
-                    <span>Operator PIC</span>
-                </div>
-                <span style="font-size:10px; color:#bfdbfe; background:rgba(255,255,255,0.12); padding:1px 6px; border-radius:4px; font-weight:700;">Ganti ⇄</span>
+        <div class="sidebar-operator-card" onclick="bukaModalGantiShift()" title="Klik untuk Ganti PIC Operator / Serah Terima Shift" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:10px; padding:12px 14px; margin-bottom:18px; cursor:pointer; transition:all 0.2s ease;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <span style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color:#93c5fd; text-transform:uppercase; letter-spacing:0.6px;">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Operator PIC
+                </span>
+                <span style="font-size:12px; color:#bfdbfe; background:rgba(255,255,255,0.12); padding:2px 8px; border-radius:5px; font-weight:600;">Ganti</span>
             </div>
-            <div style="display:flex; align-items:center; gap:7px; margin-bottom:6px;">
-                <div style="width:24px; height:24px; border-radius:6px; background:rgba(255,255,255,0.15); display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0;">
-                    👤
-                </div>
-                <div id="sidebar-operator-name" style="font-size:13px; font-weight:800; color:#ffffff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                    Mukhamad Nawwaf
-                </div>
+            <div id="sidebar-operator-name" style="font-size:15px; font-weight:800; color:#ffffff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:8px;">
+                Mukhamad Nawwaf
             </div>
             <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                <span id="sidebar-shift-badge" style="background:rgba(99,102,241,0.3); border:1px solid rgba(165,180,252,0.35); color:#e0e7ff; padding:2px 7px; border-radius:4px; font-size:10.5px; font-weight:700;">
+                <span id="sidebar-shift-badge" style="background:rgba(99,102,241,0.3); border:1px solid rgba(165,180,252,0.35); color:#e0e7ff; padding:3px 9px; border-radius:5px; font-size:12px; font-weight:700;">
                     Shift 1 (Pagi)
                 </span>
-                <span id="sidebar-mp-badge" style="background:rgba(255,255,255,0.1); color:#cbd5e1; padding:2px 6px; border-radius:4px; font-size:10.5px; font-weight:600;">
+                <span id="sidebar-mp-badge" style="background:rgba(255,255,255,0.12); color:#e2e8f0; padding:3px 8px; border-radius:5px; font-size:12px; font-weight:600;">
                     6 MP
                 </span>
             </div>

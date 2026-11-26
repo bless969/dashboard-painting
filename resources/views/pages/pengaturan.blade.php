@@ -5,7 +5,7 @@
         <div class="settings-row">
             <div class="settings-row-text">
                 <div class="settings-row-label">Bentuk Grafik Produksi &amp; EFF</div>
-                <div class="settings-row-desc">Mengatur bentuk grafik Input/Output dan EFF di halaman Dashboard Painting.</div>
+                <div class="settings-row-desc">Mengatur bentuk grafik di halaman Chart.</div>
             </div>
             <select id="chart-type-select" class="filter-select" onchange="simpanBentukGrafik(this.value)" title="Pilih jenis grafik">
                 <option value="bar">Bar Chart</option>
@@ -20,12 +20,12 @@
         <div class="panel-title">Target Produksi Bulanan (PCS)</div>
         <div class="settings-row">
             <div class="settings-row-text">
-                <div class="settings-row-label">Kapasitas Target Bulan Ini</div>
-                <div class="settings-row-desc">Menentukan target total output PCS lini painting untuk bulan berjalan. Nilai ini akan menghitung persentase pencapaian target di dashboard utama.</div>
+                <div class="settings-row-label">Target Bulan Ini</div>
+                <div class="settings-row-desc">Target total output PCS untuk bulan berjalan.</div>
             </div>
             <div style="display:flex; gap:10px; align-items:center;">
-                <input type="number" id="pengaturan-target-pcs" class="filter-select" style="width:160px; font-weight:700; color:#0d3b8c;" placeholder="50000" min="1" step="100">
-                <button type="button" class="btn-simpan-produksi" onclick="simpanTargetDariPengaturan()" style="padding:8px 16px; background:#0d3b8c; color:white; border:none; border-radius:6px; font-weight:600; cursor:pointer;">
+                <input type="number" id="pengaturan-target-pcs" class="filter-select" style="width:170px; font-weight:700; color:#0d3b8c; background:#ffffff;" placeholder="50000" min="1" step="100">
+                <button type="button" class="btn-simpan-produksi btn-nav-action btn-blue" onclick="simpanTargetDariPengaturan()" style="padding:9px 18px; border:none; font-size:14px;">
                     Simpan Target
                 </button>
             </div>
